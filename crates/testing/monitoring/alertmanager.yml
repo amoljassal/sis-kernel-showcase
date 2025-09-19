@@ -1,0 +1,134 @@
+global:
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'sis-kernel-alerts@example.com'
+  smtp_auth_username: 'alerts@example.com'
+  smtp_auth_password: 'password'
+
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'sis-kernel-team'
+  routes:
+    - match:
+        severity: critical
+      receiver: 'sis-kernel-critical'
+      group_wait: 0s
+      repeat_interval: 5m
+
+    - match:
+        category: performance
+      receiver: 'sis-kernel-performance-team'
+      group_interval: 30s
+
+    - match:
+        category: security
+      receiver: 'sis-kernel-security-team'
+      group_wait: 0s
+      repeat_interval: 1m
+
+    - match:
+        category: distributed
+      receiver: 'sis-kernel-distributed-team'
+
+    - match:
+        category: ai
+      receiver: 'sis-kernel-ai-team'
+
+receivers:
+  - name: 'sis-kernel-team'
+    email_configs:
+      - to: 'sis-kernel-team@example.com'
+        subject: '[SIS Kernel] {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          
+          Labels:
+          {{ range .Labels.SortedPairs }}  {{ .Name }}: {{ .Value }}
+          {{ end }}
+          
+          Firing Time: {{ .StartsAt }}
+          {{ if .EndsAt }}Resolved Time: {{ .EndsAt }}{{ end }}
+          {{ end }}
+
+  - name: 'sis-kernel-critical'
+    email_configs:
+      - to: 'sis-kernel-oncall@example.com'
+        subject: '[CRITICAL] SIS Kernel Alert: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        body: |
+          CRITICAL ALERT
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          
+          Severity: {{ .Labels.severity }}
+          Category: {{ .Labels.category }}
+          
+          This requires immediate attention!
+          
+          Time: {{ .StartsAt }}
+          {{ end }}
+    slack_configs:
+      - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        channel: '#sis-kernel-alerts'
+        title: 'Critical SIS Kernel Alert'
+        text: |
+          *CRITICAL ALERT*
+          {{ range .Alerts }}
+          *{{ .Annotations.summary }}*
+          {{ .Annotations.description }}
+          {{ end }}
+
+  - name: 'sis-kernel-performance-team'
+    email_configs:
+      - to: 'sis-kernel-performance@example.com'
+        subject: '[Performance] SIS Kernel: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        body: |
+          Performance Alert Details:
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          
+          Current Value: {{ .Labels.value }}
+          Threshold: {{ .Labels.threshold }}
+          
+          Time: {{ .StartsAt }}
+          {{ end }}
+
+  - name: 'sis-kernel-security-team'
+    email_configs:
+      - to: 'sis-kernel-security@example.com'
+        subject: '[SECURITY] SIS Kernel: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        body: |
+          SECURITY ALERT
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          
+          This is a security-related alert that requires immediate investigation.
+          
+          Time: {{ .StartsAt }}
+          {{ end }}
+
+  - name: 'sis-kernel-distributed-team'
+    email_configs:
+      - to: 'sis-kernel-distributed@example.com'
+        subject: '[Distributed] SIS Kernel: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+
+  - name: 'sis-kernel-ai-team'
+    email_configs:
+      - to: 'sis-kernel-ai@example.com'
+        subject: '[AI/ML] SIS Kernel: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'cluster', 'service']

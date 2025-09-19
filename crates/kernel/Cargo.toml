@@ -1,0 +1,48 @@
+[package]
+name = "sis_kernel"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "sis_kernel"
+path = "src/main.rs"
+
+[dependencies]
+bootloader_api = { version = "=0.11.11", default-features = false }
+linked_list_allocator = { version = "0.10.5", default-features = false, features = ["use_spin"] }
+spin = { version = "0.9.8", default-features = false, features = ["spin_mutex", "once", "rwlock"] }
+lazy_static = { version = "1.4.0", default-features = false, features = ["spin_no_std"] }
+bitflags = { version = "2.9.1", default-features = false }
+half = { version = "2.4.1", default-features = false, features = ["bytemuck"] }
+heapless = { version = "0.8", default-features = false }
+sha2 = { version = "0.10", default-features = false, features = ["force-soft"] }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+x86_64 = { version = "=0.14.13", default-features = false, features = ["instructions", "abi_x86_interrupt"] }
+uart_16550 = { version = "0.2.0", default-features = false }
+pic8259 = { version = "0.10.1", default-features = false }
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+
+[target.'cfg(target_arch = "riscv64")'.dependencies]
+riscv = { version = "0.11", default-features = false }
+riscv-rt = { version = "0.12", default-features = false, optional = true }
+
+[features]
+default = []
+arm64-ai = []
+neon-optimized = ["arm64-ai"]  # NEON SIMD optimization for Apple Silicon
+bringup = []
+formal-verification = []  # RISC-V hooks guarded by target_arch
+aia = []  # Advanced Interrupt Architecture for RISC-V (no-op unless riscv64)
+perf-verbose = []  # Enable verbose [PERF] logs on serial
+strict = []        # Deny unused when enabled
+deterministic = [] # Enable deterministic scheduler scaffolding (CBS+EDF)
+graph-demo = []    # Run graph demo during bring-up
+graph-spsc-debug = [] # Debug SPSC ring demo with progress prints
+virtio-console = []   # Enable VirtIO console driver path during bring-up
+graph-autostats = []  # Auto-create a baseline graph and emit graph_stats_* METRICs
+
+[build-dependencies]
+bootloader = { version = "=0.11.11", default-features = false, features = ["bios"] }
+bootloader_api = { version = "=0.11.11" }

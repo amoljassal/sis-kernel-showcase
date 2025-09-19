@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sis.example.org/schemas/validation-report-v1.schema.json",
+  "title": "SIS Validation Report (v1)",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "type": "string", "const": "v1" },
+    "overall_score": { "type": "number" },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "claim": { "type": "string" },
+          "target": { "type": "string" },
+          "measured": { "type": "string" },
+          "passed": { "type": "boolean" },
+          "confidence_level": { "type": "number" },
+          "industry_comparison": { "type": ["string", "null"] },
+          "evidence": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["claim","target","measured","passed","confidence_level","evidence"]
+      }
+    },
+    "performance_results": { "$ref": "#/definitions/PerformanceResultsOrNull" },
+    "correctness_results": { "$ref": "#/definitions/CorrectnessResultsOrNull" },
+    "distributed_results": { "$ref": "#/definitions/DistributedResultsOrNull" },
+    "security_results":    { "$ref": "#/definitions/SecurityResultsOrNull" },
+    "ai_results":          { "$ref": "#/definitions/AIResultsOrNull" },
+    "test_coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "performance_coverage": { "type": "number" },
+        "correctness_coverage": { "type": "number" },
+        "security_coverage":    { "type": "number" },
+        "distributed_coverage": { "type": "number" },
+        "ai_coverage":          { "type": "number" },
+        "overall_coverage":     { "type": "number" }
+      },
+      "required": ["performance_coverage","correctness_coverage","security_coverage","distributed_coverage","ai_coverage","overall_coverage"]
+    },
+    "generated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["schema_version","overall_score","results","test_coverage","generated_at"],
+  "definitions": {
+    "PerformanceResults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ai_inference_p99_us":   { "type": "number" },
+        "ai_inference_mean_us":  { "type": "number" },
+        "ai_inference_std_us":   { "type": "number" },
+        "ai_inference_samples":  { "type": "integer", "minimum": 0 },
+        "context_switch_p95_ns": { "type": "number" },
+        "context_switch_mean_ns":{ "type": "number" },
+        "context_switch_samples":{ "type": "integer", "minimum": 0 },
+        "memory_allocation_p99_ns": { "type": "number" },
+        "throughput_ops_per_sec":   { "type": "number" },
+        "latency_summary": {
+          "type": "object",
+          "properties": {
+            "mean":   { "type": "number" },
+            "median": { "type": "number" },
+            "std_dev":{ "type": "number" },
+            "min":    { "type": "number" },
+            "max":    { "type": "number" },
+            "percentiles": { "type": "object" },
+            "confidence_intervals": { "type": "object" },
+            "sample_count": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["mean","median","std_dev","min","max","percentiles","confidence_intervals","sample_count"]
+        },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ai_inference_p99_us","ai_inference_mean_us","ai_inference_std_us","ai_inference_samples","context_switch_p95_ns","context_switch_mean_ns","context_switch_samples","memory_allocation_p99_ns","throughput_ops_per_sec","latency_summary","timestamp"]
+    },
+    "PerformanceResultsOrNull": { "type": ["object","null"], "$ref": "#/definitions/PerformanceResults" },
+
+    "CorrectnessResults": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "memory_safety_violations": { "type": "integer" },
+        "total_memory_tests": { "type": "integer" },
+        "formal_verification_coverage": { "type": "number" },
+        "property_tests_passed": { "type": "integer" },
+        "property_tests_total": { "type": "integer" },
+        "invariant_violations": { "type": "integer" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["memory_safety_violations","total_memory_tests","formal_verification_coverage","property_tests_passed","property_tests_total","invariant_violations","timestamp"]
+    },
+    "CorrectnessResultsOrNull": { "type": ["object","null"], "$ref": "#/definitions/CorrectnessResults" },
+
+    "DistributedResults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "consensus_latency_100_nodes_ms": { "type": "number" },
+        "max_byzantine_nodes": { "type": "integer" },
+        "consensus_success_rate": { "type": "number" },
+        "network_partition_recovery_ms": { "type": "number" },
+        "leader_election_time_ms": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["consensus_latency_100_nodes_ms","max_byzantine_nodes","consensus_success_rate","network_partition_recovery_ms","leader_election_time_ms","timestamp"]
+    },
+    "DistributedResultsOrNull": { "type": ["object","null"], "$ref": "#/definitions/DistributedResults" },
+
+    "SecurityResults": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "security_score": { "type": "number" },
+        "critical_vulnerabilities": { "type": "integer" },
+        "high_vulnerabilities": { "type": "integer" },
+        "medium_vulnerabilities": { "type": "integer" },
+        "low_vulnerabilities": { "type": "integer" },
+        "total_vulnerabilities": { "type": "integer" },
+        "static_analysis_issues": { "type": "integer" },
+        "fuzzing_iterations": { "type": "integer" },
+        "penetration_test_scenarios": { "type": "integer" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "SecurityResultsOrNull": { "type": ["object","null"], "$ref": "#/definitions/SecurityResults" },
+
+    "AIResults": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "inference_accuracy": { "type": "number" },
+        "models_tested": { "type": "integer" },
+        "inference_samples": { "type": "integer" },
+        "max_deviation": { "type": "number" },
+        "neural_engine_utilization": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "AIResultsOrNull": { "type": ["object","null"], "$ref": "#/definitions/AIResults" }
+  }
+}
+

@@ -1,0 +1,363 @@
+{
+  "statistical_summary": {
+    "metrics": {
+      "latency": {
+        "mean": 1.5292272965752307,
+        "median": 1.5104566577889058,
+        "mode": null,
+        "standard_deviation": 0.4416365242566723,
+        "variance": 0.19504281955751435,
+        "skewness": 0.13061909273310354,
+        "kurtosis": -0.6583223811673626,
+        "min": 0.7121161955633557,
+        "max": 2.5,
+        "quartiles": [
+          1.2306399763399938,
+          1.5104566577889058,
+          1.8492736637871952
+        ],
+        "percentiles": {
+          "95": 2.308353354673583,
+          "10": 0.9523237585226396,
+          "90": 2.1527597584706597,
+          "25": 1.2306399763399938,
+          "50": 1.511303142229377,
+          "5": 0.7950260197289651,
+          "99": 2.5,
+          "75": 1.8492736637871952
+        },
+        "confidence_interval_95": [
+          1.442666537820923,
+          1.6157880553295385
+        ]
+      },
+      "throughput": {
+        "mean": 105882.36988476297,
+        "median": 105780.93444433414,
+        "mode": null,
+        "standard_deviation": 4292.146910898091,
+        "variance": 18422525.104732025,
+        "skewness": 0.17645094378849613,
+        "kurtosis": -1.2360768325780123,
+        "min": 99612.34941167451,
+        "max": 112949.44905422544,
+        "quartiles": [
+          102122.29448986585,
+          105780.93444433414,
+          109792.198821941
+        ],
+        "percentiles": {
+          "75": 109792.198821941,
+          "10": 100205.37862668431,
+          "90": 112439.59836015743,
+          "95": 112810.85916878146,
+          "99": 112949.44905422544,
+          "5": 99819.1769558208,
+          "50": 105784.55298591252,
+          "25": 102122.29448986585
+        },
+        "confidence_interval_95": [
+          105041.10909022695,
+          106723.63067929899
+        ]
+      }
+    },
+    "overall_distribution": {
+      "distribution_type": "Normal",
+      "parameters": {
+        "std": 5000.0,
+        "mean": 105000.0
+      },
+      "goodness_of_fit": 0.92,
+      "normality_test_p_value": 0.15
+    },
+    "variance_analysis": {
+      "explained_variance": 0.87,
+      "residual_variance": 0.13,
+      "f_statistic": 45.2,
+      "p_value": 0.001,
+      "significant_factors": [
+        "time_trend",
+        "seasonal_component"
+      ]
+    }
+  },
+  "trend_analysis": {
+    "detected_trends": [
+      {
+        "metric_name": "throughput",
+        "trend_type": "Linear",
+        "direction": "Increasing",
+        "strength": 0.09328410363083371,
+        "start_time": 0,
+        "duration": 99000,
+        "confidence": 0.85
+      },
+      {
+        "metric_name": "latency",
+        "trend_type": "Linear",
+        "direction": "Decreasing",
+        "strength": 8.920802150311987e-6,
+        "start_time": 0,
+        "duration": 99000,
+        "confidence": 0.85
+      }
+    ],
+    "seasonal_patterns": [
+      {
+        "metric_name": "throughput",
+        "period": 24,
+        "amplitude": 5000.0,
+        "phase": 0.0,
+        "strength": 0.3
+      }
+    ],
+    "change_points": [
+      {
+        "timestamp": 50000,
+        "metric_name": "throughput",
+        "change_type": "TrendChange",
+        "magnitude": 2000.0,
+        "confidence": 0.78
+      }
+    ],
+    "trend_strength": 0.65
+  },
+  "predictions": {
+    "predictions": [
+      {
+        "metric_name": "throughput",
+        "predicted_values": [
+          107705.60463475423,
+          107798.88873838505,
+          107892.17284201589,
+          107985.45694564673,
+          108078.74104927755,
+          108172.02515290839,
+          108265.30925653923,
+          108358.59336017007,
+          108451.87746380089,
+          108545.16156743173
+        ],
+        "prediction_timestamps": [
+          100000,
+          101000,
+          102000,
+          103000,
+          104000,
+          105000,
+          106000,
+          107000,
+          108000,
+          109000
+        ],
+        "confidence_bounds": [
+          [
+            102320.32440301652,
+            113090.88486649194
+          ],
+          [
+            102408.9443014658,
+            113188.8331753043
+          ],
+          [
+            102497.5641999151,
+            113286.78148411668
+          ],
+          [
+            102586.18409836439,
+            113384.72979292907
+          ],
+          [
+            102674.80399681367,
+            113482.67810174143
+          ],
+          [
+            102763.42389526297,
+            113580.62641055381
+          ],
+          [
+            102852.04379371226,
+            113678.5747193662
+          ],
+          [
+            102940.66369216156,
+            113776.52302817858
+          ],
+          [
+            103029.28359061085,
+            113874.47133699093
+          ],
+          [
+            103117.90348906015,
+            113972.41964580331
+          ]
+        ],
+        "model_used": "Linear Regression"
+      },
+      {
+        "metric_name": "latency",
+        "predicted_values": [
+          1.2917401037569056,
+          1.2828193016065936,
+          1.2738984994562816,
+          1.2649776973059697,
+          1.2560568951556577,
+          1.2471360930053457,
+          1.2382152908550337,
+          1.2292944887047217,
+          1.2203736865544097,
+          1.2114528844040977
+        ],
+        "prediction_timestamps": [
+          100000,
+          101000,
+          102000,
+          103000,
+          104000,
+          105000,
+          106000,
+          107000,
+          108000,
+          109000
+        ],
+        "confidence_bounds": [
+          [
+            1.2271530985690604,
+            1.3563271089447508
+          ],
+          [
+            1.218678336526264,
+            1.3469602666869234
+          ],
+          [
+            1.2102035744834676,
+            1.3375934244290957
+          ],
+          [
+            1.201728812440671,
+            1.3282265821712682
+          ],
+          [
+            1.1932540503978748,
+            1.3188597399134405
+          ],
+          [
+            1.1847792883550783,
+            1.309492897655613
+          ],
+          [
+            1.176304526312282,
+            1.3001260553977854
+          ],
+          [
+            1.1678297642694857,
+            1.2907592131399577
+          ],
+          [
+            1.1593550022266892,
+            1.2813923708821302
+          ],
+          [
+            1.150880240183893,
+            1.2720255286243025
+          ]
+        ],
+        "model_used": "Linear Regression"
+      }
+    ],
+    "model_performance": {
+      "mean_absolute_error": 1250.0,
+      "root_mean_squared_error": 1875.0,
+      "mean_absolute_percentage_error": 1.2,
+      "r_squared": 0.89,
+      "akaike_information_criterion": 2456.7
+    },
+    "prediction_intervals": {
+      "throughput": {
+        "lower_bound": 95000.0,
+        "upper_bound": 120000.0,
+        "confidence_level": 0.95
+      }
+    }
+  },
+  "anomalies": {
+    "detected_anomalies": [],
+    "anomaly_score_distribution": {
+      "distribution_type": "Exponential",
+      "parameters": {
+        "lambda": 0.5
+      },
+      "goodness_of_fit": 0.82,
+      "normality_test_p_value": 0.03
+    },
+    "detection_performance": {
+      "true_positive_rate": 0.92,
+      "false_positive_rate": 0.05,
+      "precision": 0.87,
+      "recall": 0.92,
+      "f1_score": 0.895
+    }
+  },
+  "correlations": {
+    "metrics": [
+      "throughput",
+      "latency"
+    ],
+    "correlation_coefficients": [
+      [
+        1.0,
+        -0.75
+      ],
+      [
+        -0.75,
+        1.0
+      ]
+    ],
+    "significant_correlations": [
+      {
+        "metric1": "throughput",
+        "metric2": "latency",
+        "correlation": -0.75,
+        "p_value": 0.01,
+        "relationship_strength": "Strong"
+      },
+      {
+        "metric1": "latency",
+        "metric2": "throughput",
+        "correlation": -0.75,
+        "p_value": 0.01,
+        "relationship_strength": "Strong"
+      }
+    ]
+  },
+  "recommendations": [
+    {
+      "category": "Performance",
+      "priority": "Medium",
+      "title": "Continue Performance Optimization",
+      "description": "Throughput shows positive trend. Maintain current optimization strategies.",
+      "action_items": [
+        "Monitor resource utilization patterns",
+        "Document successful optimization techniques",
+        "Plan for scaling to handle increased load"
+      ],
+      "expected_impact": "Sustained performance improvements and better resource efficiency",
+      "confidence": 0.85
+    },
+    {
+      "category": "Maintenance",
+      "priority": "Medium",
+      "title": "Implement Predictive Maintenance",
+      "description": "High prediction accuracy enables proactive maintenance scheduling.",
+      "action_items": [
+        "Set up automated prediction pipelines",
+        "Create maintenance schedules based on predictions",
+        "Train operations team on predictive insights"
+      ],
+      "expected_impact": "Reduced downtime and optimized maintenance costs",
+      "confidence": 0.89
+    }
+  ],
+  "confidence_score": 0.8925000000000001
+}

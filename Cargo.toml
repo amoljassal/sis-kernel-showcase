@@ -1,0 +1,28 @@
+[workspace]
+members = [
+  "crates/kernel",
+  "crates/uefi-boot",
+  "crates/testing"
+]
+resolver = "2"
+[profile.dev.package.bootloader]
+# Compile bootloader once, quickly, and keep it stable in cache
+opt-level = 3
+codegen-units = 1
+debug = false
+
+[profile.dev.package.bootloader_api]
+opt-level = 3
+codegen-units = 1
+debug = false
+
+# Global profile settings
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+# Nightly aarch64-unknown-none + LTO may reference internal OOM hooks that
+# are not exposed in no_std. Disable LTO to avoid link issues in release.
+lto = false
+codegen-units = 1

@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sis.example.org/schemas/sis-metrics-v1.schema.json",
+  "title": "SIS Metrics Dump (v1)",
+  "description": "Schema for the metrics_dump.json emitted by the SIS testing runner (Phase 1).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "v1" },
+    "real_ctx_switch_ns": { "type": "array", "items": { "type": "number" } },
+    "ai_inference_us":    { "type": "array", "items": { "type": "number" } },
+    "ctx_switch_ns":      { "type": "array", "items": { "type": "number" } },
+    "irq_latency_ns":     { "type": "array", "items": { "type": "number" } },
+    "memory_alloc_ns":    { "type": "array", "items": { "type": "number" } },
+
+    "graph_stats_ops":       { "type": ["number", "null"] },
+    "graph_stats_channels":  { "type": ["number", "null"] },
+
+    "graph_demo_total_ns":         { "type": ["number", "null"] },
+    "graph_demo_avg_ns_per_item":  { "type": ["number", "null"] },
+    "graph_demo_items":            { "type": ["number", "null"] },
+    "channel_ab_depth_max":        { "type": ["number", "null"] },
+    "channel_ab_stalls":           { "type": ["number", "null"] },
+    "channel_ab_drops":            { "type": ["number", "null"] },
+    "schema_mismatch_count":      { "type": ["number", "null"] },
+    "quality_warns":              { "type": ["number", "null"] },
+    "zero_copy_count":             { "type": ["number", "null"] },
+    "zero_copy_handle_count":      { "type": ["number", "null"] },
+
+    "op_a_total_ns":  { "type": ["number", "null"] },
+    "op_b_total_ns":  { "type": ["number", "null"] },
+    "op_a_runs":      { "type": ["number", "null"] },
+    "op_b_runs":      { "type": ["number", "null"] },
+    "arena_remaining_bytes": { "type": ["number", "null"] },
+
+    "op_a_pmu_inst":        { "type": ["number", "null"] },
+    "op_b_pmu_inst":        { "type": ["number", "null"] },
+    "op_a_pmu_l1d_refill":  { "type": ["number", "null"] },
+    "op_b_pmu_l1d_refill":  { "type": ["number", "null"] },
+
+    "op_a_p50_ns":  { "type": ["number", "null"] },
+    "op_a_p95_ns":  { "type": ["number", "null"] },
+    "op_a_p99_ns":  { "type": ["number", "null"] },
+    "op_b_p50_ns":  { "type": ["number", "null"] },
+    "op_b_p95_ns":  { "type": ["number", "null"] },
+    "op_b_p99_ns":  { "type": ["number", "null"] },
+    "scheduler_run_us": { "type": ["number", "null"] },
+
+    "ctl_frames_rx":          { "type": ["number", "null"] },
+    "ctl_frames_tx":          { "type": ["number", "null"] },
+    "ctl_errors":             { "type": ["number", "null"] },
+    "ctl_backpressure_drops": { "type": ["number", "null"] },
+    "ctl_roundtrip_us":       { "type": ["number", "null"] },
+    "ctl_selected_port":     { "type": ["number", "null"] },
+    "ctl_port_bound":        { "type": ["number", "null"] },
+
+    "deterministic_deadline_miss_count": { "type": ["number", "null"] },
+    "deterministic_jitter_p99_ns": { "type": ["number", "null"] },
+    "model_load_success": { "type": ["number", "null"] },
+    "model_load_fail": { "type": ["number", "null"] },
+    "model_audit_entries": { "type": ["number", "null"] },
+    "models_loaded": { "type": ["number", "null"] },
+    "det_constraint_verified": { "type": ["number", "null"] },
+    "det_constraint_violation_alloc": { "type": ["number", "null"] },
+    "det_constraint_violation_block": { "type": ["number", "null"] },
+    "deterministic_demo_duration_us": { "type": ["number", "null"] },
+    "deterministic_demo_completed": { "type": ["number", "null"] },
+
+    "summary": { "$ref": "#/definitions/PerformanceResults" }
+    ,
+    "graphs": {
+      "description": "Optional per-graph metrics dump (future expansion)",
+      "type": ["object", "null"],
+      "additionalProperties": { "$ref": "#/definitions/GraphMetrics" }
+    }
+  },
+  "required": ["schema_version", "summary"],
+  "definitions": {
+    "StatisticalSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mean":   { "type": "number" },
+        "median": { "type": "number" },
+        "std_dev":{ "type": "number" },
+        "min":    { "type": "number" },
+        "max":    { "type": "number" },
+        "percentiles": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "confidence_intervals": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": { "type": "number" }
+          }
+        },
+        "sample_count": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["mean","median","std_dev","min","max","percentiles","confidence_intervals","sample_count"]
+    },
+    "PerformanceResults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ai_inference_p99_us":   { "type": "number" },
+        "ai_inference_mean_us":  { "type": "number" },
+        "ai_inference_std_us":   { "type": "number" },
+        "ai_inference_samples":  { "type": "integer", "minimum": 0 },
+
+        "context_switch_p95_ns": { "type": "number" },
+        "context_switch_mean_ns":{ "type": "number" },
+        "context_switch_samples":{ "type": "integer", "minimum": 0 },
+
+        "memory_allocation_p99_ns": { "type": "number" },
+        "throughput_ops_per_sec":   { "type": "number" },
+
+        "latency_summary": { "$ref": "#/definitions/StatisticalSummary" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "ai_inference_p99_us",
+        "ai_inference_mean_us",
+        "ai_inference_std_us",
+        "ai_inference_samples",
+        "context_switch_p95_ns",
+        "context_switch_mean_ns",
+        "context_switch_samples",
+        "memory_allocation_p99_ns",
+        "throughput_ops_per_sec",
+        "latency_summary",
+        "timestamp"
+      ]
+    },
+    "GraphMetrics": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": ["string", "null"] },
+        "operators": {
+          "type": ["array", "null"],
+          "items": { "$ref": "#/definitions/OperatorMetrics" }
+        },
+        "channels": {
+          "type": ["array", "null"],
+          "items": { "$ref": "#/definitions/ChannelMetrics" }
+        }
+      }
+    },
+    "OperatorMetrics": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": ["string", "integer"] },
+        "stage": { "type": ["string", "null"] },
+        "runs": { "type": ["number", "null"] },
+        "total_ns": { "type": ["number", "null"] },
+        "pmu": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "number" }
+        }
+      }
+    },
+    "ChannelMetrics": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": ["string", "integer"] },
+        "depth_max": { "type": ["number", "null"] },
+        "stalls": { "type": ["number", "null"] },
+        "drops": { "type": ["number", "null"] }
+      }
+    }
+  }
+}

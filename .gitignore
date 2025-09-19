@@ -1,0 +1,30 @@
+# Rust build artifacts
+/target/
+*.pdb
+
+# Cargo lock file (keep for binary projects)
+# Cargo.lock
+
+# IDE files  
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+._.DS_Store
+Thumbs.db
+
+# QEMU/Testing artifacts
+out/
+*.iso
+iso/
+
+# Temporary files
+*.tmp
+*.log
+qemu-serial.log
+
+# Build artifacts
+bootimage-*.bin
