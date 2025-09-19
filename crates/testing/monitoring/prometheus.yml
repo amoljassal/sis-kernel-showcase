@@ -1,0 +1,106 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'sis-kernel-testing'
+    environment: 'production'
+
+rule_files:
+  - "sis_kernel_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+scrape_configs:
+  # SIS Kernel Testing Framework Metrics
+  - job_name: 'sis-kernel-tests'
+    static_configs:
+      - targets: ['localhost:8080']
+    metrics_path: /metrics
+    scrape_interval: 5s
+    scrape_timeout: 5s
+    honor_labels: true
+    params:
+      format: ['prometheus']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: localhost:8080
+
+  # Performance Metrics
+  - job_name: 'sis-kernel-performance'
+    static_configs:
+      - targets: ['localhost:8081']
+    metrics_path: /performance/metrics
+    scrape_interval: 1s
+    scrape_timeout: 1s
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'sis_kernel_(latency|throughput|cpu_usage|memory_usage).*'
+        target_label: category
+        replacement: 'performance'
+
+  # Security Metrics
+  - job_name: 'sis-kernel-security'
+    static_configs:
+      - targets: ['localhost:8082']
+    metrics_path: /security/metrics
+    scrape_interval: 10s
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'sis_kernel_(vulnerability|memory_safety|crypto).*'
+        target_label: category
+        replacement: 'security'
+
+  # Distributed Systems Metrics
+  - job_name: 'sis-kernel-distributed'
+    static_configs:
+      - targets: ['localhost:8083']
+    metrics_path: /distributed/metrics
+    scrape_interval: 1s
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'sis_kernel_(consensus|byzantine|network).*'
+        target_label: category
+        replacement: 'distributed'
+
+  # AI/ML Metrics
+  - job_name: 'sis-kernel-ai'
+    static_configs:
+      - targets: ['localhost:8084']
+    metrics_path: /ai/metrics
+    scrape_interval: 1s
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'sis_kernel_(inference|accuracy|neon).*'
+        target_label: category
+        replacement: 'ai'
+
+  # QEMU Runtime Metrics
+  - job_name: 'sis-kernel-qemu'
+    static_configs:
+      - targets: ['localhost:8085']
+    metrics_path: /qemu/metrics
+    scrape_interval: 5s
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'qemu_(boot_time|memory|cpu).*'
+        target_label: category
+        replacement: 'qemu'
+
+  # System Metrics (Node Exporter)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['localhost:9100']
+    scrape_interval: 15s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

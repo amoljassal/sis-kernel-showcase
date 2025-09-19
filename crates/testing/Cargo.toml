@@ -1,0 +1,100 @@
+[package]
+name = "sis-testing"
+version = "0.1.0"
+edition = "2021"
+description = "Comprehensive industry-grade test suite for SIS Kernel"
+authors = ["SIS Kernel Team"]
+license = "MIT OR Apache-2.0"
+default-run = "sis-test-runner"
+
+[lints.rust]
+unused = "deny"
+dead_code = "warn"
+unsafe_code = "deny"
+
+[lints.clippy]
+all = "warn"
+pedantic = "allow"
+nursery = "allow" 
+cargo = "allow"
+
+[[bin]]
+name = "sis-test-runner"
+path = "src/bin/main.rs"
+
+[[bin]]
+name = "ai-benchmark-runner"
+path = "src/bin/ai_benchmark_runner.rs"
+
+[[bin]]
+name = "formal-verification-runner"
+path = "src/bin/formal_verification_runner.rs"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+libc = "0.2"
+anyhow = "1.0"
+thiserror = "1.0"
+log = "0.4"
+env_logger = "0.11"
+rand = "0.8"
+
+
+# Formal verification (optional)
+kani = { version = "0.0.1", optional = true }
+
+# Prusti contracts for verification (optional)
+prusti-contracts = { version = "0.1.0", optional = true }
+
+[dev-dependencies]
+
+# Testing utilities
+tempfile = "3.8"
+
+[features]
+default = ["qemu-tests", "performance-tests", "correctness-tests"]
+
+# Test categories
+qemu-tests = []
+performance-tests = []
+correctness-tests = []
+distributed-tests = []
+security-tests = []
+ai-tests = []
+
+# Optional heavy suites (off by default)
+property-based-tests = ["dep:proptest", "dep:quickcheck"]
+
+# Formal verification support (off by default)
+formal-verification = ["dep:kani", "dep:prusti-contracts"]
+
+# Integration with existing kernel
+kernel-integration = []
+
+# Extended test suites
+comprehensive-suite = [
+    "qemu-tests",
+    "performance-tests", 
+    "correctness-tests",
+    "distributed-tests",
+    "security-tests",
+    "ai-tests"
+]
+
+# Production-grade enforcement
+strict = [
+    "comprehensive-suite",
+    "formal-verification",
+    "property-based-tests"
+]
+
+[dependencies.proptest]
+version = "1.4"
+optional = true
+
+[dependencies.quickcheck]
+version = "1.0"
+optional = true

@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+import argparse
+import socket
+import struct
+import sys
+import time
+
+SOCK_PATH = '/tmp/sis-datactl.sock'
+
+def frame(cmd: int, payload: bytes, flags: int = 0) -> bytes:
+    # magic 'C'(0x43), ver=0, cmd, flags, len (LE u32), payload
+    hdr = struct.pack('<BBBBI', 0x43, 0, cmd, flags, len(payload))
+    return hdr + payload
+
+def with_token(payload: bytes, token: int) -> bytes:
+    return struct.pack('<Q', token) + payload
+
+def send_frame(cmd: int, payload: bytes, wait_ack: bool = False):
+    data = frame(cmd, payload)
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.settimeout(1.0)
+        s.connect(SOCK_PATH)
+        s.sendall(data)
+        if wait_ack:
+            try:
+                resp = s.recv(64)
+                if resp:
+                    sys.stdout.write(f"ACK: {resp!r}\n")
+            except socket.timeout:
+                sys.stdout.write("ACK: <timeout>\n")
+
+def cmd_create_graph(args):
+    pl = with_token(b'', args.token)
+    send_frame(0x01, pl, args.wait_ack)
+    print('CreateGraph sent')
+
+def cmd_add_channel(args):
+    cap = int(args.capacity)
+    if cap < 1 or cap > 65535:
+        raise SystemExit('capacity must be 1..65535')
+    payload = with_token(struct.pack('<H', cap), args.token)
+    send_frame(0x02, payload, args.wait_ack)
+    print(f'AddChannel(capacity={cap}) sent')
+
+def cmd_add_operator(args):
+    op_id = int(args.op_id)
+    in_ch = int(args.in_ch) if args.in_ch is not None else 0xFFFF
+    out_ch = int(args.out_ch) if args.out_ch is not None else 0xFFFF
+    prio = int(args.priority)
+    stage_map = {
+        'acquire': 0,
+        'clean': 1,
+        'explore': 2,
+        'model': 3,
+        'explain': 4,
+        None: 0,
+    }
+    stage = stage_map.get(args.stage, 0)
+    if args.in_schema is not None or args.out_schema is not None:
+        in_schema = int(args.in_schema) if args.in_schema is not None else 0
+        out_schema = int(args.out_schema) if args.out_schema is not None else 0
+        payload = with_token(struct.pack('<IHHBBII', op_id, in_ch, out_ch, prio, stage, in_schema, out_schema), args.token)
+        send_frame(0x05, payload, args.wait_ack)
+        print(f'AddOperatorTyped(op_id={op_id}, in={in_ch}, out={out_ch}, prio={prio}, stage={stage}, in_schema={in_schema}, out_schema={out_schema}) sent')
+    else:
+        payload = with_token(struct.pack('<IHHBB', op_id, in_ch, out_ch, prio, stage), args.token)
+        send_frame(0x03, payload, args.wait_ack)
+        print(f'AddOperator(op_id={op_id}, in={in_ch}, out={out_ch}, prio={prio}, stage={stage}) sent')
+
+def cmd_start(args):
+    steps = int(args.steps)
+    payload = with_token(struct.pack('<I', steps), args.token)
+    send_frame(0x04, payload, args.wait_ack)
+    print(f'StartGraph(steps={steps}) sent')
+
+def cmd_det(args):
+    wcet = int(args.wcet_ns)
+    period = int(args.period_ns)
+    deadline = int(args.deadline_ns)
+    payload = with_token(struct.pack('<QQQ', wcet, period, deadline), args.token)
+    send_frame(0x06, payload, args.wait_ack)
+    print(f'EnableDeterministic(wcet_ns={wcet}, period_ns={period}, deadline_ns={deadline}) sent')
+
+def main():
+    ap = argparse.ArgumentParser(description='SIS control-plane client (V0 framing)')
+    sub = ap.add_subparsers(dest='cmd', required=True)
+    ap.add_argument('--wait-ack', action='store_true', help='wait for ACK/ERR from kernel (1s timeout)')
+    ap.add_argument('--token', type=lambda x: int(x, 0), default=0x53535F4354524C21, help='64-bit capability token (default matches kernel dev token)')
+
+    sub.add_parser('create').set_defaults(fn=cmd_create_graph)
+
+    ap_ch = sub.add_parser('add-channel')
+    ap_ch.add_argument('capacity')
+    ap_ch.set_defaults(fn=cmd_add_channel)
+
+    ap_op = sub.add_parser('add-operator')
+    ap_op.add_argument('op_id')
+    ap_op.add_argument('--in-ch', type=int)
+    ap_op.add_argument('--out-ch', type=int)
+    ap_op.add_argument('--priority', type=int, default=10)
+    ap_op.add_argument('--stage', choices=['acquire','clean','explore','model','explain'])
+    ap_op.add_argument('--in-schema', type=int)
+    ap_op.add_argument('--out-schema', type=int)
+    ap_op.set_defaults(fn=cmd_add_operator)
+
+    ap_run = sub.add_parser('start')
+    ap_run.add_argument('steps')
+    ap_run.set_defaults(fn=cmd_start)
+
+    ap_det = sub.add_parser('det')
+    ap_det.add_argument('wcet_ns')
+    ap_det.add_argument('period_ns')
+    ap_det.add_argument('deadline_ns')
+    ap_det.set_defaults(fn=cmd_det)
+
+    args = ap.parse_args()
+    args.fn(args)
+
+if __name__ == '__main__':
+    main()

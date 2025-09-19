@@ -1,0 +1,48 @@
+# ARM64 build configuration for SIS Kernel
+[build]
+target = "target-configs/aarch64-unknown-none.json"
+
+[target.'cfg(target_arch = "aarch64")']
+rustflags = [
+  # Enable ARM64-specific optimizations
+  "-C", "target-cpu=native",
+  "-C", "target-feature=+neon,+fp-armv8,+crc,+crypto",
+  
+  # AI workload optimizations
+  "-C", "opt-level=3",
+  "-C", "lto=fat",
+  "-C", "codegen-units=1",
+  
+  # Neural Engine and Metal GPU support
+  "-C", "link-arg=-framework", "-C", "link-arg=Accelerate",
+  "-C", "link-arg=-framework", "-C", "link-arg=Metal",
+  "-C", "link-arg=-framework", "-C", "link-arg=MetalKit",
+  
+  # Linker configuration
+  "--cfg", "arm64-ai",
+]
+
+[profile.dev]
+panic = "abort"
+lto = true
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+opt-level = 3
+
+# Apple Silicon specific configuration
+[target.aarch64-apple-darwin]
+rustflags = [
+  "-C", "target-feature=+neon,+fp-armv8,+crc,+crypto,+aes,+sha2,+sha3",
+  "--cfg", "apple-silicon",
+]
+
+# Raspberry Pi 4 specific configuration  
+[target.aarch64-unknown-linux-gnu]
+rustflags = [
+  "-C", "target-cpu=cortex-a72",
+  "-C", "target-feature=+neon,+fp-armv8,+crc",
+  "--cfg", "raspberry-pi-4",
+]

@@ -1,0 +1,167 @@
+groups:
+  - name: sis_kernel_performance
+    interval: 5s
+    rules:
+      # AI Inference Performance
+      - alert: AIInferenceLatencyHigh
+        expr: sis_kernel_ai_inference_latency_p99_microseconds > 40
+        for: 10s
+        labels:
+          severity: critical
+          category: performance
+        annotations:
+          summary: "AI Inference latency exceeds target"
+          description: "AI Inference P99 latency is {{ $value }}μs, exceeding 40μs target"
+
+      - alert: AIInferenceLatencyDegraded
+        expr: sis_kernel_ai_inference_latency_p95_microseconds > 30
+        for: 30s
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "AI Inference latency showing degradation"
+          description: "AI Inference P95 latency is {{ $value }}μs, approaching 40μs limit"
+
+      # Context Switch Performance
+      - alert: ContextSwitchLatencyHigh
+        expr: sis_kernel_context_switch_latency_p95_nanoseconds > 500
+        for: 5s
+        labels:
+          severity: critical
+          category: performance
+        annotations:
+          summary: "Context switch latency exceeds target"
+          description: "Context switch P95 latency is {{ $value }}ns, exceeding 500ns target"
+
+      # Throughput Monitoring
+      - alert: ThroughputLow
+        expr: rate(sis_kernel_throughput_ops_total[1m]) < 100000
+        for: 1m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "System throughput below threshold"
+          description: "Throughput is {{ $value }} ops/sec, below 100K ops/sec threshold"
+
+  - name: sis_kernel_distributed
+    interval: 1s
+    rules:
+      # Byzantine Consensus
+      - alert: ConsensusLatencyHigh
+        expr: sis_kernel_byzantine_consensus_latency_milliseconds > 5
+        for: 5s
+        labels:
+          severity: critical
+          category: distributed
+        annotations:
+          summary: "Byzantine consensus latency exceeds target"
+          description: "Consensus latency is {{ $value }}ms, exceeding 5ms target"
+
+      - alert: ConsensusFailureRate
+        expr: rate(sis_kernel_byzantine_consensus_failures_total[1m]) > 0.001
+        for: 30s
+        labels:
+          severity: critical
+          category: distributed
+        annotations:
+          summary: "Byzantine consensus failure rate too high"
+          description: "Consensus failure rate is {{ $value }}, exceeding 0.1% threshold"
+
+      # Network Partition Recovery
+      - alert: NetworkPartitionRecoverySlow
+        expr: sis_kernel_network_partition_recovery_milliseconds > 1000
+        for: 10s
+        labels:
+          severity: warning
+          category: distributed
+        annotations:
+          summary: "Network partition recovery is slow"
+          description: "Recovery time is {{ $value }}ms, exceeding 1s threshold"
+
+  - name: sis_kernel_security
+    interval: 10s
+    rules:
+      # Memory Safety
+      - alert: MemorySafetyViolation
+        expr: sis_kernel_memory_safety_violations_total > 0
+        for: 0s
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Memory safety violation detected"
+          description: "{{ $value }} memory safety violations detected"
+
+      # Vulnerability Detection
+      - alert: CriticalVulnerabilityDetected
+        expr: sis_kernel_vulnerabilities_critical_total > 0
+        for: 0s
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Critical vulnerability detected"
+          description: "{{ $value }} critical vulnerabilities found"
+
+      # Cryptographic Validation
+      - alert: CryptoValidationFailure
+        expr: sis_kernel_crypto_validation_failures_total > 0
+        for: 0s
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Cryptographic validation failure"
+          description: "{{ $value }} crypto validation failures detected"
+
+  - name: sis_kernel_ai
+    interval: 1s
+    rules:
+      # AI Accuracy
+      - alert: AIAccuracyLow
+        expr: sis_kernel_ai_inference_accuracy_percent < 99.9
+        for: 30s
+        labels:
+          severity: critical
+          category: ai
+        annotations:
+          summary: "AI inference accuracy below target"
+          description: "AI accuracy is {{ $value }}%, below 99.9% target"
+
+      # Neural Engine Utilization
+      - alert: NeuralEngineUtilizationLow
+        expr: sis_kernel_neural_engine_utilization_percent < 90
+        for: 1m
+        labels:
+          severity: warning
+          category: ai
+        annotations:
+          summary: "Neural Engine utilization low"
+          description: "Neural Engine utilization is {{ $value }}%, below 90% target"
+
+  - name: sis_kernel_qemu
+    interval: 5s
+    rules:
+      # QEMU Boot Time
+      - alert: QEMUBootSlow
+        expr: qemu_boot_time_seconds > 30
+        for: 0s
+        labels:
+          severity: warning
+          category: qemu
+        annotations:
+          summary: "QEMU boot time exceeds threshold"
+          description: "QEMU boot took {{ $value }}s, exceeding 30s threshold"
+
+      # QEMU Resource Usage
+      - alert: QEMUMemoryHigh
+        expr: qemu_memory_usage_bytes > 2147483648  # 2GB
+        for: 1m
+        labels:
+          severity: warning
+          category: qemu
+        annotations:
+          summary: "QEMU memory usage high"
+          description: "QEMU using {{ $value | humanize1024 }}B memory, exceeding 2GB"

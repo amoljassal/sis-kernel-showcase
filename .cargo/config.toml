@@ -1,0 +1,24 @@
+[target.aarch64-unknown-none]
+rustflags = [
+    "-C", "code-model=small",
+    "-C", "relocation-model=static",
+]
+
+# Keep x86_64 support for transition period
+[target.x86_64-unknown-none]
+rustflags = [
+    "-C", "code-model=kernel",
+    "-C", "relocation-model=static",
+]
+
+# RISC-V 64-bit configuration
+[target.riscv64gc-unknown-none-elf]
+rustflags = [
+    "-C", "link-arg=-Tcrates/kernel/src/arch/riscv64/linker.ld",
+    "-C", "code-model=medium",
+    "-C", "target-feature=+m,+a,+f,+d,+c",
+    "-C", "relocation-model=static",
+]
+
+## Note: build-std and target selection are controlled by scripts and per-command flags.
+## Removing global defaults here ensures host tools (like sis-testing) build with std.
