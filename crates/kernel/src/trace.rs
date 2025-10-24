@@ -1,16 +1,35 @@
 //! Lightweight tracing and METRIC emission utilities.
 //! Designed for no_std, low-overhead serial output.
+//!
+//! Runtime metrics capture: disabled by default, enabled via metricsctl command.
+
+use core::sync::atomic::{AtomicBool, Ordering};
+
+/// Runtime toggle for metric emission (on by default for visibility)
+static METRICS_ENABLED: AtomicBool = AtomicBool::new(true);
+
+/// Enable or disable metric emission at runtime
+pub fn metrics_set_enabled(enabled: bool) {
+    METRICS_ENABLED.store(enabled, Ordering::Release);
+}
+
+/// Check if metrics emission is currently enabled
+pub fn metrics_enabled() -> bool {
+    METRICS_ENABLED.load(Ordering::Acquire)
+}
 
 #[inline(always)]
 pub fn metric_kv(name: &str, value: usize) {
-    unsafe {
-        crate::uart_print(b"METRIC ");
-        print_str(name);
-        crate::uart_print(b"=");
-        print_usize(value);
-        crate::uart_print(b"\n");
+    // Conditionally print to UART based on runtime toggle
+    if METRICS_ENABLED.load(Ordering::Relaxed) {
+        unsafe {
+            crate::uart_print(b"METRIC ");
+            print_str(name);
+            crate::uart_print(b"=");
+            print_usize(value);
+            crate::uart_print(b"\n");
+        }
     }
-    // Note: demo metric rings are disabled during bring-up to avoid early-boot contention.
 }
 
 #[inline(always)]
@@ -86,10 +105,17 @@ pub unsafe fn print_usize(mut num: usize) {
     }
 }
 
-// Demo metric rings disabled: provide stubs for snapshotters
-#[inline(always)]
-pub fn metrics_snapshot_ctx_switch(_out: &mut [usize]) -> usize { 0 }
-#[inline(always)]
-pub fn metrics_snapshot_memory_alloc(_out: &mut [usize]) -> usize { 0 }
-#[inline(always)]
-pub fn metrics_snapshot_real_ctx(_out: &mut [usize]) -> usize { 0 }
+/// Snapshot recent ctx_switch_ns values (stub: always returns 0)
+pub fn metrics_snapshot_ctx_switch(_out: &mut [usize]) -> usize {
+    0
+}
+
+/// Snapshot recent memory_alloc_ns values (stub: always returns 0)
+pub fn metrics_snapshot_memory_alloc(_out: &mut [usize]) -> usize {
+    0
+}
+
+/// Snapshot recent real_ctx_switch_ns values (stub: always returns 0)
+pub fn metrics_snapshot_real_ctx(_out: &mut [usize]) -> usize {
+    0
+}

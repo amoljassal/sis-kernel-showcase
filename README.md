@@ -316,6 +316,7 @@ Useful shell commands (type `help` for full list):
   - `ctlhex` — low-level V0 binary control-plane frame injection
 - **Performance monitoring**:
   - `pmu` — PMU hardware counter demo, emits instruction and cache metrics (feature: `perf-verbose`)
+  - `metricsctl on|off|status` — runtime toggle for METRIC output (enabled by default); useful for reducing noise during testing
   - Built-in metrics collection for context switching, memory allocation, AI inference, and deterministic scheduling
 
 ## LLM Kernel Service (feature: `llm`)
@@ -334,7 +335,7 @@ The LLM service is a kernel‑resident, feature‑gated component that exposes a
 
 ## Neural Agent (MLP) + Ask AI
 
-The kernel includes a tiny, bounded MLP (single hidden layer, Q8.8 fixed‑point) to enable a “neural‑first” control loop for simple decisions.
+The kernel includes a tiny, bounded MLP (single hidden layer, Q8.8 fixed‑point) to enable a "neural‑first" control loop for simple decisions.
 
 - Commands:
   - `neuralctl reset` — reset agent to defaults (3x3x2 identity‑like mapping).
@@ -346,11 +347,14 @@ The kernel includes a tiny, bounded MLP (single hidden layer, Q8.8 fixed‑point
   - `neuralctl selftest` — quick pass/fail check with metrics.
   - `nnjson` — print the neural audit ring as JSON (inputs and targets in milli).
   - `ask-ai "<text>"` — simple keyword mapping to features → run agent → print hint.
+  - `metricsctl on|off|status` — runtime toggle for metric emission (enabled by default).
 
 - Notes:
   - Metrics: `nn_infer_us`, `nn_infer_count`, `nn_teach_count`, `nn_selftest_ok`.
   - Fixed caps: inputs<=16, hidden<=16, outputs<=4 to keep compute bounded.
   - Audit ring (size 32) tracks recent inferences and teach entries; `nnjson` exports them.
+  - **Lazy initialization**: `ask-ai` auto-initializes the neural network on first use—no manual `neuralctl reset` required.
+  - **Runtime metric control**: Use `metricsctl off` to suppress METRIC output noise during testing; `metricsctl on` to re-enable.
 
 ### Host Control (VirtIO) Smoke
 
