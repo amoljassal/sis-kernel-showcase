@@ -10,6 +10,7 @@ pub fn metric_kv(name: &str, value: usize) {
         print_usize(value);
         crate::uart_print(b"\n");
     }
+    // Note: demo metric rings are disabled during bring-up to avoid early-boot contention.
 }
 
 #[inline(always)]
@@ -84,3 +85,11 @@ pub unsafe fn print_usize(mut num: usize) {
         crate::uart_print(&[buf[i]]);
     }
 }
+
+// Demo metric rings disabled: provide stubs for snapshotters
+#[inline(always)]
+pub fn metrics_snapshot_ctx_switch(_out: &mut [usize]) -> usize { 0 }
+#[inline(always)]
+pub fn metrics_snapshot_memory_alloc(_out: &mut [usize]) -> usize { 0 }
+#[inline(always)]
+pub fn metrics_snapshot_real_ctx(_out: &mut [usize]) -> usize { 0 }

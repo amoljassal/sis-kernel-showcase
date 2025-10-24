@@ -275,6 +275,14 @@ pub fn selftest() -> bool {
     ok
 }
 
+/// Get last outputs in milli; returns number of outputs copied
+pub fn last_outputs_milli(buf: &mut [i32]) -> usize {
+    let n = NEURAL.lock();
+    let len = n.last_out_len.min(buf.len());
+    for i in 0..len { buf[i] = (n.last_out[i] as i32) * 1000 / 256; }
+    len
+}
+
 /// Get current neural agent dimensions (in, hidden, out)
 pub fn dims() -> (usize, usize, usize) {
     let n = NEURAL.lock();
