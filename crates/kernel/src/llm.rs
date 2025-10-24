@@ -16,6 +16,8 @@ extern crate alloc;
 use alloc::string::String;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use spin::Mutex;
+#[cfg(feature = "crypto-real")]
+use sha2::{Digest, Sha256};
 
 use crate::trace::metric_kv;
 use crate::model;
@@ -719,7 +721,17 @@ pub fn load_model_package(model_id: u32, hash: [u8; 32], sig: [u8; 64], size_byt
     data.resize(size_bytes, byte);
 
     // Compute expected hash and compare with provided
-    let computed = demo_sha256_like(&data);
+    #[cfg(feature = "crypto-real")]
+    let computed: [u8; 32] = {
+        let mut hasher = Sha256::new();
+        hasher.update(&data);
+        let out = hasher.finalize();
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&out[..]);
+        arr
+    };
+    #[cfg(not(feature = "crypto-real"))]
+    let computed: [u8; 32] = demo_sha256_like(&data);
     if computed != hash {
         // Hash mismatch => audit reject
         audit(1, 0, 0, STATE.lock().cfg.wcet_cycles, STATE.lock().cfg.period_ns, 0b010);
