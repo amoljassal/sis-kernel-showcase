@@ -269,8 +269,9 @@ BRINGUP=1 ./scripts/uefi_run.sh
 # Available features:
 #  - llm: Kernel-resident LLM service
 #  - crypto-real: Enable real SHA-256 + Ed25519 cryptography (production mode; requires sha2, ed25519-dalek). Notes:
-#      - Verification uses a compiled-in Ed25519 public key constant in `crates/kernel/src/model.rs`.
-#      - The placeholder key rejects signatures. Replace `ED25519_PUBKEY` with your public key to accept real packages.
+#      - The Ed25519 verifying key can be set at build time via `SIS_ED25519_PUBKEY` (64 hex chars, optional `0x` prefix):
+#          `SIS_ED25519_PUBKEY=0x<64-hex> SIS_FEATURES="llm,crypto-real" BRINGUP=1 ./scripts/uefi_run.sh`
+#      - If not set or invalid, signature verification will fail (reject). No runtime environment is used.
 BRINGUP=1 GRAPH=1 PERF=1 ./scripts/uefi_run.sh
 BRINGUP=1 DETERMINISTIC=1 ./scripts/uefi_run.sh
 BRINGUP=1 SIS_FEATURES="graph-demo,perf-verbose,deterministic" ./scripts/uefi_run.sh
@@ -322,6 +323,14 @@ The LLM service is a kernel‑resident, feature‑gated component that exposes a
   - `llmstream "<prompt>" [--max-tokens N] [--chunk N]` — stream tokens in fixed-size chunks and emit streaming metrics
   - `llmpoll [max]` — poll recent session tokens; shows `id`, `n`, `done`, `plen` (prompt length), and `model` metadata. Works for streamed sessions too.
   - `llmcancel [id]` — cancel last or specific session by id.
+
+Crypto-real usage
+- Provide a 32-byte Ed25519 public key (hex) at build time:
+  - macOS/Linux: `export SIS_ED25519_PUBKEY=0x<64-hex>` then run the build (or prefix the command).
+- Verification details:
+  - Hash: SHA-256 computed over the model bytes.
+  - Signature: verified with `ed25519-dalek` using the provided public key and the hash as the message bytes.
+  - If the key is missing/invalid, signature checks fail (audit rejects).
   - `llmgraph "<prompt>"` — graph‑backed tokenize/print via SPSC channels; emits chunk tensors on an output channel and prints them
   - `llmstats` — show queue depth, total tokens, last latency
   - `llmctl audit` — print recent LLM audit entries (load/infer/stream) with status flags
