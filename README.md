@@ -116,6 +116,13 @@ Non-goals and not implemented: production hardening beyond testing framework, fu
 - `scripts/llm_audit_demo.sh`: host audit demonstration (when experimenting with VirtIO)
 - `tools/sis_datactl.py`: control-plane client (UNIX/TCP) with `--wait-ack`, `--retries`, and LLM frames
   - `llm-hash <model_id> [--size N]`: compute demo SHA-256-like hash for model package testing (matches kernel llmhash)
+ - `tools/sis_sign_model.py`: host-side signer for crypto-real model packages
+   - Usage: `python3 tools/sis_sign_model.py --model-id 7 --size 1024 --privkey <64-hex>`
+   - Outputs:
+     - Public Key (hex) — set at build time: `export SIS_ED25519_PUBKEY=0x<pubkey>`
+     - SHA-256 (hex) — pass as `--hash 0x<...>` to `llmctl load`
+     - Signature (hex) — pass as `--sig 0x<...>` to `llmctl load`
+   - Kernel load (shell): `llmctl load --model 7 --hash 0x<HASH> --sig 0x<SIG> --size-bytes 1024`
 
 ## Typed Graphs
 
