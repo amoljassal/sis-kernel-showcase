@@ -204,7 +204,7 @@ impl Shell {
             #[cfg(feature = "llm")]
             crate::uart_print(b"  llmpoll  - Poll last infer tokens: llmpoll [max]\n");
             #[cfg(feature = "llm")]
-            crate::uart_print(b"  llmcancel- Cancel last infer (stub): llmcancel\n");
+            crate::uart_print(b"  llmcancel- Cancel infer: llmcancel [id]\n");
             crate::uart_print(b"  ctladmin - Show/rotate admin token: ctladmin [0xHEX]\n");
             crate::uart_print(b"  ctlsubmit- Show/rotate submit token: ctlsubmit [0xHEX]\n");
             crate::uart_print(b"  ctlembed - Print embedded-rights token: ctlembed admin|submit\n");

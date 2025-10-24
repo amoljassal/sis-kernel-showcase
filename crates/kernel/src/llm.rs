@@ -114,7 +114,12 @@ impl InferState {
 static INFER_TABLE: Mutex<heapless::Vec<InferState, 32>> = Mutex::new(heapless::Vec::new());
 static MODEL_SEC: Mutex<model::ModelSecurityManager<4, 64>> = Mutex::new(model::ModelSecurityManager::new());
 
-fn record_infer_state(id: usize, toks: heapless::Vec<heapless::String<32>, 128>, model_id: Option<u32>) {
+fn record_infer_state(
+    id: usize,
+    toks: heapless::Vec<heapless::String<32>, 128>,
+    model_id: Option<u32>,
+    prompt_len: usize,
+) {
     // Update last-infer for backward compatibility
     {
         let mut li = LAST_INFER.lock();
@@ -129,7 +134,6 @@ fn record_infer_state(id: usize, toks: heapless::Vec<heapless::String<32>, 128>,
     if tab.len() == tab.capacity() { let _ = tab.remove(0); }
     // Capture timestamp
     let ts_ns = crate::graph::cycles_to_ns(crate::graph::now_cycles());
-    let prompt_len = toks.iter().map(|s| s.len()).sum();
     let _ = tab.push(InferState::new(id, toks, ts_ns, model_id, prompt_len));
 }
 
@@ -433,7 +437,7 @@ pub fn infer(prompt: &str, max_tokens: Option<usize>) -> LlmResult {
     audit(3, prompt.len(), tokens, wcet_cycles, period_ns, status);
 
     // Publish state (last + table) without locking STATE again
-    record_infer_state(id, captured, cur_model_id);
+    record_infer_state(id, captured, cur_model_id, prompt.len());
 
     LlmResult { infer_id: id, tokens_emitted: tokens, output: out, latency_us: us }
 }
@@ -488,6 +492,8 @@ pub fn infer_stream(prompt: &str, max_tokens: Option<usize>, chunk_tokens: usize
     let mut out = String::new();
     let mut chunks = 0usize;
     let mut chunk_buf = String::new();
+    // Capture tokens for control-plane polling and session tracking
+    let mut captured: heapless::Vec<heapless::String<32>, 128> = heapless::Vec::new();
 
     while i < bytes.len() && tokens < cap {
         let mut j = i;
@@ -505,12 +511,16 @@ pub fn infer_stream(prompt: &str, max_tokens: Option<usize>, chunk_tokens: usize
             if !out.is_empty() { out.push(' '); }
             if !chunk_buf.is_empty() { chunk_buf.push(' '); }
             out.push_str("⟨"); chunk_buf.push_str("⟨");
+            let mut tok_s = heapless::String::<32>::new();
             for &b in &bytes[i..j] {
                 let c = if (b'A'..=b'Z').contains(&b) { (b as u8 + 32) as char }
                         else if (b'a'..=b'z').contains(&b) || (b'0'..=b'9').contains(&b) { b as char }
                         else { '?' };
-                out.push(c); chunk_buf.push(c);
+                out.push(c);
+                chunk_buf.push(c);
+                let _ = tok_s.push(c);
             }
+            let _ = captured.push(tok_s);
             out.push_str("⟩"); chunk_buf.push_str("⟩");
             tokens += 1;
 
@@ -554,6 +564,12 @@ pub fn infer_stream(prompt: &str, max_tokens: Option<usize>, chunk_tokens: usize
     }
 
     audit(4, prompt.len(), tokens, st.cfg.wcet_cycles, st.cfg.period_ns, 0b001);
+
+    // Publish state so streamed sessions are visible to ctl_poll/llmsummary
+    let cur_model_id = st.current_model.as_ref().map(|m| m.id);
+    drop(st);
+    record_infer_state(id, captured, cur_model_id, prompt.len());
+
     LlmResult { infer_id: id, tokens_emitted: tokens, output: out, latency_us: us }
 }
 

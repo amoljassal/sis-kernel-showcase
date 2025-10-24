@@ -101,7 +101,20 @@ impl<const MAX_MODELS: usize, const MAX_AUDIT_ENTRIES: usize> ModelSecurityManag
         self.verify_ed25519_signature(&package.sha256_hash, &package.ed25519_signature)
     }
 
-    /// SHA-256 hash (demo implementation)
+    /// SHA-256 hash implementation
+    #[cfg(feature = "crypto-real")]
+    fn sha256_hash(&self, data: &[u8]) -> [u8; 32] {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(data);
+        let out = hasher.finalize();
+        let mut hash = [0u8; 32];
+        hash.copy_from_slice(&out[..]);
+        hash
+    }
+
+    /// SHA-256 hash (demo implementation when crypto-real is off)
+    #[cfg(not(feature = "crypto-real"))]
     fn sha256_hash(&self, data: &[u8]) -> [u8; 32] {
         // Demo checksum-based hash (keeps behavior consistent without real keys)
         let mut hash = [0u8; 32];
@@ -117,7 +130,24 @@ impl<const MAX_MODELS: usize, const MAX_AUDIT_ENTRIES: usize> ModelSecurityManag
         hash
     }
 
-    /// Ed25519 signature verification (demo always accepts)
+    /// Ed25519 signature verification using a compiled-in public key (crypto-real)
+    #[cfg(feature = "crypto-real")]
+    fn verify_ed25519_signature(&self, hash: &[u8; 32], signature: &[u8; 64]) -> bool {
+        use ed25519_dalek::{Signature, VerifyingKey};
+        // IMPORTANT: Replace with your production verifying key.
+        // The placeholder value below will cause verification to fail unless set to a real key.
+        const ED25519_PUBKEY: [u8; 32] = [0u8; 32];
+        match VerifyingKey::from_bytes(&ED25519_PUBKEY) {
+            Ok(vk) => {
+                let sig = Signature::from_bytes(signature);
+                vk.verify_strict(hash, &sig).is_ok()
+            }
+            _ => false,
+        }
+    }
+
+    /// Ed25519 signature verification (demo accepts any signature when crypto-real is off)
+    #[cfg(not(feature = "crypto-real"))]
     fn verify_ed25519_signature(&self, _hash: &[u8; 32], _signature: &[u8; 64]) -> bool { true }
 
     /// Load and verify a signed model package
