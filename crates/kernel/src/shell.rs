@@ -142,6 +142,8 @@ impl Shell {
                 "llmverify" => self.cmd_llm_verify(),
                 #[cfg(feature = "llm")]
                 "llmhash" => self.cmd_llm_hash(&parts[1..]),
+                #[cfg(feature = "llm")]
+                "llmkey" => self.cmd_llm_key(),
                 "ctlkey" => self.cmd_ctlkey(&parts[1..]),
                 "ctladmin" => self.cmd_ctladmin(&parts[1..]),
                 "ctlsubmit" => self.cmd_ctlsubmit(&parts[1..]),
@@ -216,6 +218,8 @@ impl Shell {
             crate::uart_print(b"  llmverify - Verify demo model package (stub SHA256+Ed25519)\n");
             #[cfg(feature = "llm")]
             crate::uart_print(b"  llmhash  - Compute demo hash: llmhash <model_id> [size_bytes]\n");
+            #[cfg(feature = "llm")]
+            crate::uart_print(b"  llmkey   - Show build-time Ed25519 public key (crypto-real)\n");
             crate::uart_print(b"  ctlkey   - Show or rotate control-plane key: ctlkey [0xHEX]\n");
             crate::uart_print(b"  rtaivalidation - Run comprehensive real-time AI inference validation\n");
             crate::uart_print(b"  temporaliso - Run AI temporal isolation demonstration\n");
@@ -507,6 +511,27 @@ impl Shell {
             unsafe { crate::uart_print(&[table[hi as usize]]); crate::uart_print(&[table[lo as usize]]); }
         }
         unsafe { crate::uart_print(b"\n"); }
+    }
+
+    #[cfg(feature = "llm")]
+    fn cmd_llm_key(&self) {
+        #[cfg(feature = "crypto-real")]
+        {
+            match crate::model::get_verifying_key() {
+                Some(pk) => {
+                    unsafe { crate::uart_print(b"LLM PUBKEY: 0x"); }
+                    let table = b"0123456789abcdef";
+                    for b in pk {
+                        let hi = (b >> 4) & 0xF; let lo = b & 0xF;
+                        unsafe { crate::uart_print(&[table[hi as usize]]); crate::uart_print(&[table[lo as usize]]); }
+                    }
+                    unsafe { crate::uart_print(b"\n"); }
+                }
+                None => unsafe { crate::uart_print(b"LLM PUBKEY: <unset>\n"); },
+            }
+        }
+        #[cfg(not(feature = "crypto-real"))]
+        unsafe { crate::uart_print(b"[LLM] crypto-real feature not enabled\n"); }
     }
 
     #[cfg(feature = "llm")]

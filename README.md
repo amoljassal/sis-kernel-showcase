@@ -325,11 +325,12 @@ The LLM service is a kernel‑resident, feature‑gated component that exposes a
 - Build and run with LLM enabled:
   - `SIS_FEATURES="llm" BRINGUP=1 ./scripts/uefi_run.sh`
 - In the shell:
-  - `llmctl load [--wcet-cycles N] [--model ID] [--sig 0xHEX]` — configure service and (optionally) verify a stub signature; audits ok/reject
-  - `llminfer "<prompt>" [--max-tokens N]` — run an inference and print result
-  - `llmstream "<prompt>" [--max-tokens N] [--chunk N]` — stream tokens in fixed-size chunks and emit streaming metrics
-  - `llmpoll [max]` — poll recent session tokens; shows `id`, `n`, `done`, `plen` (prompt length), and `model` metadata. Works for streamed sessions too.
-  - `llmcancel [id]` — cancel last or specific session by id.
+- `llmctl load [--wcet-cycles N] [--model ID] [--sig 0xHEX]` — configure service and (optionally) verify a stub signature; audits ok/reject
+- `llminfer "<prompt>" [--max-tokens N]` — run an inference and print result
+- `llmstream "<prompt>" [--max-tokens N] [--chunk N]` — stream tokens in fixed-size chunks and emit streaming metrics
+- `llmpoll [max]` — poll recent session tokens; shows `id`, `n`, `done`, `plen` (prompt length), and `model` metadata. Works for streamed sessions too.
+- `llmcancel [id]` — cancel last or specific session by id.
+- `llmkey` — show the build-time Ed25519 public key (feature: `crypto-real`).
 
 Crypto-real usage
 - Provide a 32-byte Ed25519 public key (hex) at build time:

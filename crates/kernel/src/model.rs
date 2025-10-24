@@ -76,6 +76,28 @@ pub struct ModelSecurityManager<const MAX_MODELS: usize, const MAX_AUDIT_ENTRIES
     load_failure_count: u32,
 }
 
+/// Expose the build-time Ed25519 verifying key as raw bytes (None if not set/invalid)
+#[cfg(feature = "crypto-real")]
+pub fn get_verifying_key() -> Option<[u8; 32]> {
+    if let Some(val) = option_env!("SIS_ED25519_PUBKEY") {
+        let hex = if let Some(rest) = val.strip_prefix("0x").or_else(|| val.strip_prefix("0X")) { rest } else { val };
+        if hex.len() != 64 { return None; }
+        let b = hex.as_bytes();
+        let mut out = [0u8; 32];
+        let mut i = 0usize;
+        while i < 32 {
+            let hi = b[i*2];
+            let lo = b[i*2+1];
+            let hn = match hi { b'0'..=b'9'=>hi-b'0', b'a'..=b'f'=>hi-b'a'+10, b'A'..=b'F'=>hi-b'A'+10, _=>0xFF };
+            let ln = match lo { b'0'..=b'9'=>lo-b'0', b'a'..=b'f'=>lo-b'a'+10, b'A'..=b'F'=>lo-b'A'+10, _=>0xFF };
+            if hn > 15 || ln > 15 { return None; }
+            out[i] = (hn << 4) | ln;
+            i += 1;
+        }
+        Some(out)
+    } else { None }
+}
+
 impl<const MAX_MODELS: usize, const MAX_AUDIT_ENTRIES: usize> ModelSecurityManager<MAX_MODELS, MAX_AUDIT_ENTRIES> {
     pub const fn new() -> Self {
         Self {
