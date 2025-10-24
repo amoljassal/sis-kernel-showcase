@@ -118,10 +118,39 @@ impl Shell {
                 "rtaivalidation" => self.cmd_realtime_ai_validation(),
                 "temporaliso" => self.cmd_temporal_isolation_demo(),
                 "phase3validation" => self.cmd_phase3_validation(),
+                #[cfg(feature = "llm")]
+                "llmctl" => self.cmd_llmctl(&parts[1..]),
+                #[cfg(feature = "llm")]
+                "llminfer" => self.cmd_llminfer(&parts[1..]),
+                #[cfg(feature = "llm")]
+                "llmstats" => self.cmd_llmstats(),
+                #[cfg(feature = "llm")]
+                "llmstream" => self.cmd_llmstream(&parts[1..]),
+                #[cfg(feature = "llm")]
+                "llmgraph" => self.cmd_llmgraph(&parts[1..]),
+                #[cfg(feature = "llm")]
+                "llmjson" => self.cmd_llm_audit_json(),
+                #[cfg(feature = "llm")]
+                "llmsig" => self.cmd_llmsig(&parts[1..]),
+                #[cfg(feature = "llm")]
+                "llmpoll" => self.cmd_llmpoll(&parts[1..]),
+                #[cfg(feature = "llm")]
+                "llmcancel" => self.cmd_llmcancel(&parts[1..]),
+                #[cfg(feature = "llm")]
+                "llmsummary" => self.cmd_llm_summary(),
+                #[cfg(feature = "llm")]
+                "llmverify" => self.cmd_llm_verify(),
+                #[cfg(feature = "llm")]
+                "llmhash" => self.cmd_llm_hash(&parts[1..]),
                 "ctlkey" => self.cmd_ctlkey(&parts[1..]),
+                "ctladmin" => self.cmd_ctladmin(&parts[1..]),
+                "ctlsubmit" => self.cmd_ctlsubmit(&parts[1..]),
+                "ctlembed" => self.cmd_ctlembed(&parts[1..]),
                 "det" => self.cmd_det(&parts[1..]),
                 "graphctl" => self.cmd_graphctl(&parts[1..]),
                 "ctlhex" => self.cmd_ctlhex(&parts[1..]),
+                #[cfg(feature = "virtio-console")]
+                "vconwrite" => self.cmd_vconwrite(&parts[1..]),
                 "pmu" => self.cmd_pmu_demo(),
                 "mem" => self.cmd_mem(),
                 "regs" => self.cmd_regs(),
@@ -160,12 +189,41 @@ impl Shell {
             crate::uart_print(b"  infdemo  - Run deterministic inference demo (cycle-accurate)\n");
             crate::uart_print(b"  npudemo  - Run NPU device emulation demo (MMIO/IRQ)\n");
             crate::uart_print(b"  npudriver- Run NPU driver demo with interrupt handling\n");
+            #[cfg(feature = "llm")]
+            crate::uart_print(b"  llmctl   - LLM control: load [--wcet-cycles N] [--model ID] [--hash 0xHEX..64] [--sig 0xHEX..128] [--ctx N] [--vocab N] [--quant q4_0|q4_1|int8|fp16|fp32] [--name NAME] [--rev N] [--size-bytes N] | budget [--wcet-cycles N] [--period-ns N] [--max-tokens-per-period N] | status | audit\n");
+            #[cfg(feature = "llm")]
+            crate::uart_print(b"  llminfer - Submit a prompt for LLM inference: llminfer <text> [--max-tokens N]\n");
+            #[cfg(feature = "llm")]
+            crate::uart_print(b"  llmstats - Show LLM service stats\n");
+            #[cfg(feature = "llm")]
+            crate::uart_print(b"  llmstream- Stream tokens in chunks: llmstream <text> [--max-tokens N] [--chunk N]\n");
+            #[cfg(feature = "llm")]
+            crate::uart_print(b"  llmgraph - Graph-backed tokenize/print via SPSC: llmgraph <text>\n");
+            #[cfg(feature = "llm")]
+            crate::uart_print(b"  llmsig   - Print stub signature for model id: llmsig <id>\n");
+            #[cfg(feature = "llm")]
+            crate::uart_print(b"  llmpoll  - Poll last infer tokens: llmpoll [max]\n");
+            #[cfg(feature = "llm")]
+            crate::uart_print(b"  llmcancel- Cancel last infer (stub): llmcancel\n");
+            crate::uart_print(b"  ctladmin - Show/rotate admin token: ctladmin [0xHEX]\n");
+            crate::uart_print(b"  ctlsubmit- Show/rotate submit token: ctlsubmit [0xHEX]\n");
+            crate::uart_print(b"  ctlembed - Print embedded-rights token: ctlembed admin|submit\n");
+            #[cfg(feature = "llm")]
+            crate::uart_print(b"  llmjson  - Print LLM audit log as JSON\n");
+            #[cfg(feature = "llm")]
+            crate::uart_print(b"  llmsummary - List recent LLM sessions (id, tokens, done)\n");
+            #[cfg(feature = "llm")]
+            crate::uart_print(b"  llmverify - Verify demo model package (stub SHA256+Ed25519)\n");
+            #[cfg(feature = "llm")]
+            crate::uart_print(b"  llmhash  - Compute demo hash: llmhash <model_id> [size_bytes]\n");
             crate::uart_print(b"  ctlkey   - Show or rotate control-plane key: ctlkey [0xHEX]\n");
             crate::uart_print(b"  rtaivalidation - Run comprehensive real-time AI inference validation\n");
             crate::uart_print(b"  temporaliso - Run AI temporal isolation demonstration\n");
             crate::uart_print(b"  phase3validation - Run complete Phase 3 AI-native kernel validation\n");
             crate::uart_print(b"  graphctl - Control graph: create | add-channel <cap> | add-operator <op_id> [--in N|none] [--out N|none] [--prio P] [--stage acquire|clean|explore|model|explain] [--in-schema S] [--out-schema S] | start <steps> | det <wcet_ns> <period_ns> <deadline_ns> | stats\n");
             crate::uart_print(b"  ctlhex   - Inject control frame as hex (Create/Add/Start)\n");
+            #[cfg(feature = "virtio-console")]
+            crate::uart_print(b"  vconwrite- Send text to host via virtio-console: vconwrite <text>\n");
             crate::uart_print(b"  pmu      - Run PMU demo (cycles/inst/l1d_refill)\n");
             crate::uart_print(b"  mem      - Show memory information\n");
             crate::uart_print(b"  regs     - Show system registers\n");
@@ -178,6 +236,360 @@ impl Shell {
             crate::uart_print(b"  clear    - Clear screen\n");
             crate::uart_print(b"  exit     - Exit shell\n");
         }
+    }
+
+    #[cfg(feature = "virtio-console")]
+    fn cmd_vconwrite(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: vconwrite <text>\n"); }
+            return;
+        }
+        let mut msg = alloc::string::String::new();
+        for (i, s) in args.iter().enumerate() {
+            if i > 0 { msg.push(' '); }
+            msg.push_str(s);
+        }
+        let drv = crate::virtio_console::get_virtio_console_driver();
+        match drv.write_data(msg.as_bytes()) {
+            Ok(n) => unsafe { crate::uart_print(b"[VCON] wrote "); self.print_number_simple(n as u64); crate::uart_print(b" bytes\n"); },
+            Err(_) => unsafe { crate::uart_print(b"[VCON] write failed\n"); },
+        }
+    }
+
+    // --- LLM commands (feature: llm) ---
+    #[cfg(feature = "llm")]
+    fn cmd_llmctl(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: llmctl load [--wcet-cycles N] [--model ID] [--hash 0xHEX..64] [--sig 0xHEX..128] | budget [--wcet-cycles N] [--period-ns N] [--max-tokens-per-period N]\n"); }
+            return;
+        }
+        match args[0] {
+            "load" => {
+                self.cmd_llmctl_load(args);
+            }
+            "budget" => {
+                let mut wcet: Option<u64> = None;
+                let mut period: Option<u64> = None;
+                let mut max_per: Option<usize> = None;
+                let mut i = 1;
+                while i < args.len() {
+                    match args[i] {
+                        "--wcet-cycles" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<u64>(){ wcet=Some(v);} } },
+                        "--period-ns" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<u64>(){ period=Some(v);} } },
+                        "--max-tokens-per-period" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<usize>(){ max_per=Some(v);} } },
+                        _ => {}
+                    }
+                    i+=1;
+                }
+                crate::llm::configure_budget(wcet, period, max_per);
+                unsafe { crate::uart_print(b"[LLM] budget configured\n"); }
+            }
+            "status" => {
+                #[cfg(feature = "deterministic")]
+                {
+                    let (used, acc, rej, misses, p99) = crate::deterministic::llm_get_status();
+                    unsafe {
+                        crate::uart_print(b"[LLM][DET] used_ppm="); self.print_number_simple(used as u64);
+                        crate::uart_print(b" accepted="); self.print_number_simple(acc as u64);
+                        crate::uart_print(b" rejected="); self.print_number_simple(rej as u64);
+                        crate::uart_print(b" deadline_misses="); self.print_number_simple(misses as u64);
+                        crate::uart_print(b" jitter_p99_ns="); self.print_number_simple(p99 as u64);
+                        crate::uart_print(b"\n");
+                    }
+                }
+                #[cfg(not(feature = "deterministic"))]
+                unsafe { crate::uart_print(b"[LLM] deterministic feature not enabled\n"); }
+            }
+            "audit" => {
+                crate::llm::audit_print();
+            }
+            _ => unsafe { crate::uart_print(b"Usage: llmctl load [--wcet-cycles N] [--model ID] [--hash 0xHEX..64] [--sig 0xHEX..128] | budget [--wcet-cycles N] [--period-ns N] [--max-tokens-per-period N]\n"); },
+        }
+    }
+
+    #[cfg(feature = "llm")]
+    fn cmd_llmctl_load(&self, args: &[&str]) {
+        let mut wcet: Option<u64> = None;
+        let mut model_id: Option<u32> = None;
+        let mut hash_bytes: Option<[u8;32]> = None;
+        let mut sig_bytes: Option<[u8;64]> = None;
+        let mut ctx: Option<u32> = None;
+        let mut vocab: Option<u32> = None;
+        let mut quant: Option<crate::llm::Quantization> = None;
+        let mut name: Option<alloc::string::String> = None;
+        let mut rev: Option<u32> = None;
+        let mut size_bytes: Option<usize> = None;
+        let mut i = 1;
+        while i < args.len() {
+            match args[i] {
+                "--wcet-cycles" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<u64>(){ wcet=Some(v);} } },
+                "--model" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<u32>(){ model_id=Some(v);} } },
+                "--hash" => { i+=1; if i<args.len(){ if let Some(b)=Self::parse_hex_fixed::<32>(args[i]){ hash_bytes=Some(b);} } },
+                "--sig" => { i+=1; if i<args.len(){ if let Some(b)=Self::parse_hex_fixed::<64>(args[i]){ sig_bytes=Some(b);} } },
+                "--ctx" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<u32>(){ ctx=Some(v);} } },
+                "--vocab" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<u32>(){ vocab=Some(v);} } },
+                "--quant" => { i+=1; if i<args.len(){ quant=match args[i].to_ascii_lowercase().as_str(){"q4_0"=>Some(crate::llm::Quantization::Q4_0),"q4_1"=>Some(crate::llm::Quantization::Q4_1),"int8"=>Some(crate::llm::Quantization::Int8),"fp16"=>Some(crate::llm::Quantization::FP16),"fp32"=>Some(crate::llm::Quantization::FP32),_=>None}; } },
+                "--name" => { i+=1; if i<args.len(){ let mut s=alloc::string::String::new(); s.push_str(args[i]); name=Some(s);} },
+                "--rev" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<u32>(){ rev=Some(v);} } },
+                "--size-bytes" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<usize>(){ size_bytes=Some(v);} } },
+                _ => {}
+            }
+            i+=1;
+        }
+        let ok = if model_id.is_some() && hash_bytes.is_some() {
+            let mid = model_id.unwrap();
+            let hb = hash_bytes.unwrap();
+            let sb = sig_bytes.unwrap_or([0u8;64]);
+            let sz = size_bytes.unwrap_or(1024);
+            crate::llm::load_model_package(mid, hb, sb, sz)
+        } else if ctx.is_some() || vocab.is_some() || quant.is_some() || name.is_some() || rev.is_some() || size_bytes.is_some() {
+            let mid = model_id.unwrap_or(0);
+            let meta = crate::llm::ModelMeta { id: mid, name, ctx_len: ctx.unwrap_or(2048), vocab_size: vocab.unwrap_or(50_000), quant: quant.unwrap_or(crate::llm::Quantization::Int8), revision: rev, size_bytes: size_bytes.unwrap_or(1_048_576) };
+            crate::llm::load_model_with_meta(Some(meta), wcet, None)
+        } else if model_id.is_some() {
+            crate::llm::load_model_meta(model_id, wcet, None)
+        } else {
+            crate::llm::load_model(wcet)
+        };
+        unsafe { if ok { crate::uart_print(b"[LLM] model loaded\n"); } else { crate::uart_print(b"[LLM] model load failed\n"); } }
+    }
+
+    #[cfg(feature = "llm")]
+    fn parse_hex_fixed<const N: usize>(s: &str) -> Option<[u8; N]> {
+        let hex = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
+        if hex.len() != N * 2 { return None; }
+        let mut out = [0u8; N];
+        let bytes = hex.as_bytes();
+        for i in 0..N {
+            let hi = bytes[i*2];
+            let lo = bytes[i*2+1];
+            let hn = match hi { b'0'..=b'9' => hi - b'0', b'a'..=b'f' => hi - b'a' + 10, b'A'..=b'F' => hi - b'A' + 10, _ => 0xFF };
+            let ln = match lo { b'0'..=b'9' => lo - b'0', b'a'..=b'f' => lo - b'a' + 10, b'A'..=b'F' => lo - b'A' + 10, _ => 0xFF };
+            if hn > 15 || ln > 15 { return None; }
+            out[i] = (hn << 4) | ln;
+        }
+        Some(out)
+    }
+
+    #[cfg(feature = "llm")]
+    fn cmd_llminfer(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: llminfer <prompt text> [--max-tokens N]\n"); }
+            return;
+        }
+        // Parse optional --max-tokens
+        let mut max_tokens: Option<usize> = None;
+        let mut prompt_parts: heapless::Vec<&str, 32> = heapless::Vec::new();
+        let mut i = 0usize;
+        while i < args.len() {
+            if args[i] == "--max-tokens" {
+                i += 1;
+                if i < args.len() { if let Ok(v) = args[i].parse::<usize>() { max_tokens = Some(v); } }
+            } else {
+                let _ = prompt_parts.push(args[i]);
+            }
+            i += 1;
+        }
+        let mut prompt = alloc::string::String::new();
+        for (k, p) in prompt_parts.iter().enumerate() {
+            if k > 0 { prompt.push(' '); }
+            prompt.push_str(p);
+        }
+        let res = crate::llm::infer(&prompt, max_tokens);
+        unsafe {
+            crate::uart_print(b"[LLM] infer id="); self.print_number_simple(res.infer_id as u64);
+            crate::uart_print(b" tokens="); self.print_number_simple(res.tokens_emitted as u64);
+            crate::uart_print(b" latency_us="); self.print_number_simple(res.latency_us as u64);
+            crate::uart_print(b"\n[LLM] output: ");
+            crate::uart_print(res.output.as_bytes());
+            crate::uart_print(b"\n");
+        }
+    }
+
+    #[cfg(feature = "llm")]
+    fn cmd_llmstats(&self) {
+        let (qdmax, total_tokens, misses, last_us) = crate::llm::stats();
+        unsafe {
+            crate::uart_print(b"[LLM] queue_depth_max="); self.print_number_simple(qdmax as u64);
+            crate::uart_print(b" total_tokens="); self.print_number_simple(total_tokens as u64);
+            crate::uart_print(b" deadline_misses="); self.print_number_simple(misses as u64);
+            crate::uart_print(b" last_latency_us="); self.print_number_simple(last_us as u64);
+            crate::uart_print(b"\n");
+        }
+    }
+
+    #[cfg(feature = "llm")]
+    fn cmd_llm_audit_json(&self) {
+        crate::llm::audit_print_json();
+    }
+
+    #[cfg(feature = "llm")]
+    fn cmd_llmsig(&self, args: &[&str]) {
+        if args.len() < 1 {
+            unsafe { crate::uart_print(b"Usage: llmsig <model_id>\n"); }
+            return;
+        }
+        let id = match args[0].parse::<u32>() {
+            Ok(v) => v,
+            Err(_) => { unsafe { crate::uart_print(b"[LLM] invalid model id\n"); } return; }
+        };
+        // Recompute the signature using the same stub logic as in llm.rs
+        let salt_a: u64 = 0xA5A5_A5A5_A5A5_A5A5;
+        let salt_b: u64 = 0x5349_534C_4D4F_444C; // b"SISLMODL"
+        let sig = salt_a ^ salt_b ^ (id as u64);
+        unsafe { crate::uart_print(b"LLM SIG: "); }
+        self.print_hex(sig);
+        unsafe { crate::uart_print(b"\n"); }
+    }
+
+    #[cfg(feature = "llm")]
+    fn cmd_llmpoll(&self, args: &[&str]) {
+        let max = if !args.is_empty() {
+            args[0].parse::<usize>().unwrap_or(4)
+        } else { 4 };
+        let (id, n, done, _items) = crate::llm::ctl_poll(max);
+        unsafe {
+            crate::uart_print(b"[LLM][POLL] id="); self.print_number_simple(id as u64);
+            crate::uart_print(b" n="); self.print_number_simple(n as u64);
+            crate::uart_print(b" done="); self.print_number_simple(done as u64);
+            crate::uart_print(b"\n");
+        }
+    }
+
+    #[cfg(feature = "llm")]
+    fn cmd_llmcancel(&self, args: &[&str]) {
+        if let Some(id_str) = args.get(0) {
+            if let Ok(id) = id_str.parse::<u32>() {
+                crate::llm::ctl_cancel_id(id as usize);
+                unsafe { crate::uart_print(b"[LLM] cancel issued for id="); }
+                self.print_number_simple(id as u64);
+                unsafe { crate::uart_print(b"\n"); }
+                return;
+            }
+        }
+        crate::llm::ctl_cancel();
+        unsafe { crate::uart_print(b"[LLM] cancel issued\n"); }
+    }
+
+    #[cfg(feature = "llm")]
+    fn cmd_llm_summary(&self) {
+        crate::llm::ctl_print_sessions();
+    }
+
+    #[cfg(feature = "llm")]
+    fn cmd_llm_verify(&self) {
+        let ok = crate::llm::verify_demo_model();
+        unsafe {
+            if ok { crate::uart_print(b"[LLM][MODEL] verify ok\n"); }
+            else { crate::uart_print(b"[LLM][MODEL] verify FAILED\n"); }
+        }
+    }
+
+    #[cfg(feature = "llm")]
+    fn cmd_llm_hash(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: llmhash <model_id> [size_bytes]\n"); }
+            return;
+        }
+        let id = match args[0].parse::<u32>() { Ok(v) => v, Err(_) => { unsafe { crate::uart_print(b"[LLM] invalid model id\n"); } return; } };
+        let size = if args.len() >= 2 { args[1].parse::<usize>().unwrap_or(1024) } else { 1024 };
+        let hash = crate::llm::demo_hash_for(id, size);
+        unsafe { crate::uart_print(b"LLM HASH: 0x"); }
+        for b in hash {
+            let hi = (b >> 4) & 0xF; let lo = b & 0xF; let table = b"0123456789ABCDEF";
+            unsafe { crate::uart_print(&[table[hi as usize]]); crate::uart_print(&[table[lo as usize]]); }
+        }
+        unsafe { crate::uart_print(b"\n"); }
+    }
+
+    #[cfg(feature = "llm")]
+    fn cmd_llmstream(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: llmstream <prompt text> [--max-tokens N] [--chunk N]\n"); }
+            return;
+        }
+        let mut max_tokens: Option<usize> = None;
+        let mut chunk: usize = 2;
+        let mut prompt_parts: heapless::Vec<&str, 32> = heapless::Vec::new();
+        let mut i = 0usize;
+        while i < args.len() {
+            match args[i] {
+                "--max-tokens" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<usize>(){ max_tokens=Some(v);} } },
+                "--chunk" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<usize>(){ if v>0 { chunk=v; } } } },
+                _ => { let _ = prompt_parts.push(args[i]); }
+            }
+            i+=1;
+        }
+        let mut prompt = alloc::string::String::new();
+        for (k,p) in prompt_parts.iter().enumerate(){ if k>0 { prompt.push(' ');} prompt.push_str(p);}        
+        let res = crate::llm::infer_stream(&prompt, max_tokens, chunk);
+        unsafe {
+            crate::uart_print(b"[LLM][STREAM] infer id="); self.print_number_simple(res.infer_id as u64);
+            crate::uart_print(b" tokens="); self.print_number_simple(res.tokens_emitted as u64);
+            crate::uart_print(b" latency_us="); self.print_number_simple(res.latency_us as u64);
+            crate::uart_print(b"\n");
+        }
+    }
+
+    #[cfg(feature = "llm")]
+    fn cmd_llmgraph(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: llmgraph <prompt text>\n"); }
+            return;
+        }
+        // Build prompt string
+        let mut prompt = alloc::string::String::new();
+        for (k,p) in args.iter().enumerate(){ if k>0 { prompt.push(' ');} prompt.push_str(p);}        
+        // Create a tiny graph with one operator reading TEXT and printing tokens
+        let mut g = crate::graph::GraphApi::create();
+        let in_ch = g.add_channel(crate::graph::ChannelSpec{capacity:64});
+        let out_ch = g.add_channel(crate::graph::ChannelSpec{capacity:64});
+        let _op = g.add_operator(crate::graph::OperatorSpec{
+            id: 42,
+            func: crate::graph::op_llm_run,
+            in_ch: Some(in_ch),
+            out_ch: Some(out_ch),
+            priority: 10,
+            stage: None,
+            in_schema: None,
+            out_schema: None,
+        });
+        // Allocate a TEXT tensor and enqueue to input channel
+        unsafe {
+            use crate::tensor::{TensorHeader, TensorAlloc};
+            let text_bytes = prompt.as_bytes();
+            let total = core::mem::size_of::<TensorHeader>() + text_bytes.len();
+            if let Some(h) = TensorAlloc::alloc_uninit(total, 64) {
+                if let Some(hdr) = h.header_mut() {
+                    hdr.version = 1; hdr.dtype = 0; hdr.dims = [0;4]; hdr.strides=[0;4];
+                    hdr.data_offset = core::mem::size_of::<TensorHeader>() as u64;
+                    hdr.schema_id = 1001; // SCHEMA_TEXT
+                    hdr.records = 1; hdr.quality=100; hdr._pad=0; hdr.lineage=0;
+                }
+                let dst = (h.ptr as usize + core::mem::size_of::<TensorHeader>()) as *mut u8;
+                core::ptr::copy_nonoverlapping(text_bytes.as_ptr(), dst, text_bytes.len());
+                let _ = g.channel(in_ch).try_enqueue(h);
+            }
+        }
+        // Run a few steps to give operator time to process
+        g.run_steps(4);
+        // Drain produced channel and print chunk tensors
+        let out = g.channel(out_ch);
+        let mut _drained = 0usize;
+        loop {
+            if let Some(h) = out.try_dequeue() {
+                unsafe {
+                    let (data_ptr, data_len) = if let Some(hdr)=h.header(){ ((h.ptr as usize + hdr.data_offset as usize) as *const u8, (h.len.saturating_sub(hdr.data_offset as usize))) } else { (h.ptr as *const u8, h.len) };
+                    let sl = core::slice::from_raw_parts(data_ptr, data_len);
+                    crate::uart_print(b"[LLM][GRAPH-OUT] chunk: ");
+                    crate::uart_print(sl);
+                    crate::uart_print(b"\n");
+                    crate::tensor::TensorAlloc::dealloc(h, 64);
+                }
+                _drained += 1;
+            } else { break; }
+        }
+        unsafe { crate::uart_print(b"[LLM][GRAPH] done\n"); }
     }
 
     /// Echo command
@@ -341,6 +753,60 @@ impl Shell {
             }
             Err(_) => unsafe { crate::uart_print(b"[CTL] invalid hex token\n"); },
         }
+    }
+
+    /// Show or rotate the admin token for control-plane (host)
+    fn cmd_ctladmin(&self, args: &[&str]) {
+        if args.is_empty() {
+            let tok = crate::control::get_admin_token();
+            unsafe { crate::uart_print(b"ADMIN TOKEN: "); }
+            self.print_hex(tok);
+            unsafe { crate::uart_print(b"\n"); }
+            return;
+        }
+        let s = args[0].trim();
+        let v = if let Some(stripped) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) { u64::from_str_radix(stripped, 16) } else { u64::from_str_radix(s, 16) };
+        match v {
+            Ok(tok) => { crate::control::set_admin_token(tok); unsafe { crate::uart_print(b"ADMIN TOKEN UPDATED\n"); } }
+            Err(_) => unsafe { crate::uart_print(b"[CTL] invalid hex token\n"); },
+        }
+    }
+
+    /// Show or rotate the submit token for control-plane (host)
+    fn cmd_ctlsubmit(&self, args: &[&str]) {
+        if args.is_empty() {
+            let tok = crate::control::get_submit_token();
+            unsafe { crate::uart_print(b"SUBMIT TOKEN: "); }
+            self.print_hex(tok);
+            unsafe { crate::uart_print(b"\n"); }
+            return;
+        }
+        let s = args[0].trim();
+        let v = if let Some(stripped) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) { u64::from_str_radix(stripped, 16) } else { u64::from_str_radix(s, 16) };
+        match v {
+            Ok(tok) => { crate::control::set_submit_token(tok); unsafe { crate::uart_print(b"SUBMIT TOKEN UPDATED\n"); } }
+            Err(_) => unsafe { crate::uart_print(b"[CTL] invalid hex token\n"); },
+        }
+    }
+
+    /// Print an embedded-rights token for host use
+    /// Usage: ctlembed admin | ctlembed submit
+    fn cmd_ctlembed(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: ctlembed admin|submit\n"); }
+            return;
+        }
+        // rights bit0=ADMIN, bit1=SUBMIT
+        let rights: u8 = match args[0].to_ascii_lowercase().as_str() {
+            "admin" => 0x01,
+            "submit" => 0x02,
+            _ => { unsafe { crate::uart_print(b"Usage: ctlembed admin|submit\n"); } return; }
+        };
+        let secret = crate::control::get_control_token() & 0x00FF_FFFF_FFFF_FFFFu64;
+        let tok = ((rights as u64) << 56) | secret;
+        unsafe { crate::uart_print(b"EMBED TOKEN: "); }
+        self.print_hex(tok);
+        unsafe { crate::uart_print(b"\n"); }
     }
 
     /// Deterministic control: on/off/status/reset
@@ -673,6 +1139,12 @@ impl Shell {
                     }
                 } else {
                     unsafe { crate::uart_print(b"GRAPH: no active graph\n"); }
+                }
+            }
+            "show" | "export" => {
+                match crate::control::export_graph_text() {
+                    Ok(()) => unsafe { crate::uart_print(b"[GRAPH] export complete\n"); },
+                    Err(_) => unsafe { crate::uart_print(b"[GRAPH] no active graph\n"); },
                 }
             }
             _ => unsafe { crate::uart_print(b"Usage: graphctl <create|add-channel|add-operator|start|det|stats> ...\n"); }

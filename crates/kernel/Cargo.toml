@@ -42,6 +42,7 @@ graph-demo = []    # Run graph demo during bring-up
 graph-spsc-debug = [] # Debug SPSC ring demo with progress prints
 virtio-console = []   # Enable VirtIO console driver path during bring-up
 graph-autostats = []  # Auto-create a baseline graph and emit graph_stats_* METRICs
+llm = []             # Kernel-resident LLM operator/service (feature-gated)
 
 [build-dependencies]
 bootloader = { version = "=0.11.11", default-features = false, features = ["bios"] }

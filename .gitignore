@@ -28,3 +28,9 @@ qemu-serial.log
 
 # Build artifacts
 bootimage-*.bin
+# Conversation logs and unrelated projects
+docs/chatgpt-*.md
+Projects/
+
+# macOS metadata
+.DS_Store

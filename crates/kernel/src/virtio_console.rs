@@ -13,6 +13,8 @@ const VCON_DMA_POOL_SIZE: usize = 256 * 1024; // 256 KiB
 struct VconDmaPool([u8; VCON_DMA_POOL_SIZE]);
 static mut VCON_DMA_POOL: VconDmaPool = VconDmaPool([0; VCON_DMA_POOL_SIZE]);
 static VCON_DMA_OFF: AtomicUsize = AtomicUsize::new(0);
+// Fixed maximum we allocate for queue ring memory; negotiated size may be smaller
+const QMAX: u32 = 256;
 
 /// VirtIO Console feature bits
 #[repr(u32)]
@@ -79,43 +81,9 @@ struct VirtQueueDesc {
     next: u16,
 }
 
-/// VirtQueue available ring
-#[repr(C)]
-#[derive(Debug)]
-struct VirtQueueAvail {
-    /// Flags
-    flags: u16,
-    /// Index
-    idx: u16,
-    /// Ring of descriptor indices
-    ring: [u16; 256],
-    /// Used event (optional)
-    used_event: u16,
-}
-
-/// VirtQueue used ring element
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-struct VirtQueueUsedElem {
-    /// Descriptor index
-    id: u32,
-    /// Bytes written
-    len: u32,
-}
-
-/// VirtQueue used ring
-#[repr(C)]
-#[derive(Debug)]
-struct VirtQueueUsed {
-    /// Flags
-    flags: u16,
-    /// Index
-    idx: u16,
-    /// Ring of used elements
-    ring: [VirtQueueUsedElem; 256],
-    /// Available event (optional)
-    avail_event: u16,
-}
+// We avoid fixed-size ring structs; instead we compute offsets dynamically
+// Avail layout: u16 flags, u16 idx, u16 ring[size], u16 used_event(optional)
+// Used layout:  u16 flags, u16 idx, { u32 id, u32 len }[size], u16 avail_event(optional)
 
 /// VirtQueue implementation
 struct VirtQueue {
@@ -126,23 +94,27 @@ struct VirtQueue {
     size: u16,
     /// Descriptor table
     desc_table: *mut VirtQueueDesc,
-    /// Available ring
-    avail_ring: *mut VirtQueueAvail,
-    /// Used ring
-    used_ring: *mut VirtQueueUsed,
+    /// Available ring base (MMIO-mapped DMA memory)
+    avail_base: u64,
+    /// Used ring base (MMIO-mapped DMA memory)
+    used_base: u64,
     /// Next available descriptor
     next_desc: u16,
     /// Last seen used index
     last_used_idx: u16,
+    /// Shadow available idx to avoid MMIO reads
+    avail_idx_shadow: u16,
 }
 
 impl VirtQueue {
     /// Create new virtqueue (simplified for basic console)
     unsafe fn new(index: u16, size: u16, desc_addr: u64) -> Self {
         let desc_table = desc_addr as *mut VirtQueueDesc;
-        let avail_ring = (desc_addr + (size as u64 * 16)) as *mut VirtQueueAvail;
-        let used_ring =
-            (desc_addr + (size as u64 * 16) + (size as u64 * 2) + 6) as *mut VirtQueueUsed;
+        // Conservative ring layout matching prior working build
+        // avail_base = desc + (size*16)
+        // used_base  = avail_base + (size*2) + 6
+        let avail_base = desc_addr + (size as u64 * 16);
+        let used_base = avail_base + (size as u64 * 2) + 6;
 
         // Initialize descriptor table
         for i in 0..size {
@@ -153,22 +125,23 @@ impl VirtQueue {
             desc.next = (i + 1) % size;
         }
 
-        // Initialize available ring
-        (*avail_ring).flags = 0;
-        (*avail_ring).idx = 0;
+        // Initialize available ring header
+        core::ptr::write_volatile(avail_base as *mut u16, 0u16); // flags
+        core::ptr::write_volatile((avail_base + 2) as *mut u16, 0u16); // idx
 
-        // Initialize used ring
-        (*used_ring).flags = 0;
-        (*used_ring).idx = 0;
+        // Initialize used ring header
+        core::ptr::write_volatile(used_base as *mut u16, 0u16); // flags
+        core::ptr::write_volatile((used_base + 2) as *mut u16, 0u16); // idx
 
         VirtQueue {
             index,
             size,
             desc_table,
-            avail_ring,
-            used_ring,
+            avail_base,
+            used_base,
             next_desc: 0,
             last_used_idx: 0,
+            avail_idx_shadow: 0,
         }
     }
 
@@ -185,12 +158,13 @@ impl VirtQueue {
         desc.len = len;
         desc.flags = flags;
 
-        // Add to available ring
-        let avail_idx = (*self.avail_ring).idx as usize % self.size as usize;
-        (*self.avail_ring).ring[avail_idx] = desc_idx;
-
-        // Update available index
-        (*self.avail_ring).idx = (*self.avail_ring).idx.wrapping_add(1);
+        // Add to available ring: ring entry at offset 4 + 2*idx
+        let idx = self.avail_idx_shadow;
+        let off = self.avail_base + 4 + (2 * (idx as u64 % self.size as u64));
+        core::ptr::write_volatile(off as *mut u16, desc_idx);
+        let new_idx = idx.wrapping_add(1);
+        self.avail_idx_shadow = new_idx;
+        core::ptr::write_volatile((self.avail_base + 2) as *mut u16, new_idx);
 
         self.next_desc = (self.next_desc + 1) % self.size;
 
@@ -199,14 +173,15 @@ impl VirtQueue {
 
     /// Check for used buffers
     unsafe fn get_used_buffer(&mut self) -> Option<(u32, u32)> {
-        if self.last_used_idx == (*self.used_ring).idx {
+        let used_idx = core::ptr::read_volatile((self.used_base + 2) as *const u16);
+        if self.last_used_idx == used_idx {
             return None;
         }
-
-        let used_elem = (*self.used_ring).ring[self.last_used_idx as usize % self.size as usize];
+        let elem_off = self.used_base + 4 + ((self.last_used_idx as u64 % self.size as u64) * 8);
+        let id = core::ptr::read_volatile(elem_off as *const u32);
+        let len = core::ptr::read_volatile((elem_off + 4) as *const u32);
         self.last_used_idx = self.last_used_idx.wrapping_add(1);
-
-        Some((used_elem.id, used_elem.len))
+        Some((id, len))
     }
 }
 
@@ -276,19 +251,22 @@ impl VirtIOConsoleDriver {
     /// Initialize virtqueues
     unsafe fn init_virtqueues(&mut self, _device: &DeviceInfo) -> DriverResult<()> {
         let transport = self.transport.as_ref().ok_or(DriverError::InitFailed)?;
+        // Use fixed allocation footprint matching our static ring structs (256 entries)
+        const QMAX: u32 = 256;
 
         // Select queue 0 (receiveq)
         transport.write_reg(VirtIOMMIOOffset::QueueSel, 0);
         let queue0_size_hw = transport.read_reg(VirtIOMMIOOffset::QueueNumMax);
-        // Clamp to a sane size to avoid huge allocations/writes if QEMU reports a large max
-        let queue0_size = core::cmp::min(queue0_size_hw, 256);
+        let queue0_size = core::cmp::min(queue0_size_hw, QMAX);
 
         if queue0_size == 0 {
             return Err(DriverError::NotSupported);
         }
 
         // Allocate memory for queue 0
-        let q0_bytes = (queue0_size as usize * 16) + (queue0_size as usize * 2) + 6 + (queue0_size as usize * 8) + 6;
+        // Allocate for QMAX entries to match struct sizes (avoid overwrite when size < 256)
+        // Match prior working allocation footprint
+        let q0_bytes = (QMAX as usize * 16) + (QMAX as usize * 2) + 6 + (QMAX as usize * 8) + 6;
         let queue0_addr = Self::dma_alloc(q0_bytes, 4096);
         self.receiveq = Some(VirtQueue::new(0, queue0_size as u16, queue0_addr));
 
@@ -329,12 +307,12 @@ impl VirtIOConsoleDriver {
         // Select queue 1 (transmitq)
         transport.write_reg(VirtIOMMIOOffset::QueueSel, 1);
         let queue1_size_hw = transport.read_reg(VirtIOMMIOOffset::QueueNumMax);
-        let queue1_size = core::cmp::min(queue1_size_hw, 256);
+        let queue1_size = core::cmp::min(queue1_size_hw, QMAX);
 
         if queue1_size > 0 {
-            let q1_bytes = (queue1_size as usize * 16) + (queue1_size as usize * 2) + 6 + (queue1_size as usize * 8) + 6;
-            let queue1_addr = Self::dma_alloc(q1_bytes, 4096);
-            self.transmitq = Some(VirtQueue::new(1, queue1_size as u16, queue1_addr));
+        let q1_bytes = (QMAX as usize * 16) + (QMAX as usize * 2) + 6 + (QMAX as usize * 8) + 6;
+        let queue1_addr = Self::dma_alloc(q1_bytes, 4096);
+        self.transmitq = Some(VirtQueue::new(1, queue1_size as u16, queue1_addr));
 
             // Set queue 1 addresses
             transport.write_reg(
@@ -367,15 +345,11 @@ impl VirtIOConsoleDriver {
 
     /// Negotiate features (detect MultiPort)
     unsafe fn negotiate_features(&mut self, transport: &VirtIOMMIOTransport) -> u32 {
-        // Read device features (low 32 bits)
+        // Read device features (low 32 bits). For stability on macOS/QEMU, operate in single-port mode.
         transport.write_reg(VirtIOMMIOOffset::DeviceFeaturesSel, 0);
-        let dev = transport.read_reg(VirtIOMMIOOffset::DeviceFeatures);
-        let mut features: u32 = 0;
-        if (dev & (VirtIOConsoleFeatures::MultiPort as u32)) != 0 {
-            self.multip = true;
-            features |= VirtIOConsoleFeatures::MultiPort as u32;
-        }
-        features
+        let _dev = transport.read_reg(VirtIOMMIOOffset::DeviceFeatures);
+        self.multip = false;
+        0
     }
 
     /// Write data using VirtIO console
@@ -445,6 +419,23 @@ impl VirtIOConsoleDriver {
         loop {
             match self.read_data(&mut tmp) {
                 Ok(n) if n > 0 => {
+                    // Lightweight trace + debug to confirm delivery
+                    crate::trace::metric_kv("vcon_rx_bytes", n as usize);
+                    // Print first few bytes for framing check: 'C', ver, cmd, flags, lenLE
+                    crate::uart_print(b"[VCON][RX] n=");
+                    self.print_hex(n as u32);
+                    crate::uart_print(b" bytes: ");
+                    let show = core::cmp::min(8, n);
+                    for i in 0..show {
+                        let b = tmp[i] as u32;
+                        let hi = ((b >> 4) & 0xF) as u8;
+                        let lo = (b & 0xF) as u8;
+                        let hex = b"0123456789ABCDEF";
+                        crate::uart_print(&[hex[hi as usize]]);
+                        crate::uart_print(&[hex[lo as usize]]);
+                        crate::uart_print(b" ");
+                    }
+                    crate::uart_print(b"\n");
                     // Append to ctl_buf
                     let space = self.ctl_buf.len().saturating_sub(self.ctl_len);
                     let to_copy = core::cmp::min(space, n);
@@ -624,6 +615,7 @@ impl VirtIOConsoleDriver {
         Ok(())
     }
 
+
     /// Send a control event (e.g., PortOpen) on the control TX queue
     unsafe fn send_ctrl_event(&mut self, event: u16, id: u32, value: u16) -> DriverResult<()> {
         if let Some(txq) = self.ctrl_txq.as_mut() {
@@ -700,9 +692,10 @@ impl Driver for VirtIOConsoleDriver {
             // CTRL RX on queue 2
             unsafe {
                 transport.write_reg(VirtIOMMIOOffset::QueueSel, 2);
-                let qsz = transport.read_reg(VirtIOMMIOOffset::QueueNumMax);
+                let qsz_hw = transport.read_reg(VirtIOMMIOOffset::QueueNumMax);
+                let qsz = core::cmp::min(qsz_hw, QMAX);
                 if qsz > 0 {
-                    let bytes = (qsz as usize * 16) + (qsz as usize * 2) + 6 + (qsz as usize * 8) + 6;
+                    let bytes = (QMAX as usize * 16) + (QMAX as usize * 2) + 6 + (QMAX as usize * 8) + 6;
                     let base = Self::dma_alloc(bytes, 4096);
                     self.ctrl_rxq = Some(VirtQueue::new(2, qsz as u16, base));
                     transport.write_reg(VirtIOMMIOOffset::QueueDescLow, (base & 0xFFFF_FFFF) as u32);
@@ -722,9 +715,10 @@ impl Driver for VirtIOConsoleDriver {
                 }
                 // CTRL TX on queue 3
                 transport.write_reg(VirtIOMMIOOffset::QueueSel, 3);
-                let qsz3 = transport.read_reg(VirtIOMMIOOffset::QueueNumMax);
+                let qsz3_hw = transport.read_reg(VirtIOMMIOOffset::QueueNumMax);
+                let qsz3 = core::cmp::min(qsz3_hw, QMAX);
                 if qsz3 > 0 {
-                    let bytes = (qsz3 as usize * 16) + (qsz3 as usize * 2) + 6 + (qsz3 as usize * 8) + 6;
+                    let bytes = (QMAX as usize * 16) + (QMAX as usize * 2) + 6 + (QMAX as usize * 8) + 6;
                     let base = Self::dma_alloc(bytes, 4096);
                     self.ctrl_txq = Some(VirtQueue::new(3, qsz3 as u16, base));
                     transport.write_reg(VirtIOMMIOOffset::QueueDescLow, (base & 0xFFFF_FFFF) as u32);
@@ -755,6 +749,7 @@ impl Driver for VirtIOConsoleDriver {
 
             unsafe {
                 crate::uart_print(b"[VIRTIO-CONSOLE] Driver marked as ready\n");
+                crate::uart_print(b"VCON: READY\n");
             }
 
             self.initialized = true;
@@ -797,7 +792,7 @@ impl Driver for VirtIOConsoleDriver {
             }
         }
 
-        // Attempt to drain RX and process control frames
+        // Attempt to drain RX and process control frames from the data queue
         unsafe { let _ = self.poll_control_frames(); }
         // Poll control events if multiport
         unsafe { let _ = self.poll_ctrl_events(); }

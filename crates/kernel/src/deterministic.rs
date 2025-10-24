@@ -9,7 +9,13 @@ use crate::trace::metric_kv;
 use crate::ml::{VerifiedMLModel, ModelId};
 use crate::npu::NpuPriority;
 use crate::npu_driver::{NpuDriverResult, submit_ai_inference, poll_inference_results};
+use crate::syscall::{read_cycle_counter, print_cycles};
 use alloc::vec::Vec;
+
+#[inline(always)]
+fn print_u64_simple(v: usize) {
+    crate::shell::print_number_simple(v as u64);
+}
 
 #[derive(Copy, Clone)]
 pub struct TaskSpec {
@@ -1038,6 +1044,70 @@ impl<const MAX_SERVERS: usize> DeterministicScheduler<MAX_SERVERS> {
     }
 }
 
+// --- LLM integration helpers (minimal), behind `deterministic` feature ---
+// Expose a tiny global scheduler for LLM accounting so shell flows can drive
+// budgeting/jitter without full graph integration.
+
+static mut LLM_SCHEDULER: Option<DeterministicScheduler<4>> = None;
+const LLM_GRAPH_ID: u32 = 1000;
+const ADMISSION_BOUND_PPM: u32 = 850_000;
+
+/// Ensure the global LLM scheduler exists
+#[allow(static_mut_refs)]
+pub fn llm_sched_init() {
+    unsafe {
+        if LLM_SCHEDULER.is_none() {
+            LLM_SCHEDULER = Some(DeterministicScheduler::<4>::new(ADMISSION_BOUND_PPM));
+        }
+    }
+}
+
+/// Configure/register the LLM server with given budgets (ns). Returns true on admit.
+pub fn llm_configure_server(wcet_ns: u64, period_ns: u64, deadline_ns: u64) -> bool {
+    llm_sched_init();
+    unsafe {
+        if let Some(ref mut sched) = LLM_SCHEDULER {
+            // Best-effort: admit a fresh server. If full, reuse success path.
+            sched.admit_graph(LLM_GRAPH_ID, TaskSpec { id: LLM_GRAPH_ID, wcet_ns, period_ns, deadline_ns }).is_ok()
+        } else {
+            false
+        }
+    }
+}
+
+/// Account one LLM inference completion with runtime/expected ns. Updates det metrics.
+pub fn llm_on_infer_complete(actual_runtime_ns: u64, expected_ns: u64) {
+    unsafe {
+        if let Some(ref mut sched) = LLM_SCHEDULER {
+            // Fake a schedule tick at now; use actual as wall time increment for jitter/deadlines
+            let now_ns = actual_runtime_ns; // relative in this stub
+            let _ = sched.schedule_next(now_ns);
+            sched.complete_execution(LLM_GRAPH_ID, actual_runtime_ns, expected_ns);
+            sched.emit_metrics();
+        }
+    }
+}
+
+/// Snapshot of scheduler status for LLM server
+pub fn llm_get_status() -> (u32, u32, u32, u32, u64) {
+    // (used_ppm, accepted, rejected, deadline_misses, jitter_p99_ns)
+    unsafe {
+        if let Some(ref sched) = LLM_SCHEDULER {
+            let (used, acc, rej) = sched.admission_controller.stats();
+            // Compute jitter p99 from samples
+            let mut p99: u64 = 0;
+            if sched.jitter_count > 0 {
+                let mut sorted = [0u64; 64];
+                sorted[..sched.jitter_count].copy_from_slice(&sched.jitter_samples_ns[..sched.jitter_count]);
+                sorted[..sched.jitter_count].sort_unstable();
+                let idx = ((sched.jitter_count - 1) as f32 * 0.99) as usize;
+                p99 = sorted[idx];
+            }
+            (used, acc, rej, sched.deadline_misses, p99)
+        } else { (0,0,0,0,0) }
+    }
+}
+
 /// Deterministic operation constraints enforcement
 pub struct ConstraintEnforcer {
     /// Track allocations to prevent dynamic allocation in deterministic ops
@@ -1121,12 +1191,12 @@ pub fn test_ai_traditional_isolation() {
     unsafe { crate::uart_print(b"[AI ISOLATION] Testing temporal isolation between AI and traditional tasks\n"); }
     
     // Simulate AI task with strict timing requirements
-    let ai_wcet_cycles = 20000; // 8us at 2.4GHz
-    let ai_deadline_ns = 10_000; // 10us deadline
+    let _ai_wcet_cycles = 20000; // 8us at 2.4GHz
+    let _ai_deadline_ns = 10_000; // 10us deadline
     
     // Simulate traditional task
-    let traditional_wcet_cycles = 50000; // 20us at 2.4GHz
-    let traditional_deadline_ns = 100_000; // 100us deadline
+    let _traditional_wcet_cycles = 50000; // 20us at 2.4GHz
+    let _traditional_deadline_ns = 100_000; // 100us deadline
     
     // Test that AI task timing is unaffected by traditional task
     let ai_start = read_cycle_counter();
@@ -1137,7 +1207,7 @@ pub fn test_ai_traditional_isolation() {
     let traditional_start = read_cycle_counter();
     simulate_traditional_task_execution();
     let traditional_end = read_cycle_counter();
-    let traditional_actual_cycles = traditional_end.wrapping_sub(traditional_start);
+    let _traditional_actual_cycles = traditional_end.wrapping_sub(traditional_start);
     
     // Test concurrent execution
     let concurrent_ai_start = read_cycle_counter();
@@ -1178,7 +1248,7 @@ pub fn test_priority_ai_scheduling() {
     unsafe { crate::uart_print(b"[AI PRIORITY] Testing priority-based AI inference scheduling\n"); }
     
     // Create high and low priority AI tasks
-    let high_priority_ai = AiTaskSpec {
+    let _high_priority_ai = AiTaskSpec {
         id: 1,
         model_id: crate::ml::ModelId(1),
         wcet_cycles: 15000, // 6us at 2.4GHz
@@ -1189,7 +1259,7 @@ pub fn test_priority_ai_scheduling() {
         output_size: 10,
     };
     
-    let low_priority_ai = AiTaskSpec {
+    let _low_priority_ai = AiTaskSpec {
         id: 2,
         model_id: crate::ml::ModelId(2),
         wcet_cycles: 25000, // 10us at 2.4GHz
@@ -1236,7 +1306,7 @@ pub fn test_ai_budget_compliance() {
     
     // Create AI task with budget constraints
     let ai_budget_cycles = 30000; // 12.5us at 2.4GHz
-    let ai_period_ns = 100_000; // 100us period
+    let _ai_period_ns = 100_000; // 100us period
     
     // Simulate multiple inference executions within budget
     let mut total_consumed_cycles = 0u64;
@@ -1289,7 +1359,7 @@ pub fn validate_ai_scheduler_integration() {
     unsafe { crate::uart_print(b"[AI SCHEDULER] Simulating scheduler AI task integration\n"); }
     
     // Create test AI task
-    let test_ai_task = AiTaskSpec {
+    let _test_ai_task = AiTaskSpec {
         id: 100,
         model_id: crate::ml::ModelId(100),
         wcet_cycles: 18000, // 7.5us at 2.4GHz

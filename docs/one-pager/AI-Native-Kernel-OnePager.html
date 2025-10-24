@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI‑Native Kernel (QEMU Demo) — One‑Page Summary</title>
+  <style>
+    body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; color: #111; }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    h2 { font-size: 16px; margin: 18px 0 8px; }
+    ul { margin: 8px 0 12px 20px; }
+    li { margin: 4px 0; }
+    code { background: #f6f8fa; padding: 2px 4px; border-radius: 4px; }
+    .small { color: #444; font-size: 12px; margin-top: 12px; }
+    .links { margin-top: 10px; }
+  </style>
+  <meta name="color-scheme" content="light dark">
+</head>
+<body>
+  <h1>AI‑Native Kernel (QEMU Demo) — One‑Page Summary</h1>
+  <h2>Summary</h2>
+  <ul>
+    <li>I build working demos fast using AI as my build partner. This kernel demo boots with one command and produces “image → top‑5 labels” with timings in seconds. It’s designed to showcase rapid prototyping, not to be a production OS.</li>
+  </ul>
+
+  <h2>What It Does</h2>
+  <ul>
+    <li>Runs a tiny pipeline inside a kernel demo and prints results instantly.</li>
+    <li>Shows step timings (normalize/model/total) for clear performance insight.</li>
+    <li>Includes a live “safety key” rotation to demonstrate basic control security.</li>
+  </ul>
+
+  <h2>Why It Matters</h2>
+  <ul>
+    <li>Proves speed: idea → running system quickly, with clear outcomes.</li>
+    <li>Proves clarity: built‑in timing and simple commands anyone can run.</li>
+    <li>Proves hand‑off: a clean repo and a minimal interface senior engineers can extend.</li>
+  </ul>
+
+  <h2>How To Run (copy‑paste)</h2>
+  <ul>
+    <li>Build + boot (QEMU): <code>BRINGUP=1 ./scripts/uefi_run.sh</code></li>
+    <li>In the SIS shell: <code>imagedemo</code> → prints top‑5 labels + timing metrics.</li>
+    <li>Safety moment: <code>ctlkey</code> → <code>ctlkey 0x53535F4354524C22</code> → <code>ctlkey</code> (confirm key changed).</li>
+  </ul>
+
+  <h2>What You’ll See</h2>
+  <ul>
+    <li>Five labels with scores (e.g., person, tree, car…).</li>
+    <li>Three timing metrics: normalize_us, model_us, total_us.</li>
+    <li>Safety key shown before and after rotation.</li>
+  </ul>
+
+  <h2>Optional: Deterministic Mode</h2>
+  <ul>
+    <li>Build with feature: <code>SIS_FEATURES="deterministic" BRINGUP=1 ./scripts/uefi_run.sh</code>.</li>
+    <li>Commands: <code>graphctl create</code> → <code>graphctl add-channel 64</code> → <code>det on 50000 200000 200000</code> → <code>det status</code> → <code>graphctl start 10</code> → <code>det status</code>.</li>
+  </ul>
+
+  <h2>Hand‑Off Plan (Week 1–2 if a team adopts it)</h2>
+  <ul>
+    <li>Add a tiny Python adapter so normal scripts can call the kernel pipeline like a function.</li>
+    <li>Add two common operators (resize/normalize, top‑K) and a simple HTML/text summary report.</li>
+    <li>Keep the repo clean and the demo script unchanged (one command to run).</li>
+  </ul>
+
+  <div class="links">
+    <strong>Links</strong>
+    <ul>
+      <li>Repo (showcase): <a href="https://github.com/amoljassal/sis-kernel-showcase">github.com/amoljassal/sis-kernel-showcase</a></li>
+      <li>LinkedIn: <a href="https://www.linkedin.com/in/amoljassal/">linkedin.com/in/amoljassal</a></li>
+      <li>Email: (add your preferred email)</li>
+    </ul>
+  </div>
+
+  <div class="small">Export to PDF: open in a browser → File → Print → Save as PDF.</div>
+</body>
+</html>
+
