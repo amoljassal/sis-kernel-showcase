@@ -268,7 +268,9 @@ BRINGUP=1 ./scripts/uefi_run.sh
 #
 # Available features:
 #  - llm: Kernel-resident LLM service
-#  - crypto-real: Enable real SHA-256 + Ed25519 cryptography (production mode; requires sha2, ed25519-dalek)
+#  - crypto-real: Enable real SHA-256 + Ed25519 cryptography (production mode; requires sha2, ed25519-dalek). Notes:
+#      - Verification uses a compiled-in Ed25519 public key constant in `crates/kernel/src/model.rs`.
+#      - The placeholder key rejects signatures. Replace `ED25519_PUBKEY` with your public key to accept real packages.
 BRINGUP=1 GRAPH=1 PERF=1 ./scripts/uefi_run.sh
 BRINGUP=1 DETERMINISTIC=1 ./scripts/uefi_run.sh
 BRINGUP=1 SIS_FEATURES="graph-demo,perf-verbose,deterministic" ./scripts/uefi_run.sh
@@ -318,6 +320,8 @@ The LLM service is a kernel‑resident, feature‑gated component that exposes a
   - `llmctl load [--wcet-cycles N] [--model ID] [--sig 0xHEX]` — configure service and (optionally) verify a stub signature; audits ok/reject
   - `llminfer "<prompt>" [--max-tokens N]` — run an inference and print result
   - `llmstream "<prompt>" [--max-tokens N] [--chunk N]` — stream tokens in fixed-size chunks and emit streaming metrics
+  - `llmpoll [max]` — poll recent session tokens; shows `id`, `n`, `done`, `plen` (prompt length), and `model` metadata. Works for streamed sessions too.
+  - `llmcancel [id]` — cancel last or specific session by id.
   - `llmgraph "<prompt>"` — graph‑backed tokenize/print via SPSC channels; emits chunk tensors on an output channel and prints them
   - `llmstats` — show queue depth, total tokens, last latency
   - `llmctl audit` — print recent LLM audit entries (load/infer/stream) with status flags
