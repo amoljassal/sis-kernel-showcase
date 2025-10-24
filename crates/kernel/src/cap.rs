@@ -22,7 +22,7 @@ bitflags::bitflags! {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum CapObjectKind { Graph, Operator, Channel, Tensor, Model }
+pub enum CapObjectKind { Graph, Operator, Channel, Tensor, Model, Llm }
 
 pub struct Capability {
     pub id: CapId,

@@ -18,6 +18,162 @@ This README reflects the implemented, verifiable behavior in this repo today —
 
 Non-goals and not implemented: production hardening beyond testing framework, full BFT consensus protocol, RDMA fabric, sub-µs context switching on QEMU (achieved in simulation), full driver stack. References to these in past docs were aspirational; this README describes actual code.
 
+## Quick Start
+
+- Build and boot (shell-first, recommended):
+  - `SIS_FEATURES="llm" BRINGUP=1 ./scripts/uefi_run.sh`
+  - At `sis>` run:
+    - `llmctl load --wcet-cycles 50000`
+    - `llminfer "hello world from sis shell" --max-tokens 8`
+    - `llmstream "stream hello world again" --max-tokens 6 --chunk 2`
+    - `llmjson` and `llmstats`
+- Deterministic budgeting (optional):
+  - Boot with: `SIS_FEATURES="llm,deterministic" BRINGUP=1 ./scripts/uefi_run.sh`
+  - In shell: `llmctl budget --period-ns 1000000000 --max-tokens-per-period 8` then `llmctl status`
+- Signature stub (audited allow/deny):
+  - `llmsig 42` → prints `LLM SIG: 0x...`
+  - Load OK: `llmctl load --model 42 --sig 0x<hex>` → `llmjson` shows `op=1,status=1`
+  - Load reject: `llmctl load --model 42 --sig 0xDEADBEEF` → `op=1,status=2`
+
+## LLM Service (feature: `llm`)
+
+- Commands:
+  - `llmctl load [--wcet-cycles N] [--model ID] [--sig 0xHEX]`
+  - `llminfer <prompt> [--max-tokens N]`
+  - `llmstream <prompt> [--max-tokens N] [--chunk N]`
+  - `llmgraph <prompt>` (graph-backed streaming demo)
+  - `llmstats`, `llmjson`
+  - `llmpoll [max]` — poll last inference for up to `max` tokens (counts; ASCII-safe)
+  - `llmcancel` — cancel last inference (stub; marks done)
+- `llmsummary` — list recent LLM sessions (id, total tokens, consumed, done, timestamp, model)
+- `llmverify` — verify demo model package using stub SHA-256 + Ed25519 (audited allow/deny)
+- `llmhash` — compute the demo SHA-256‑like hash for a deterministic buffer: `llmhash <model_id> [size_bytes]`
+- Metrics: `llm_infer_us`, `llm_tokens_out`, `llm_queue_depth_max`, `llm_deadline_miss_count`, `llm_rejects`, `llm_stream_chunks`.
+- Deterministic integration (optional feature `deterministic`):
+- `llmctl budget --wcet-cycles N --period-ns N --max-tokens-per-period N`
+- `llmctl status` prints admission/usage/jitter/misses.
+
+## Security & Audit
+
+- Audit ring (printed by `llmjson`):
+  - Operations: `1=load`, `2=budget`, `3=infer`, `4=stream`
+  - Status bits: `0b001=ok`, `0b010=reject`, `0b100=deadline_miss`
+  - Fields: `prompt_len`, `tokens`, `wcet_cycles`, `period_ns`, `ts_ns`
+- Tokens (host control and future use):
+  - `ctladmin`, `ctlsubmit`: show/rotate admin/submit tokens
+  - `ctlembed admin|submit`: print an embedded-rights token (upper 8 bits = rights)
+- Signature stub (shell-first):
+  - `llmsig <id>` prints a deterministic signature for `id`
+  - `llmctl load --model <id> --sig 0xHEX` audits accept/reject
+
+## Host Control (Optional)
+
+- VirtIO console host control is experimental and off by default. Prefer shell-first flows.
+- To experiment: `VIRTIO=1 SIS_FEATURES="llm,virtio-console" BRINGUP=1 ./scripts/uefi_run.sh`
+  - Host (UNIX): `./tools/sis_datactl.py --retries 4 --wait-ack llm-load --wcet-cycles 25000`
+- Host (TCP): set `DATACTL_TCP=1 DATACTL_PORT=7777` for the run and pass `--tcp 127.0.0.1:7777` to the tool
+- Notes:
+  - Only one client can connect to the QEMU socket at a time. Close `nc` before running the Python tool.
+  - macOS virtconsole delivery can be flaky; TCP is often more reliable.
+  - For `llm-poll`, the tool prints a single-line ACK like: `ACK: OK TOK id=1 n=4 done=0 items=hello|world|from|sis`. Use `id=0` to poll the last inference; otherwise provide a specific id.
+
+### Host control quick start (pair the mode correctly)
+
+- UNIX mode (default in `uefi_run.sh`):
+  1) Boot: `VIRTIO=1 SIS_FEATURES="llm,virtio-console" BRINGUP=1 ./scripts/uefi_run.sh`
+     - The script prints: `Using UNIX socket chardev for datactl at /tmp/sis-datactl.sock`.
+  2) Host: run the tool without `--tcp`:
+     - `./tools/sis_datactl.py --wait-ack llm-load --wcet-cycles 25000`
+     - `./tools/sis_datactl.py --wait-ack llm-infer "hello world" --max-tokens 8`
+     - `./tools/sis_datactl.py --wait-ack llm-poll 4`
+
+- TCP mode:
+  1) Boot: `DATACTL_TCP=1 DATACTL_PORT=7777 VIRTIO=1 SIS_FEATURES="llm,virtio-console" BRINGUP=1 ./scripts/uefi_run.sh`
+     - The script prints: `Using TCP chardev for datactl on 127.0.0.1:7777`.
+  2) Host: run the tool with `--tcp 127.0.0.1:7777`:
+     - `./tools/sis_datactl.py --tcp 127.0.0.1:7777 --wait-ack llm-load --wcet-cycles 25000`
+     - `./tools/sis_datactl.py --tcp 127.0.0.1:7777 --wait-ack llm-infer "hello world" --max-tokens 8`
+     - `./tools/sis_datactl.py --tcp 127.0.0.1:7777 --wait-ack llm-poll 4`
+
+## Testing & CI
+
+- Full suite (QEMU, reports):
+  - `cargo run -p sis-testing --release`
+- LLM-only smoke (boots one node, runs shell LLM sequence, exits 0/1):
+  - `cargo run -p sis-testing --release -- --llm-smoke`
+- LLM-only smoke with deterministic budgeting:
+  - `cargo run -p sis-testing --release -- --llm-smoke-det`
+- LLM model packaging smoke (accept + reject policies):
+  - `cargo run -p sis-testing --release -- --llm-model-smoke`
+- Quick (no QEMU; simulated tests):
+  - `cargo run -p sis-testing --release -- --quick`
+- Artifacts: JSON and HTML dashboards in `target/testing/`.
+
+## Scripts & Tools
+
+- `scripts/uefi_run.sh`: build + boot with feature toggles (e.g., `SIS_FEATURES`, `VIRTIO`, `DATACTL_TCP`)
+- `scripts/llm_demo.sh`: guided LLM demo (`DET=1` adds deterministic budgeting)
+- `scripts/llm_audit_demo.sh`: host audit demonstration (when experimenting with VirtIO)
+- `tools/sis_datactl.py`: control-plane client (UNIX/TCP) with `--wait-ack`, `--retries`, and LLM frames
+
+## Typed Graphs
+
+- Schemas:
+  - `SCHEMA_TEXT = 1001` (LLM input text)
+  - `SCHEMA_TOKENS = 1002` (LLM output tokens)
+- Strict typing:
+  - The first operator that declares an `out_schema` on a channel binds that channel’s schema.
+  - Operators that declare an `in_schema` on a channel must match the bound schema or they are rejected.
+  - LLM uses `SCHEMA_TEXT=1001` (input) and `SCHEMA_TOKENS=1002` (output).
+- Shell test (graphctl):
+  - `graphctl create`
+  - `graphctl add-channel 64`               (creates channel 0)
+  - Bind channel 0 to TEXT: `graphctl add-operator 101 --out 0 --out-schema 1001`   (accept)
+  - Mismatch (TOKENS on TEXT): `graphctl add-operator 102 --in 0 --in-schema 1002` (reject; prints `schema_mismatch_count`)
+  - Match TEXT: `graphctl add-operator 103 --in 0 --in-schema 1001`                (accept)
+  - Show counts: `graphctl stats`
+
+## Sessions & Eviction
+
+- The kernel retains a small table (capacity 32) of recent LLM sessions (inference results) for polling.
+- When full, the oldest session is evicted (oldest-first policy).
+- `llmsummary` prints: `id`, `tokens` (total), `consumed` (read count), `done` (0/1), `ts_ns` (start timestamp), `model` (id or `none`).
+
+## Troubleshooting
+
+- No `llmjson` entries after host commands:
+  - Ensure no `nc` is connected to `/tmp/sis-datactl.sock`.
+  - Use TCP mode for macOS: `DATACTL_TCP=1 DATACTL_PORT=7777` and `--tcp 127.0.0.1:7777` in the tool.
+  - Prefer shell-first commands to validate LLM service end-to-end.
+- Deadline miss bit set (`status` includes `0b100`):
+  - Increase `--wcet-cycles` (e.g., 50000) to match measured latencies in your environment.
+
+## LLM Smoke Transcript (Example)
+
+Example output from a manual shell-first run:
+
+```
+sis> llmctl load --wcet-cycles 50000
+[LLM] model loaded
+sis> llminfer hello world from sis shell --max-tokens 8
+METRIC llm_infer_us=5xx
+METRIC llm_tokens_out=5
+[LLM] infer id=1 tokens=5 latency_us=5xx
+[LLM] output: ⟨hello⟩ ⟨world⟩ ⟨from⟩ ⟨sis⟩ ⟨shell⟩
+sis> llmjson
+[{"op":3,"prompt_len":26,"tokens":5,"wcet_cycles":50000,"period_ns":0,"status":1,...}]
+```
+
+For deterministic smoke:
+
+```
+sis> llmctl load --wcet-cycles 50000
+sis> llmctl budget --period-ns 1000000000 --max-tokens-per-period 8
+sis> llminfer hello world from sis shell --max-tokens 8
+sis> llmctl status
+[LLM][DET] used_ppm=... accepted=... rejected=... deadline_misses=... jitter_p99_ns=...
+```
+
 ## What Works
 
 - Phase 3 AI-Native Features
@@ -26,6 +182,7 @@ Non-goals and not implemented: production hardening beyond testing framework, fu
   - NPU device emulation: MMIO-based NPU interface at 0x0A000000 with matrix operation support
   - ML model execution: Integrated inference pipeline with performance metrics
   - Comprehensive validation: `phase3validation` command runs full Phase 3 test suite
+  - Kernel LLM service (feature: `llm`): `llmctl`/`llminfer`/`llmstats` shell commands with METRICs (`llm_infer_us`, `llm_tokens_out`, `llm_queue_depth_max`, `llm_deadline_miss_count`, `llm_rejects`)
 
 - Boot and bring-up (UEFI/QEMU)
   - UART output: `KERNEL(U)`, `STACK OK`, `VECTORS OK`, `MMU ON`, `UART: READY`, `HEAP: READY`, `GIC: READY`, `LAUNCHING SHELL`.
@@ -144,6 +301,36 @@ Useful shell commands (type `help` for full list):
   - `pmu` — PMU hardware counter demo, emits instruction and cache metrics (feature: `perf-verbose`)
   - Built-in metrics collection for context switching, memory allocation, AI inference, and deterministic scheduling
 
+## LLM Kernel Service (feature: `llm`)
+
+The LLM service is a kernel‑resident, feature‑gated component that exposes a simple load/infer interface and emits structured METRICs. It validates dataflow, scheduling hooks, and observability using a bounded, deterministic operator (no heavy dependencies).
+
+- Build and run with LLM enabled:
+  - `SIS_FEATURES="llm" BRINGUP=1 ./scripts/uefi_run.sh`
+- In the shell:
+  - `llmctl load [--wcet-cycles N] [--model ID] [--sig 0xHEX]` — configure service and (optionally) verify a stub signature; audits ok/reject
+  - `llminfer "<prompt>" [--max-tokens N]` — run an inference and print result
+  - `llmstream "<prompt>" [--max-tokens N] [--chunk N]` — stream tokens in fixed-size chunks and emit streaming metrics
+  - `llmgraph "<prompt>"` — graph‑backed tokenize/print via SPSC channels; emits chunk tensors on an output channel and prints them
+  - `llmstats` — show queue depth, total tokens, last latency
+  - `llmctl audit` — print recent LLM audit entries (load/infer/stream) with status flags
+  - (deterministic builds) `llmctl budget [--wcet-cycles N] [--period-ns N] [--max-tokens-per-period N]` and `llmctl status` for CBS/EDF status
+- METRICs (on `llminfer`/`llmstream`):
+  - `llm_infer_us`, `llm_tokens_out`, `llm_queue_depth_max`, `llm_deadline_miss_count`, `llm_rejects`
+  - Streaming extras: `llm_stream_chunks`, `llm_stream_chunk_tokens`
+  - Graph‑backed extras: `llm_graph_chunk_drop` (count of dropped chunk tensors if the produced channel is full)
+- Audit (optional):
+  - `llmctl audit` prints recent LLM operations with status flags.
+  - Operation codes: `1=load`, `2=budget`, `3=infer`, `4=stream`.
+  - Status bits (ORed): `0b001=ok`, `0b010=reject`, `0b100=deadline_miss`.
+  - Audit entries include: `prompt_len` (bytes), `tokens` (emitted/asked), `wcet_cycles`, `period_ns`, and timestamp.
+  - Prompt contents are not logged; only lengths and counters are recorded.
+- Deterministic CBS/EDF integration (feature: `deterministic`):
+  - Build with: `SIS_FEATURES="llm,deterministic" BRINGUP=1 ./scripts/uefi_run.sh`
+  - `llmctl budget [--wcet-cycles N] [--period-ns N] [--max-tokens-per-period N]` — configures CBS server budgets; WCET is converted from cycles using `cntfrq_el0`.
+  - On each `llminfer`, scheduler metrics update: `deterministic_deadline_miss_count`, `deterministic_jitter_p99_ns`, and admission counters (`det_admission_*`).
+  - Shell remains the recommended interface; host control-plane is optional and experimental.
+
 ## Control Plane (Shell) and Framing
 
 Control-plane uses a small V0 binary frame format. For bring-up, use shell commands; a VirtIO console path exists as an opt‑in alternative.
@@ -159,7 +346,7 @@ Use `graphctl` for convenience, or `ctlhex` to inject raw frames.
 
 Host control via VirtIO console (opt-in)
 - Enable at run time: `VIRTIO=1 SIS_FEATURES="virtio-console" ./scripts/uefi_run.sh`.
-- QEMU wiring (from the script): adds `-device virtio-serial-device` and `-device virtconsole,...,name=sis.datactl` bound to `/tmp/sis-datactl.sock`.
+- QEMU wiring (from the script): adds `-device virtio-serial-device` and a primary `-device virtconsole,name=sis.datactl` bound to `/tmp/sis-datactl.sock`.
 - Send frames from host with the Python tool:
   - All control payloads require a 64-bit capability token prepended (defaults to dev token).
   - `tools/sis_datactl.py --wait-ack create`
@@ -168,7 +355,24 @@ Host control via VirtIO console (opt-in)
   - `tools/sis_datactl.py start 100`
   - Deterministic enable: `tools/sis_datactl.py det <wcet_ns> <period_ns> <deadline_ns>`
 - Kernel replies `OK\n` or `ERR\n`; use `--wait-ack` to print it.
-- Status: experimental and off by default. Prefer the shell path until stabilized.
+- Reliability notes:
+  - Wait for the banner `VCON: READY` on serial before sending frames (driver initialized).
+  - The tool supports `--retries N` and a 2s ACK timeout: e.g., `./tools/sis_datactl.py --retries 4 --wait-ack llm-load --wcet-cycles 25000`.
+  - Status: experimental and off by default. Prefer the shell path until stabilized.
+  - Multiport binding: the guest now binds to the named port `sis.datactl` via the control (PortName/PortOpen) path for more reliable delivery on macOS.
+
+LLM control frames (experimental; feature: `llm`)
+- `0x10` LlmLoad `{ token, wcet_cycles_le_u64? }`
+- `0x11` LlmInferStart `{ token, max_tokens_le_u16, prompt_utf8[...] }` (short prompts)
+- `0x12` LlmInferPoll `{ token, infer_id_le_u32 }` (reserved)
+- `0x13` LlmCancel `{ token, infer_id_le_u32 }` (reserved)
+
+Host CLI examples (when VirtIO console is enabled; use shell if ACKs time out)
+- `./tools/sis_datactl.py --retries 4 --wait-ack llm-load --wcet-cycles 25000`
+- `./tools/sis_datactl.py --retries 4 --wait-ack llm-infer "why was op B slower than op A?" --max-tokens 8`
+
+Embedded-rights tokens
+- In the SIS shell, use `ctlembed admin` or `ctlembed submit` to print a token that embeds rights in the upper 8 bits and the current secret in the lower 56 bits. Pass it to the host tool with `--token 0x...`.
 
 Control-plane metrics (VirtIO, opt-in)
 - Frame counters: `METRIC ctl_frames_rx=<n>`, `ctl_frames_tx=<n>`, `ctl_errors=<n>`, `ctl_backpressure_drops=<n>`.
@@ -265,11 +469,53 @@ Quick, copy-paste steps to record a short demo video or try locally.
 4) VirtIO host control (optional)
 - Build with VirtIO console: `SIS_FEATURES="virtio-console" BRINGUP=1 ./scripts/uefi_run.sh`
 - From host (default dev token):
-  - `tools/sis_datactl.py --wait-ack create`
+  - Wait for `VCON: READY` in serial before sending
+  - `tools/sis_datactl.py --retries 4 --wait-ack create`
   - `tools/sis_datactl.py add-channel 64`
   - `tools/sis_datactl.py add-operator 1 --in-ch 65535 --out-ch 0 --priority 10 --stage acquire`
-  - `tools/sis_datactl.py start 100`
-- If you rotated the token in the shell, pass it: `--token 0xYOUR_HEX_TOKEN`.
+  - `tools/sis_datactl.py --retries 4 start 100`
+  - If you rotated the token in the shell, pass it: `--token 0xYOUR_HEX_TOKEN`.
+
+5) LLM demo (shell)
+- Build and boot with LLM enabled: `SIS_FEATURES="llm" BRINGUP=1 ./scripts/uefi_run.sh`
+- In the SIS shell:
+  - `llmctl load --wcet-cycles 25000`
+  - `llminfer "why was op B slower than op A?" --max-tokens 8`
+  - (optional streaming) `llmstream "why was op B slower than op A?" --max-tokens 8 --chunk 2`
+  - (optional graph-backed) `llmgraph "why was op B slower than op A?"`
+  - (optional audit JSON) `llmjson`
+  - (optional audit) `llmctl audit`
+  - `llmstats`
+- Or use the helper: `./scripts/llm_demo.sh` (LLM) or `DET=1 ./scripts/llm_demo.sh` (LLM+deterministic)
+- Host audit demo: `./scripts/llm_audit_demo.sh` (shows reject vs. accept paths and `llmjson`)
+- Expected METRICs (examples):
+  - `METRIC llm_infer_us=...`, `METRIC llm_tokens_out=...`, `METRIC llm_queue_depth_max=...`
+  - (streaming) `METRIC llm_stream_chunk_tokens=...` per chunk and `METRIC llm_stream_chunks=...` summary
+
+5.1) LLM deterministic budgeting (optional)
+- Build with deterministic: `SIS_FEATURES="llm,deterministic" BRINGUP=1 ./scripts/uefi_run.sh`
+- In the SIS shell:
+  - `llmctl load --wcet-cycles 25000`
+  - `llmctl budget --period-ns 1000000000 --max-tokens-per-period 8`
+  - `llminfer "why was op B slower than op A?" --max-tokens 8`
+- Expected scheduler METRICs: `det_admission_*`, `deterministic_deadline_miss_count`, `deterministic_jitter_p99_ns`
+
+## Validation (Optional)
+
+You can generate a validation report and open a small HTML dashboard.
+
+- Quick run (QEMU-aware):
+  - `SIS_QEMU=1 cargo run -p sis-testing --release -- --quick`
+- Open the dashboard:
+  - macOS: `open target/testing/dashboard.html`
+  - Linux: `xdg-open target/testing/dashboard.html`
+- Expected note:
+  - In QEMU, the “AI inference <40µs” check will show FAIL (~2.3 ms). That target is for hardware; other categories pass in this demo.
+
+## Architecture Note
+
+- This showcase targets AArch64 (ARM64) under QEMU UEFI and is the recommended demo path.
+- RISC‑V support in the codebase is experimental and not included in this showcase to keep the demo simple and reproducible.
 
 ## Repository Structure (relevant parts)
 
@@ -284,6 +530,7 @@ Quick, copy-paste steps to record a short demo video or try locally.
 - `crates/kernel/src/model.rs` — Phase 2 signed model package infrastructure with SHA-256+Ed25519 verification, capability-based permissions, and audit logging.
 - `crates/kernel/src/cap.rs` — Extended capability system supporting model-specific permissions (LOAD/EXECUTE/INSPECT/EXPORT/ATTEST).
 - `crates/kernel/src/shell.rs` — Interactive shell with graph control commands, observability tools, Phase 2 deterministic demos, and Phase 3 AI validation commands (`rtaivalidation`, `temporaliso`, `phase3validation`).
+- `crates/kernel/src/llm.rs` — Kernel‑resident LLM service (feature: `llm`) and LLM METRICs.
 
 **Performance & Testing**:
 - `crates/kernel/src/userspace_test.rs` — Syscall tests; emits `ctx_switch_ns` and `memory_alloc_ns` metrics.

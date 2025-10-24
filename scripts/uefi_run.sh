@@ -101,6 +101,13 @@ fi
 
 echo "[*] Launching QEMU (UEFI) with GICv3, highmem, and VirtIO devices ..."
 echo "[i] Quit: Ctrl+a, then x (monitor on stdio)"
+# Clean up stale control socket to avoid bind/connect issues
+if [[ -n "${VIRTIO:-}" ]]; then
+  if [[ -S "/tmp/sis-datactl.sock" ]]; then
+    echo "[*] Removing stale /tmp/sis-datactl.sock"
+    rm -f /tmp/sis-datactl.sock || true
+  fi
+fi
 # Add debugging for VirtIO discovery if DEBUG env var is set
 DEBUG_FLAGS=""
 if [[ "${DEBUG:-}" != "" ]]; then
@@ -123,11 +130,19 @@ QEMU_DEVICES=(
 
 # Add virtio-serial only if VIRTIO=1
 if [[ "${VIRTIO:-}" != "" ]]; then
-  QEMU_DEVICES+=(
-    -device virtio-serial-device
-    -chardev socket,id=datactl,server=on,wait=off,path=/tmp/sis-datactl.sock
-    -device virtconsole,chardev=datactl,name=sis.datactl
-  )
+  QEMU_DEVICES+=( -device virtio-serial-device )
+  if [[ -n "${DATACTL_TCP:-}" ]]; then
+    PORT="${DATACTL_PORT:-7777}"
+    echo "[*] Using TCP chardev for datactl on 127.0.0.1:${PORT}"
+    # Use socket backend in TCP server mode with correct key=value syntax
+    QEMU_DEVICES+=( -chardev socket,id=datactl,host=127.0.0.1,port=${PORT},server=on,wait=off )
+  else
+    echo "[*] Using UNIX socket chardev for datactl at /tmp/sis-datactl.sock"
+    QEMU_DEVICES+=( -chardev socket,id=datactl,server=on,wait=off,path=/tmp/sis-datactl.sock )
+  fi
+  # Bind a single primary virtconsole port for control-plane with a stable name for multiport
+  # The name propagates via the control channel (PortName), allowing the guest to bind reliably.
+  QEMU_DEVICES+=( -device virtconsole,chardev=datactl,name=sis.datactl )
 fi
 
 qemu-system-aarch64 \

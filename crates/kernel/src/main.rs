@@ -45,6 +45,9 @@ pub mod deterministic;
 // AI benchmark module
 #[cfg(feature = "arm64-ai")]
 pub mod ai_benchmark;
+// LLM kernel service (feature-gated)
+#[cfg(feature = "llm")]
+pub mod llm;
 
 // Architecture-specific modules
 #[cfg(target_arch = "aarch64")]
@@ -614,6 +617,14 @@ mod bringup {
             if let Some(registry) = crate::driver::get_driver_registry() {
                 let intid: u32 = (irq & 0xFFFFFF) as u32;
                 let _ = registry.handle_device_irq(intid);
+            }
+            // Opportunistically poll VirtIO console control frames even if the device
+            // didn't raise an interrupt (keeps host control responsive in QEMU).
+            #[cfg(feature = "virtio-console")]
+            {
+                let drv = crate::virtio_console::get_virtio_console_driver();
+                let _ = drv.poll_control_frames();
+                let _ = drv.poll_ctrl_events();
             }
             // Note: do not call into device drivers here to avoid re-entrancy
             // while drivers are being initialized. Control-plane polling stays

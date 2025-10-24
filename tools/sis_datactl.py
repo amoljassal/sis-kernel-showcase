@@ -15,19 +15,57 @@ def frame(cmd: int, payload: bytes, flags: int = 0) -> bytes:
 def with_token(payload: bytes, token: int) -> bytes:
     return struct.pack('<Q', token) + payload
 
-def send_frame(cmd: int, payload: bytes, wait_ack: bool = False):
+import time
+
+def recv_until_nl(sock: socket.socket, max_bytes: int = 512, timeout: float = 2.0) -> bytes:
+    sock.settimeout(timeout)
+    data = b''
+    try:
+        while len(data) < max_bytes:
+            chunk = sock.recv(max_bytes - len(data))
+            if not chunk:
+                break
+            data += chunk
+            if b'\n' in chunk:
+                break
+    except socket.timeout:
+        pass
+    return data
+
+def send_frame(cmd: int, payload: bytes, wait_ack: bool = False, tcp: str | None = None, retries: int = 0):
     data = frame(cmd, payload)
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-        s.settimeout(1.0)
-        s.connect(SOCK_PATH)
-        s.sendall(data)
-        if wait_ack:
-            try:
-                resp = s.recv(64)
-                if resp:
-                    sys.stdout.write(f"ACK: {resp!r}\n")
-            except socket.timeout:
-                sys.stdout.write("ACK: <timeout>\n")
+    attempts = retries + 1
+    for i in range(attempts):
+        try:
+            if tcp:
+                host, port_str = tcp.split(":", 1)
+                port = int(port_str)
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.connect((host, port))
+                    s.sendall(data)
+                    if wait_ack:
+                        resp = recv_until_nl(s)
+                        if resp:
+                            sys.stdout.write(f"ACK: {resp.decode(errors='ignore').rstrip()}\n")
+                        else:
+                            if i == attempts - 1:
+                                sys.stdout.write("ACK: <timeout>\n")
+            else:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                    s.connect(SOCK_PATH)
+                    s.sendall(data)
+                    if wait_ack:
+                        resp = recv_until_nl(s)
+                        if resp:
+                            sys.stdout.write(f"ACK: {resp.decode(errors='ignore').rstrip()}\n")
+                        else:
+                            if i == attempts - 1:
+                                sys.stdout.write("ACK: <timeout>\n")
+            break
+        except (ConnectionRefusedError, BrokenPipeError, socket.timeout) as e:
+            if i == attempts - 1:
+                raise
+            time.sleep(0.25)
 
 def cmd_create_graph(args):
     pl = with_token(b'', args.token)
@@ -81,10 +119,42 @@ def cmd_det(args):
     send_frame(0x06, payload, args.wait_ack)
     print(f'EnableDeterministic(wcet_ns={wcet}, period_ns={period}, deadline_ns={deadline}) sent')
 
+def cmd_llm_load(args):
+    wcet = int(args.wcet_cycles) if args.wcet_cycles is not None else None
+    if wcet is None:
+        payload = with_token(b'', args.token)
+    else:
+        payload = with_token(struct.pack('<Q', wcet), args.token)
+    send_frame(0x10, payload, args.wait_ack, getattr(args, 'tcp', None), getattr(args, 'retries', 0))
+    print(f'LLMLoad(wcet_cycles={wcet if wcet is not None else "default"}) sent')
+
+def cmd_llm_infer(args):
+    max_tokens = int(args.max_tokens)
+    prompt_bytes = args.prompt.encode('utf-8')
+    if len(prompt_bytes) + 8 + 2 > 64:
+        raise SystemExit('prompt too long for control frame (max ~54 bytes)')
+    payload = with_token(struct.pack('<H', max_tokens) + prompt_bytes, args.token)
+    send_frame(0x11, payload, args.wait_ack, getattr(args, 'tcp', None), getattr(args, 'retries', 0))
+    print(f'LLMInferStart(max_tokens={max_tokens}, prompt_len={len(prompt_bytes)}) sent')
+
+def cmd_llm_poll(args):
+    infer_id = int(args.infer_id)
+    payload = with_token(struct.pack('<I', infer_id), args.token)
+    send_frame(0x12, payload, args.wait_ack, getattr(args, 'tcp', None), getattr(args, 'retries', 0))
+    print(f'LLMInferPoll(id={infer_id}) sent')
+
+def cmd_llm_cancel(args):
+    infer_id = int(args.infer_id)
+    payload = with_token(struct.pack('<I', infer_id), args.token)
+    send_frame(0x13, payload, args.wait_ack, getattr(args, 'tcp', None), getattr(args, 'retries', 0))
+    print(f'LLMCancel(id={infer_id}) sent')
+
 def main():
     ap = argparse.ArgumentParser(description='SIS control-plane client (V0 framing)')
     sub = ap.add_subparsers(dest='cmd', required=True)
-    ap.add_argument('--wait-ack', action='store_true', help='wait for ACK/ERR from kernel (1s timeout)')
+    ap.add_argument('--wait-ack', action='store_true', help='wait for ACK/ERR from kernel (2s timeout)')
+    ap.add_argument('--tcp', metavar='HOST:PORT', help='connect over TCP instead of UNIX socket')
+    ap.add_argument('--retries', type=int, default=0, help='retry count on timeout/refused (default 0)')
     ap.add_argument('--token', type=lambda x: int(x, 0), default=0x53535F4354524C21, help='64-bit capability token (default matches kernel dev token)')
 
     sub.add_parser('create').set_defaults(fn=cmd_create_graph)
@@ -112,6 +182,23 @@ def main():
     ap_det.add_argument('period_ns')
     ap_det.add_argument('deadline_ns')
     ap_det.set_defaults(fn=cmd_det)
+
+    ap_llm_load = sub.add_parser('llm-load')
+    ap_llm_load.add_argument('--wcet-cycles')
+    ap_llm_load.set_defaults(fn=cmd_llm_load)
+
+    ap_llm_infer = sub.add_parser('llm-infer')
+    ap_llm_infer.add_argument('prompt')
+    ap_llm_infer.add_argument('--max-tokens', required=True)
+    ap_llm_infer.set_defaults(fn=cmd_llm_infer)
+
+    ap_llm_poll = sub.add_parser('llm-poll')
+    ap_llm_poll.add_argument('infer_id')
+    ap_llm_poll.set_defaults(fn=cmd_llm_poll)
+
+    ap_llm_cancel = sub.add_parser('llm-cancel')
+    ap_llm_cancel.add_argument('infer_id')
+    ap_llm_cancel.set_defaults(fn=cmd_llm_cancel)
 
     args = ap.parse_args()
     args.fn(args)

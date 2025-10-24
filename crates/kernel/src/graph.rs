@@ -241,6 +241,97 @@ fn op_b_run(_ctx: &mut OperatorCtx) {
     // Placeholder for consumer work (could transform a tensor)
 }
 
+/// LLM graph operator: consume a TEXT tensor and emit tokens to UART and METRICs.
+/// For demo purposes, this prints tokens and emits metrics without producing new tensors.
+pub fn op_llm_run(ctx: &mut OperatorCtx) {
+    // Try to dequeue one item from consumed channel
+    if let Some(h) = ctx.consumed.try_dequeue() {
+        // Measure
+        let t0 = now_cycles();
+        let mut tokens = 0usize;
+        let mut chunks = 0usize;
+        unsafe {
+            // Parse header and derive input slice
+            let (data_ptr, data_len) = if let Some(hdr) = h.header() {
+                ((h.ptr as usize + hdr.data_offset as usize) as *const u8, (h.len.saturating_sub(hdr.data_offset as usize)))
+            } else {
+                (h.ptr as *const u8, h.len)
+            };
+            let input = core::slice::from_raw_parts(data_ptr, data_len);
+            // Tokenize by spaces, print tokens, and emit chunk tensors to produced channel
+            let mut i = 0usize;
+            let mut printed_any = false;
+            let mut chunk_buf = alloc::string::String::new();
+            let chunk_tokens = 2usize; // fixed-size chunks for demo
+            while i < input.len() {
+                while i < input.len() && input[i] <= b' ' { i += 1; }
+                if i >= input.len() { break; }
+                let mut j = i;
+                while j < input.len() && input[j] > b' ' { j += 1; }
+                // Print token
+                crate::uart_print(b"[LLM][GRAPH] token: ");
+                crate::uart_print(b"\xE2\x9F\xA8"); // left angle bracket style
+                for &b in &input[i..j] {
+                    let c = if (b'A'..=b'Z').contains(&b) { (b + 32) as char }
+                            else if (b'a'..=b'z').contains(&b) || (b'0'..=b'9').contains(&b) { b as char }
+                            else { '?' };
+                    let mut buf = [0u8; 4];
+                    let s = c.encode_utf8(&mut buf);
+                    crate::uart_print(s.as_bytes());
+                }
+                crate::uart_print(b"\xE2\x9F\xA9\n"); // right angle bracket style
+                tokens += 1;
+                printed_any = true;
+
+                // Append to chunk buffer (ASCII for demo)
+                if !chunk_buf.is_empty() { chunk_buf.push(' '); }
+                chunk_buf.push_str("⟨");
+                for &b in &input[i..j] {
+                    let c = if (b'A'..=b'Z').contains(&b) { (b + 32) as char }
+                            else if (b'a'..=b'z').contains(&b) || (b'0'..=b'9').contains(&b) { b as char }
+                            else { '?' };
+                    let mut buf = [0u8; 4]; c.encode_utf8(&mut buf); // advance
+                    chunk_buf.push(c);
+                }
+                chunk_buf.push_str("⟩");
+
+                // Flush chunk
+                if tokens % chunk_tokens == 0 {
+                    let bytes = chunk_buf.as_bytes();
+                    let total = core::mem::size_of::<crate::tensor::TensorHeader>() + bytes.len();
+                    if let Some(h2) = crate::tensor::TensorAlloc::alloc_uninit(total, 64) {
+                        if let Some(hdr2) = h2.header_mut() {
+                            hdr2.version=1; hdr2.dtype=0; hdr2.dims=[0;4]; hdr2.strides=[0;4];
+                            hdr2.data_offset = core::mem::size_of::<crate::tensor::TensorHeader>() as u64;
+                            hdr2.schema_id = 1002; // SCHEMA_TOKENS
+                            hdr2.records = 1; hdr2.quality=100; hdr2._pad=0; hdr2.lineage=0;
+                        }
+                        let dst = (h2.ptr as usize + core::mem::size_of::<crate::tensor::TensorHeader>()) as *mut u8;
+                        core::ptr::copy_nonoverlapping(bytes.as_ptr(), dst, bytes.len());
+                        if ctx.produced.try_enqueue(h2).is_err() {
+                            // Drop on enqueue failure
+                            crate::trace::metric_kv("llm_graph_chunk_drop", 1);
+                            crate::tensor::TensorAlloc::dealloc(h2, 64);
+                        } else {
+                            chunks += 1;
+                        }
+                    }
+                    chunk_buf.clear();
+                }
+                i = j;
+            }
+            let t1 = now_cycles();
+            let ns = cycles_to_ns(t1.saturating_sub(t0));
+            crate::trace::metric_kv("llm_infer_us", (ns/1000) as usize);
+            crate::trace::metric_kv("llm_tokens_out", tokens);
+            crate::trace::metric_kv("llm_stream_chunks", chunks);
+            if !printed_any {
+                crate::trace::metric_kv("llm_tokens_out", 0);
+            }
+        }
+    }
+}
+
 #[inline(always)]
 pub fn now_cycles() -> u64 {
     #[cfg(target_arch = "aarch64")]
@@ -266,6 +357,66 @@ pub fn cycles_to_ns(cycles: u64) -> u64 {
     let f = cntfrq_hz();
     if f == 0 { return 0; }
     (cycles.saturating_mul(1_000_000_000u64)) / f
+}
+
+// --- Export helpers ---
+
+#[inline(always)]
+fn uart_print_num(mut v: u64) {
+    // Write decimal to UART without allocations
+    if v == 0 { unsafe { crate::uart_print(b"0"); } return; }
+    let mut buf = [0u8; 20];
+    let mut i = 0;
+    while v > 0 && i < buf.len() { buf[i] = b'0' + (v % 10) as u8; v /= 10; i += 1; }
+    while i > 0 { i -= 1; unsafe { crate::uart_print(&[buf[i]]); } }
+}
+
+impl GraphApi {
+    /// Export graph structure and state to UART (channels and operators)
+    pub fn export_text(&self) {
+        unsafe { crate::uart_print(b"GRAPH EXPORT\n"); }
+        // Summary
+        unsafe { crate::uart_print(b"channels="); }
+        uart_print_num(self.channels.len() as u64);
+        unsafe { crate::uart_print(b" ops="); }
+        uart_print_num(self.ops.len() as u64);
+        unsafe { crate::uart_print(b"\n"); }
+
+        // Channels
+        unsafe { crate::uart_print(b"CHANNELS:\n"); }
+        for i in 0..self.channels.len() {
+            let depth = self.channels[i].depth();
+            unsafe { crate::uart_print(b" ch idx="); }
+            uart_print_num(i as u64);
+            unsafe { crate::uart_print(b" depth="); }
+            uart_print_num(depth as u64);
+            unsafe { crate::uart_print(b" schema="); }
+            if let Some(s) = self.channel_schemas.get(i).and_then(|v| *v) {
+                uart_print_num(s as u64);
+            } else {
+                unsafe { crate::uart_print(b"none"); }
+            }
+            unsafe { crate::uart_print(b"\n"); }
+        }
+
+        // Operators
+        unsafe { crate::uart_print(b"OPERATORS:\n"); }
+        for op in self.ops.iter() {
+            unsafe { crate::uart_print(b" op id="); }
+            uart_print_num(op.id as u64);
+            unsafe { crate::uart_print(b" in="); }
+            match op.in_ch { Some(v) => uart_print_num(v as u64), None => unsafe { crate::uart_print(b"none"); } }
+            unsafe { crate::uart_print(b" out="); }
+            match op.out_ch { Some(v) => uart_print_num(v as u64), None => unsafe { crate::uart_print(b"none"); } }
+            unsafe { crate::uart_print(b" prio="); }
+            uart_print_num(op.priority as u64);
+            unsafe { crate::uart_print(b" in_schema="); }
+            match op.in_schema { Some(v) => uart_print_num(v as u64), None => unsafe { crate::uart_print(b"none"); } }
+            unsafe { crate::uart_print(b" out_schema="); }
+            match op.out_schema { Some(v) => uart_print_num(v as u64), None => unsafe { crate::uart_print(b"none"); } }
+            unsafe { crate::uart_print(b"\n"); }
+        }
+    }
 }
 
 // Minimal Graph API surface (Phase 1 scaffolding)

@@ -88,8 +88,8 @@ impl QEMURuntimeManager {
         
         // Build the kernel in release mode for accurate performance testing
         let root = Self::workspace_root();
-        // Build features: bringup + neon-optimized, with optional graph-autostats when SIS_GRAPH_STATS=1
-        let mut features = "bringup,neon-optimized".to_string();
+        // Build features: allow override via SIS_TEST_FEATURES; default to bringup+llm for smoke, neon-optimized
+        let mut features = std::env::var("SIS_TEST_FEATURES").unwrap_or_else(|_| "bringup,llm,neon-optimized".to_string());
         if std::env::var("SIS_GRAPH_STATS").unwrap_or_default() == "1" {
             features.push_str(",graph-autostats");
         }

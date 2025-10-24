@@ -7,17 +7,27 @@
 //!  0x04 StartGraph { steps_le_u32 }
 //!  0x05 AddOperatorTyped { op_id_le_u32, in_ch_le_u16(0xFFFF=none), out_ch_le_u16(0xFFFF=none), priority_u8, stage_u8, in_schema_le_u32, out_schema_le_u32 }
 //!  0x06 EnableDeterministic { wcet_ns_le_u64, period_ns_le_u64, deadline_ns_le_u64 }
+//!  0x10 LlmLoad { wcet_cycles_le_u64 } (feature: `llm`)
+//!  0x11 LlmInferStart { max_tokens_le_u16, prompt_utf8[...] } (feature: `llm`)
+//!  0x12 LlmInferPoll { infer_id_le_u32 } (feature: `llm`, reserved for streaming)
+//!  0x13 LlmCancel { infer_id_le_u32 } (feature: `llm`)
 
 use crate::graph::{GraphApi, OperatorSpec, Stage};
+#[cfg(feature = "llm")]
+use crate::llm;
 use crate::trace::metric_kv;
 use core::sync::atomic::{AtomicU64, Ordering};
+#[cfg(feature = "virtio-console")]
+use heapless::String as HString;
 
 /// Maximum allowed control payload length (bytes)
 pub const MAX_CTRL_LEN: usize = 64;
 
 /// Simple 64-bit capability token for control-plane authorization.
 /// Frames must include this token as the first 8 bytes of payload.
-static CONTROL_TOKEN: AtomicU64 = AtomicU64::new(0x53535F4354524C21); // "SS_CTRL!"
+static CONTROL_TOKEN: AtomicU64 = AtomicU64::new(0x53535F4354524C21); // legacy dev token
+static CONTROL_TOKEN_ADMIN: AtomicU64 = AtomicU64::new(0x53535F4354524C21);
+static CONTROL_TOKEN_SUBMIT: AtomicU64 = AtomicU64::new(0x53535F4354524C21);
 
 static mut CTRL_GRAPH: Option<GraphApi> = None;
 
@@ -49,6 +59,57 @@ fn check_token(tok: u64) -> Result<(), CtrlError> {
     let expect = CONTROL_TOKEN.load(Ordering::Relaxed);
     if tok != expect { return Err(CtrlError::AuthFailed); }
     Ok(())
+}
+
+// Minimal decimal writer into a heapless::String
+#[cfg(feature = "virtio-console")]
+fn write_decimal_u64(buf: &mut HString<192>, mut v: u64) -> Result<(), ()> {
+    let mut tmp = [0u8; 20];
+    let mut i = 0;
+    if v == 0 {
+        buf.push('0').map_err(|_| ())?; return Ok(());
+    }
+    while v > 0 && i < tmp.len() {
+        tmp[i] = b'0' + (v % 10) as u8;
+        v /= 10; i += 1;
+    }
+    while i > 0 { i -= 1; buf.push(tmp[i] as char).map_err(|_| ())?; }
+    Ok(())
+}
+
+#[inline(always)]
+fn token_split(tok: u64) -> (u8, u64) {
+    let rights = (tok >> 56) as u8;
+    let secret = tok & 0x00FF_FFFF_FFFF_FFFF;
+    (rights, secret)
+}
+
+#[inline(always)]
+fn check_embedded_rights(tok: u64, need_admin: bool, need_submit: bool) -> Result<(), CtrlError> {
+    let (rights, secret) = token_split(tok);
+    // Secret must match CONTROL_TOKEN (lower 56 bits)
+    let expect = CONTROL_TOKEN.load(Ordering::Relaxed) & 0x00FF_FFFF_FFFF_FFFF;
+    if secret != expect { return Err(CtrlError::AuthFailed); }
+    // Rights bitmask: bit0=ADMIN, bit1=SUBMIT
+    let admin_ok = rights & 0x01 != 0;
+    let submit_ok = rights & 0x02 != 0;
+    if need_admin { if admin_ok { return Ok(()); } else { return Err(CtrlError::AuthFailed); } }
+    if need_submit { if submit_ok || admin_ok { return Ok(()); } else { return Err(CtrlError::AuthFailed); } }
+    Ok(())
+}
+
+#[inline(always)]
+fn check_token_admin(tok: u64) -> Result<(), CtrlError> {
+    let expect = CONTROL_TOKEN_ADMIN.load(Ordering::Relaxed);
+    if tok != expect { return Err(CtrlError::AuthFailed); }
+    Ok(())
+}
+
+#[inline(always)]
+fn check_token_submit_or_admin(tok: u64) -> Result<(), CtrlError> {
+    let a = CONTROL_TOKEN_ADMIN.load(Ordering::Relaxed);
+    let s = CONTROL_TOKEN_SUBMIT.load(Ordering::Relaxed);
+    if tok == a || tok == s { Ok(()) } else { Err(CtrlError::AuthFailed) }
 }
 
 pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
@@ -212,6 +273,142 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
                 } else { Err(CtrlError::NoGraph) }
             }
         }
+        0x10 => { // LlmLoad
+            let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            // Explicit allow/deny with audit
+            #[cfg(feature = "llm")]
+            {
+                // Accept either explicit admin token, or embedded admin rights
+                let mut ok = check_token_admin(tok).is_ok();
+                if !ok { ok = check_embedded_rights(tok, true, false).is_ok(); }
+                if !ok { llm::audit(1, 0, 0, 0, 0, 0b010); return Err(CtrlError::AuthFailed); }
+            }
+            #[cfg(not(feature = "llm"))]
+            {
+                check_token(tok)?;
+            }
+            #[cfg(feature = "llm")]
+            {
+                if p.len() >= 8 {
+                    let wcet = u64::from_le_bytes([p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7]]);
+                    let ok = crate::llm::load_model(Some(wcet));
+                    llm::audit(1, 0, 0, wcet, 0, if ok { 0b001 } else { 0b010 });
+                    if ok { ctrl_print(b"CTRL: llm load ok\n"); } else { ctrl_print(b"CTRL: llm load fail\n"); }
+                    return Ok(());
+                } else {
+                    let _ = crate::llm::load_model(None);
+                    llm::audit(1, 0, 0, 0, 0, 0b001);
+                    ctrl_print(b"CTRL: llm load ok (default)\n");
+                    return Ok(());
+                }
+            }
+            #[cfg(not(feature = "llm"))]
+            {
+                ctrl_print(b"CTRL: llm feature not enabled\n");
+                Ok(())
+            }
+        }
+        0x11 => { // LlmInferStart
+            if payload.len() < (8+2) { return Err(CtrlError::BadFrame); }
+            let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            #[cfg(feature = "llm")]
+            {
+                // Accept explicit submit/admin tokens, or embedded submit/admin rights
+                let mut ok = check_token_submit_or_admin(tok).is_ok();
+                if !ok { ok = check_embedded_rights(tok, false, true).is_ok(); }
+                if !ok { llm::audit(3, 0, 0, 0, 0, 0b010); return Err(CtrlError::AuthFailed); }
+            }
+            #[cfg(not(feature = "llm"))]
+            {
+                check_token(tok)?;
+            }
+            #[cfg(feature = "llm")]
+            {
+                let max_t = u16::from_le_bytes([p[0], p[1]]) as usize;
+                // Remaining bytes are utf8 prompt (bounded by MAX_CTRL_LEN)
+                let prompt_bytes = &p[2..];
+                let prompt = core::str::from_utf8(prompt_bytes).unwrap_or("");
+                let res = crate::llm::infer(prompt, Some(max_t));
+                llm::audit(3, prompt_bytes.len(), max_t, 0, 0, 0b001);
+                ctrl_print(b"CTRL: llm infer submitted\n");
+                unsafe {
+                    crate::uart_print(b"[LLM][CTL] id=");
+                    crate::shell::print_number_simple(res.infer_id as u64);
+                    crate::uart_print(b" tokens=");
+                    crate::shell::print_number_simple(res.tokens_emitted as u64);
+                    crate::uart_print(b" us=");
+                    crate::shell::print_number_simple(res.latency_us as u64);
+                    crate::uart_print(b"\n");
+                }
+                return Ok(());
+            }
+            #[cfg(not(feature = "llm"))]
+            {
+                ctrl_print(b"CTRL: llm feature not enabled\n");
+                Ok(())
+            }
+        }
+        0x12 => { // LlmInferPoll (id + optional max)
+            let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            check_token(tok)?;
+            // Expected: infer_id (u32 LE), optional max (u16 LE)
+            let (infer_id, max) = if p.len() >= 4 {
+                let id = u32::from_le_bytes([p[0],p[1],p[2],p[3]]) as usize;
+                let m = if p.len() >= 6 { u16::from_le_bytes([p[4],p[5]]) as usize } else { 4 };
+                (id, m)
+            } else {
+                (0usize, 4usize)
+            };
+            #[cfg(feature = "llm")]
+            {
+                let (id, n, done, items) = if infer_id != 0 { crate::llm::ctl_poll_id(infer_id, max) } else { crate::llm::ctl_poll(max) };
+                ctrl_print(b"CTRL: llm poll\n");
+                #[cfg(feature = "virtio-console")]
+                {
+                    // Compose a compact token response line
+                    let mut line = heapless::String::<192>::new();
+                    let _ = line.push_str("OK TOK id=");
+                    // id
+                    // append decimal id
+                    let _ = write_decimal_u64(&mut line, id as u64);
+                    let _ = line.push_str(" n=");
+                    let _ = write_decimal_u64(&mut line, n as u64);
+                    let _ = line.push_str(" done=");
+                    let _ = write_decimal_u64(&mut line, done as u64);
+                    if items.len() > 0 {
+                        let _ = line.push_str(" items=");
+                        let _ = line.push_str(items.as_str());
+                    }
+                    let _ = line.push('\n');
+                    // Send over virtio-console data TX
+                    let drv = crate::virtio_console::get_virtio_console_driver();
+                    let _ = drv.write_data(line.as_bytes());
+                }
+                unsafe {
+                    crate::uart_print(b"[LLM][CTL-POLL] id=");
+                    crate::shell::print_number_simple(id as u64);
+                    crate::uart_print(b" n=");
+                    crate::shell::print_number_simple(n as u64);
+                    crate::uart_print(b" done=");
+                    crate::shell::print_number_simple(done as u64);
+                    crate::uart_print(b" items=");
+                    crate::uart_print(items.as_bytes());
+                    crate::uart_print(b"\n");
+                }
+            }
+            Ok(())
+        }
+        0x13 => { // LlmCancel (by id)
+            let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            check_token(tok)?;
+            let id = if p.len() >= 4 { u32::from_le_bytes([p[0],p[1],p[2],p[3]]) as usize } else { 0 };
+            #[cfg(feature = "llm")]
+            {
+                if id != 0 { crate::llm::ctl_cancel_id(id); } else { crate::llm::ctl_cancel(); }
+            }
+            ctrl_print(b"CTRL: llm cancel\n");
+            Ok(())
+        }
         _ => Err(CtrlError::Unsupported),
     }
 }
@@ -225,6 +422,18 @@ pub fn current_graph_counts() -> Option<(usize, usize)> {
             Some(g.counts())
         } else {
             None
+        }
+    }
+}
+
+/// Export the current graph structure to UART
+pub fn export_graph_text() -> Result<(), CtrlError> {
+    unsafe {
+        if let Some(ref g) = CTRL_GRAPH {
+            g.export_text();
+            Ok(())
+        } else {
+            Err(CtrlError::NoGraph)
         }
     }
 }
@@ -274,6 +483,12 @@ pub fn set_control_token(new_tok: u64) {
 pub fn get_control_token() -> u64 {
     CONTROL_TOKEN.load(Ordering::Relaxed)
 }
+
+/// Rotate admin and submit tokens (optional)
+pub fn set_admin_token(tok: u64) { CONTROL_TOKEN_ADMIN.store(tok, Ordering::Relaxed); }
+pub fn set_submit_token(tok: u64) { CONTROL_TOKEN_SUBMIT.store(tok, Ordering::Relaxed); }
+pub fn get_admin_token() -> u64 { CONTROL_TOKEN_ADMIN.load(Ordering::Relaxed) }
+pub fn get_submit_token() -> u64 { CONTROL_TOKEN_SUBMIT.load(Ordering::Relaxed) }
 
 /// Enable deterministic mode on current graph (direct)
 #[cfg(feature = "deterministic")]
