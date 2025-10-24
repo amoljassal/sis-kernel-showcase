@@ -332,6 +332,45 @@ The LLM service is a kernel‑resident, feature‑gated component that exposes a
 - `llmcancel [id]` — cancel last or specific session by id.
 - `llmkey` — show the build-time Ed25519 public key (feature: `crypto-real`).
 
+## Neural Agent (MLP) + Ask AI
+
+The kernel includes a tiny, bounded MLP (single hidden layer, Q8.8 fixed‑point) to enable a “neural‑first” control loop for simple decisions.
+
+- Commands:
+  - `neuralctl reset` — reset agent to defaults (3x3x2 identity‑like mapping).
+  - `neuralctl status` — print dims, counters, last input/output in milli.
+  - `neuralctl infer <m1 m2 ...>` — run inference with milli inputs (e.g., `1000 0 0`).
+  - `neuralctl update <milli...>` — update full weight set (w1(h*in), b1(h), w2(out*h), b2(out)).
+  - `neuralctl teach <i...>|<t...>` — one bounded update step with inputs/targets (milli).
+  - `neuralctl retrain <N>` — reapply up to N recent teach entries from the audit ring.
+  - `neuralctl selftest` — quick pass/fail check with metrics.
+  - `nnjson` — print the neural audit ring as JSON (inputs and targets in milli).
+  - `ask-ai "<text>"` — simple keyword mapping to features → run agent → print hint.
+
+- Notes:
+  - Metrics: `nn_infer_us`, `nn_infer_count`, `nn_teach_count`, `nn_selftest_ok`.
+  - Fixed caps: inputs<=16, hidden<=16, outputs<=4 to keep compute bounded.
+  - Audit ring (size 32) tracks recent inferences and teach entries; `nnjson` exports them.
+
+### Host Control (VirtIO) Smoke
+
+Enable VirtIO path and drive the neural agent from the host using `tools/sis_datactl.py`.
+
+1) Boot with virtio-console enabled:
+   - `VIRTIO=1 SIS_FEATURES="llm,virtio-console" BRINGUP=1 ./scripts/uefi_run.sh`
+
+2) In a separate terminal, send frames:
+   - Status: `python3 tools/sis_datactl.py --wait-ack neural-status`
+     - ACK example: `OK NN status dims=3,3,2`
+   - Infer: `python3 tools/sis_datactl.py --wait-ack neural-infer 1000 0 0`
+     - ACK example: `OK NN infer dims=3,3,2 out=2`
+   - Teach: `python3 tools/sis_datactl.py --wait-ack neural-teach --inputs 1000 0 0 --targets 1000 0`
+     - ACK example: `OK NN teach dims=3,3,2`
+   - Update: `python3 tools/sis_datactl.py --wait-ack neural-update 1000 0 0 0 1000 0 0 0 1000 0 0 0 0 0 0 1000 0 0 0 0`
+     - ACK example: `OK NN update dims=3,3,2`
+
+3) Observe UART prints for detailed state (dims, last inputs/outputs) and use `nnjson` in the shell to export recent events.
+
 Crypto-real usage
 - Provide a 32-byte Ed25519 public key (hex) at build time:
   - macOS/Linux: `export SIS_ED25519_PUBKEY=0x<64-hex>` then run the build (or prefix the command).

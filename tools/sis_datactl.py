@@ -164,6 +164,32 @@ def cmd_llm_hash(args):
     print(f'Model ID: {model_id}, Size: {size_bytes} bytes')
     print(f'Demo Hash: {hash_bytes.hex()}')
 
+def cmd_nn_infer(args):
+    values = [int(x) for x in args.values]
+    if len(values) > 31:
+        raise SystemExit('too many values (max 31)')
+    payload = with_token(struct.pack('<B', len(values)) + b''.join(struct.pack('<h', v) for v in values), args.token)
+    send_frame(0x20, payload, args.wait_ack, getattr(args, 'tcp', None), getattr(args, 'retries', 0))
+    print(f'NeuralInfer(values={values}) sent')
+
+def cmd_nn_update(args):
+    values = [int(x) for x in args.values]
+    payload = with_token(struct.pack('<B', len(values)) + b''.join(struct.pack('<h', v) for v in values), args.token)
+    send_frame(0x21, payload, args.wait_ack, getattr(args, 'tcp', None), getattr(args, 'retries', 0))
+    print(f'NeuralUpdate({len(values)} values) sent')
+
+def cmd_nn_teach(args):
+    inputs = [int(x) for x in args.inputs]
+    targets = [int(x) for x in args.targets]
+    payload = with_token(struct.pack('<BB', len(inputs), len(targets)) + b''.join(struct.pack('<h', v) for v in inputs) + b''.join(struct.pack('<h', v) for v in targets), args.token)
+    send_frame(0x22, payload, args.wait_ack, getattr(args, 'tcp', None), getattr(args, 'retries', 0))
+    print(f'NeuralTeach(in={len(inputs)}, out={len(targets)}) sent')
+
+def cmd_nn_status(args):
+    payload = with_token(b'', args.token)
+    send_frame(0x23, payload, args.wait_ack, getattr(args, 'tcp', None), getattr(args, 'retries', 0))
+    print('NeuralStatus sent')
+
 def main():
     ap = argparse.ArgumentParser(description='SIS control-plane client (V0 framing)')
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -219,6 +245,22 @@ def main():
     ap_llm_hash.add_argument('model_id', help='model ID')
     ap_llm_hash.add_argument('--size', help='buffer size in bytes (default: 1024)')
     ap_llm_hash.set_defaults(fn=cmd_llm_hash)
+
+    ap_nn_infer = sub.add_parser('neural-infer', help='run neural inference with milli values')
+    ap_nn_infer.add_argument('values', nargs='+', help='milli values (e.g., 1000 0 0)')
+    ap_nn_infer.set_defaults(fn=cmd_nn_infer)
+
+    ap_nn_update = sub.add_parser('neural-update', help='update neural weights (milli)')
+    ap_nn_update.add_argument('values', nargs='+', help='weights/biases in milli')
+    ap_nn_update.set_defaults(fn=cmd_nn_update)
+
+    ap_nn_teach = sub.add_parser('neural-teach', help='teach step with inputs/targets')
+    ap_nn_teach.add_argument('--inputs', nargs='+', required=True, help='input milli values')
+    ap_nn_teach.add_argument('--targets', nargs='+', required=True, help='target milli values')
+    ap_nn_teach.set_defaults(fn=cmd_nn_teach)
+
+    ap_nn_status = sub.add_parser('neural-status', help='print neural status (ACK only)')
+    ap_nn_status.set_defaults(fn=cmd_nn_status)
 
     args = ap.parse_args()
     args.fn(args)

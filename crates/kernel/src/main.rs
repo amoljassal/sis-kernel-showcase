@@ -37,6 +37,7 @@ pub mod npu;
 pub mod npu_driver;
 pub mod interrupts;
 pub mod control;
+pub mod neural;
 // PMU helpers (feature-gated usage)
 pub mod pmu;
 // Deterministic scheduler scaffolding (feature-gated)
