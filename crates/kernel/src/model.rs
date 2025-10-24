@@ -130,14 +130,39 @@ impl<const MAX_MODELS: usize, const MAX_AUDIT_ENTRIES: usize> ModelSecurityManag
         hash
     }
 
-    /// Ed25519 signature verification using a compiled-in public key (crypto-real)
+    /// Parse hex string to fixed-size byte array at runtime (no_std friendly)
+    #[cfg(feature = "crypto-real")]
+    fn parse_hex_fixed<const N: usize>(s: &str) -> Option<[u8; N]> {
+        let hex = if let Some(rest) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) { rest } else { s };
+        if hex.len() != N * 2 { return None; }
+        let b = hex.as_bytes();
+        let mut out = [0u8; N];
+        let mut i = 0usize;
+        while i < N { 
+            let hi = b[i*2];
+            let lo = b[i*2+1];
+            let hn = match hi { b'0'..=b'9'=>hi-b'0', b'a'..=b'f'=>hi-b'a'+10, b'A'..=b'F'=>hi-b'A'+10, _=>0xFF };
+            let ln = match lo { b'0'..=b'9'=>lo-b'0', b'a'..=b'f'=>lo-b'a'+10, b'A'..=b'F'=>lo-b'A'+10, _=>0xFF };
+            if hn > 15 || ln > 15 { return None; }
+            out[i] = (hn << 4) | ln; 
+            i += 1; 
+        }
+        Some(out)
+    }
+
+    /// Read Ed25519 public key bytes from build-time env var `SIS_ED25519_PUBKEY`.
+    /// Expects 64 hex chars (32 bytes), optionally with 0x prefix.
+    #[cfg(feature = "crypto-real")]
+    fn pubkey_from_env() -> Option<[u8; 32]> {
+        if let Some(val) = option_env!("SIS_ED25519_PUBKEY") { Self::parse_hex_fixed::<32>(val) } else { None }
+    }
+
+    /// Ed25519 signature verification using a build-time configured public key (crypto-real)
     #[cfg(feature = "crypto-real")]
     fn verify_ed25519_signature(&self, hash: &[u8; 32], signature: &[u8; 64]) -> bool {
         use ed25519_dalek::{Signature, VerifyingKey};
-        // IMPORTANT: Replace with your production verifying key.
-        // The placeholder value below will cause verification to fail unless set to a real key.
-        const ED25519_PUBKEY: [u8; 32] = [0u8; 32];
-        match VerifyingKey::from_bytes(&ED25519_PUBKEY) {
+        let pk = match Self::pubkey_from_env() { Some(pk) => pk, None => [0u8; 32] };
+        match VerifyingKey::from_bytes(&pk) {
             Ok(vk) => {
                 let sig = Signature::from_bytes(signature);
                 vk.verify_strict(hash, &sig).is_ok()
