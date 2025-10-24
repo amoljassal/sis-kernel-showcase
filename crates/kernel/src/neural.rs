@@ -84,7 +84,12 @@ impl NeuralAgent {
     }
 
     /// Run a bounded MLP inference with Q8.8 inputs; updates last_out and returns out_len.
+    /// Lazy initialization: on first use (infer_count == 0), auto-initializes to identity-like defaults.
     pub fn infer(&mut self, input_q88: &[i16]) -> usize {
+        // Lazy init: if this is the first inference, initialize to sane defaults
+        if self.infer_count == 0 {
+            self.reset_defaults();
+        }
         let t0 = crate::graph::now_cycles();
         let mut hid = [0i16; MAX_H];
         let mut out = [0i16; MAX_OUT];

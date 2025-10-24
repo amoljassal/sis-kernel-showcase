@@ -120,6 +120,7 @@ impl Shell {
                 "ask-ai" => self.cmd_ask_ai(&parts[1..]),
                 "nnjson" => self.cmd_nn_json(),
                 "nnact" => self.cmd_nn_act(&parts[1..]),
+                "metricsctl" => self.cmd_metricsctl(&parts[1..]),
                 "metrics" => self.cmd_metrics(&parts[1..]),
                 "temporaliso" => self.cmd_temporal_isolation_demo(),
                 "phase3validation" => self.cmd_phase3_validation(),
@@ -234,6 +235,7 @@ impl Shell {
             crate::uart_print(b"  nnjson   - Print neural audit ring as JSON\n");
             crate::uart_print(b"  nnact    - Run action and log op=3: nnact <milli...>\n");
             crate::uart_print(b"  neuralctl learn on|off [limit N] | tick | dump | load <in> <hid> <out> | <weights...>\n");
+            crate::uart_print(b"  metricsctl - Runtime metric capture: on | off | status\n");
             crate::uart_print(b"  metrics  - Show recent metrics: metrics [ctx|mem|real]\n");
             crate::uart_print(b"  graphctl - Control graph: create | add-channel <cap> | add-operator <op_id> [--in N|none] [--out N|none] [--prio P] [--stage acquire|clean|explore|model|explain] [--in-schema S] [--out-schema S] | start <steps> | det <wcet_ns> <period_ns> <deadline_ns> | stats | show | export-json\n");
             crate::uart_print(b"  ctlhex   - Inject control frame as hex (Create/Add/Start)\n");
@@ -457,6 +459,34 @@ impl Shell {
         unsafe { crate::uart_print(b"[NN] action: noop suggested (safe) out_len="); }
         self.print_number_simple(out_len as u64);
         unsafe { crate::uart_print(b"\n"); }
+    }
+
+    /// Runtime toggle for metric capture
+    fn cmd_metricsctl(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: metricsctl <on|off|status>\n"); }
+            return;
+        }
+        match args[0] {
+            "on" => {
+                crate::trace::metrics_set_enabled(true);
+                unsafe { crate::uart_print(b"[METRICSCTL] capture enabled\n"); }
+            }
+            "off" => {
+                crate::trace::metrics_set_enabled(false);
+                unsafe { crate::uart_print(b"[METRICSCTL] capture disabled\n"); }
+            }
+            "status" => {
+                let enabled = crate::trace::metrics_enabled();
+                unsafe {
+                    crate::uart_print(b"[METRICSCTL] capture: ");
+                    crate::uart_print(if enabled { b"ON\n" } else { b"OFF\n" });
+                }
+            }
+            _ => {
+                unsafe { crate::uart_print(b"Usage: metricsctl <on|off|status>\n"); }
+            }
+        }
     }
 
     /// Show recent metrics captured into small rings
