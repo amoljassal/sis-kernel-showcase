@@ -43,8 +43,8 @@ Non-goals and not implemented: production hardening beyond testing framework, fu
   - `llmstream <prompt> [--max-tokens N] [--chunk N]`
   - `llmgraph <prompt>` (graph-backed streaming demo)
   - `llmstats`, `llmjson`
-  - `llmpoll [max]` — poll last inference for up to `max` tokens (counts; ASCII-safe)
-  - `llmcancel` — cancel last inference (stub; marks done)
+  - `llmpoll [max]` — poll last inference for up to `max` tokens; displays id, n (consumed), done, plen (prompt length), model (model ID or none)
+  - `llmcancel [id]` — cancel inference by ID (or last if no ID specified)
 - `llmsummary` — list recent LLM sessions (id, total tokens, consumed, done, timestamp, model)
 - `llmverify` — verify demo model package using stub SHA-256 + Ed25519 (audited allow/deny)
 - `llmhash` — compute the demo SHA-256‑like hash for a deterministic buffer: `llmhash <model_id> [size_bytes]`
@@ -115,6 +115,7 @@ Non-goals and not implemented: production hardening beyond testing framework, fu
 - `scripts/llm_demo.sh`: guided LLM demo (`DET=1` adds deterministic budgeting)
 - `scripts/llm_audit_demo.sh`: host audit demonstration (when experimenting with VirtIO)
 - `tools/sis_datactl.py`: control-plane client (UNIX/TCP) with `--wait-ack`, `--retries`, and LLM frames
+  - `llm-hash <model_id> [--size N]`: compute demo SHA-256-like hash for model package testing (matches kernel llmhash)
 
 ## Typed Graphs
 
@@ -263,7 +264,11 @@ BRINGUP=1 ./scripts/uefi_run.sh
 #  - PERF=1 enables perf-verbose (PMU programming + extra logs)
 #  - DETERMINISTIC=1 enables Phase 2 deterministic scheduler and model security
 #  - VIRTIO=1 enables the virtio-console driver path and adds QEMU virtio-serial devices (off by default)
-#  - SIS_FEATURES allows arbitrary feature list
+#  - SIS_FEATURES allows arbitrary feature list (e.g., "llm,crypto-real" for production cryptography)
+#
+# Available features:
+#  - llm: Kernel-resident LLM service
+#  - crypto-real: Enable real SHA-256 + Ed25519 cryptography (production mode; requires sha2, ed25519-dalek)
 BRINGUP=1 GRAPH=1 PERF=1 ./scripts/uefi_run.sh
 BRINGUP=1 DETERMINISTIC=1 ./scripts/uefi_run.sh
 BRINGUP=1 SIS_FEATURES="graph-demo,perf-verbose,deterministic" ./scripts/uefi_run.sh
@@ -290,6 +295,8 @@ Useful shell commands (type `help` for full list):
     - `graphctl det <wcet_ns> <period_ns> <deadline_ns>` — enable deterministic mode for the current graph (feature: `deterministic`); emits `det_admit_ok` or `det_admit_reject`
     - `graphctl start <steps>` — execute graph scheduler
     - `graphctl stats` — show current graph structure (ops/channels)
+    - `graphctl show` — export graph structure as text
+    - `graphctl export-json` — export graph structure as JSON (channels: idx/depth/schema; operators: id/in/out/priority/in_schema/out_schema)
     - Defaults: `--in none`, `--prio 10`, `--stage acquire` unless specified
   - `graphdemo` — Phase 1 observability demo (A→B pipeline), emits comprehensive per-operator latency percentiles and channel backpressure metrics
   - `detdemo` — Phase 2 deterministic demo (feature: `deterministic`), demonstrates CBS+EDF scheduler, model security, and constraint enforcement

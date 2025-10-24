@@ -149,6 +149,21 @@ def cmd_llm_cancel(args):
     send_frame(0x13, payload, args.wait_ack, getattr(args, 'tcp', None), getattr(args, 'retries', 0))
     print(f'LLMCancel(id={infer_id}) sent')
 
+def cmd_llm_hash(args):
+    model_id = int(args.model_id)
+    size_bytes = int(args.size) if args.size else 1024
+    data = bytes([(model_id & 0xFF)] * size_bytes)
+    checksum = 0
+    for byte in data:
+        checksum = (checksum + byte) & 0xFFFFFFFFFFFFFFFF
+        checksum = (checksum * 31) & 0xFFFFFFFFFFFFFFFF
+    hash_bytes = bytearray(32)
+    for i in range(4):
+        val = (checksum + i * 1000) & 0xFFFFFFFFFFFFFFFF
+        hash_bytes[i*8:(i+1)*8] = struct.pack('<Q', val)
+    print(f'Model ID: {model_id}, Size: {size_bytes} bytes')
+    print(f'Demo Hash: {hash_bytes.hex()}')
+
 def main():
     ap = argparse.ArgumentParser(description='SIS control-plane client (V0 framing)')
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -199,6 +214,11 @@ def main():
     ap_llm_cancel = sub.add_parser('llm-cancel')
     ap_llm_cancel.add_argument('infer_id')
     ap_llm_cancel.set_defaults(fn=cmd_llm_cancel)
+
+    ap_llm_hash = sub.add_parser('llm-hash', help='compute demo hash for model package testing')
+    ap_llm_hash.add_argument('model_id', help='model ID')
+    ap_llm_hash.add_argument('--size', help='buffer size in bytes (default: 1024)')
+    ap_llm_hash.set_defaults(fn=cmd_llm_hash)
 
     args = ap.parse_args()
     args.fn(args)

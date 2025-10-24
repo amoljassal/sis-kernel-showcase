@@ -194,6 +194,8 @@ pub struct VirtIOConsoleDriver {
     ctrl_txq: Option<VirtQueue>,
     buffer: [u8; 4096],
     /// Dedicated RX buffer for receive queue
+    /// NOTE: Single buffer design may drop data under high load.
+    /// For production, consider ring buffer or multiple RX buffers.
     rx_buffer: [u8; 4096],
     initialized: bool,
     multip: bool,

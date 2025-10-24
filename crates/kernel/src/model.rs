@@ -101,34 +101,24 @@ impl<const MAX_MODELS: usize, const MAX_AUDIT_ENTRIES: usize> ModelSecurityManag
         self.verify_ed25519_signature(&package.sha256_hash, &package.ed25519_signature)
     }
 
-    /// Simplified SHA-256 hash computation (demo implementation)
+    /// SHA-256 hash (demo implementation)
     fn sha256_hash(&self, data: &[u8]) -> [u8; 32] {
-        // In real implementation, would use proper SHA-256
-        // For demo, use simple checksum-based hash
+        // Demo checksum-based hash (keeps behavior consistent without real keys)
         let mut hash = [0u8; 32];
         let mut checksum: u64 = 0;
-        
         for byte in data {
             checksum = checksum.wrapping_add(*byte as u64);
             checksum = checksum.wrapping_mul(31);
         }
-        
-        // Fill hash array with checksum-derived bytes
         for i in 0..4 {
             let bytes = (checksum.wrapping_add(i as u64 * 1000)).to_le_bytes();
             hash[i*8..(i+1)*8].copy_from_slice(&bytes);
         }
-        
         hash
     }
 
-    /// Simplified Ed25519 signature verification (demo implementation)
-    fn verify_ed25519_signature(&self, _hash: &[u8; 32], _signature: &[u8; 64]) -> bool {
-        // In real implementation, would use Ed25519 verification
-        // For Phase 2 demo, simulate successful verification
-        // (In production, would integrate with ring or dalek crates)
-        true
-    }
+    /// Ed25519 signature verification (demo always accepts)
+    fn verify_ed25519_signature(&self, _hash: &[u8; 32], _signature: &[u8; 64]) -> bool { true }
 
     /// Load and verify a signed model package
     pub fn load_model(&mut self, package: ModelPackage, data: &[u8]) -> Result<u32, ModelResult> {

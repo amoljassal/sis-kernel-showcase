@@ -417,6 +417,55 @@ impl GraphApi {
             unsafe { crate::uart_print(b"\n"); }
         }
     }
+
+    pub fn export_json(&self) {
+        unsafe { crate::uart_print(b"{\"channels\":["); }
+        for i in 0..self.channels.len() {
+            if i > 0 { unsafe { crate::uart_print(b","); } }
+            let depth = self.channels[i].depth();
+            unsafe { crate::uart_print(b"{\"idx\":"); }
+            uart_print_num(i as u64);
+            unsafe { crate::uart_print(b",\"depth\":"); }
+            uart_print_num(depth as u64);
+            unsafe { crate::uart_print(b",\"schema\":"); }
+            if let Some(s) = self.channel_schemas.get(i).and_then(|v| *v) {
+                uart_print_num(s as u64);
+            } else {
+                unsafe { crate::uart_print(b"null"); }
+            }
+            unsafe { crate::uart_print(b"}"); }
+        }
+        unsafe { crate::uart_print(b"],\"operators\":["); }
+        for (idx, op) in self.ops.iter().enumerate() {
+            if idx > 0 { unsafe { crate::uart_print(b","); } }
+            unsafe { crate::uart_print(b"{\"id\":"); }
+            uart_print_num(op.id as u64);
+            unsafe { crate::uart_print(b",\"in\":"); }
+            match op.in_ch {
+                Some(v) => uart_print_num(v as u64),
+                None => unsafe { crate::uart_print(b"null"); }
+            }
+            unsafe { crate::uart_print(b",\"out\":"); }
+            match op.out_ch {
+                Some(v) => uart_print_num(v as u64),
+                None => unsafe { crate::uart_print(b"null"); }
+            }
+            unsafe { crate::uart_print(b",\"priority\":"); }
+            uart_print_num(op.priority as u64);
+            unsafe { crate::uart_print(b",\"in_schema\":"); }
+            match op.in_schema {
+                Some(v) => uart_print_num(v as u64),
+                None => unsafe { crate::uart_print(b"null"); }
+            }
+            unsafe { crate::uart_print(b",\"out_schema\":"); }
+            match op.out_schema {
+                Some(v) => uart_print_num(v as u64),
+                None => unsafe { crate::uart_print(b"null"); }
+            }
+            unsafe { crate::uart_print(b"}"); }
+        }
+        unsafe { crate::uart_print(b"]}\n"); }
+    }
 }
 
 // Minimal Graph API surface (Phase 1 scaffolding)

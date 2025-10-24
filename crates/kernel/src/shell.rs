@@ -220,7 +220,7 @@ impl Shell {
             crate::uart_print(b"  rtaivalidation - Run comprehensive real-time AI inference validation\n");
             crate::uart_print(b"  temporaliso - Run AI temporal isolation demonstration\n");
             crate::uart_print(b"  phase3validation - Run complete Phase 3 AI-native kernel validation\n");
-            crate::uart_print(b"  graphctl - Control graph: create | add-channel <cap> | add-operator <op_id> [--in N|none] [--out N|none] [--prio P] [--stage acquire|clean|explore|model|explain] [--in-schema S] [--out-schema S] | start <steps> | det <wcet_ns> <period_ns> <deadline_ns> | stats\n");
+            crate::uart_print(b"  graphctl - Control graph: create | add-channel <cap> | add-operator <op_id> [--in N|none] [--out N|none] [--prio P] [--stage acquire|clean|explore|model|explain] [--in-schema S] [--out-schema S] | start <steps> | det <wcet_ns> <period_ns> <deadline_ns> | stats | show | export-json\n");
             crate::uart_print(b"  ctlhex   - Inject control frame as hex (Create/Add/Start)\n");
             #[cfg(feature = "virtio-console")]
             crate::uart_print(b"  vconwrite- Send text to host via virtio-console: vconwrite <text>\n");
@@ -448,10 +448,17 @@ impl Shell {
             args[0].parse::<usize>().unwrap_or(4)
         } else { 4 };
         let (id, n, done, _items) = crate::llm::ctl_poll(max);
+        let (plen, model_id) = crate::llm::ctl_peek_meta(id);
         unsafe {
             crate::uart_print(b"[LLM][POLL] id="); self.print_number_simple(id as u64);
             crate::uart_print(b" n="); self.print_number_simple(n as u64);
             crate::uart_print(b" done="); self.print_number_simple(done as u64);
+            crate::uart_print(b" plen="); self.print_number_simple(plen as u64);
+            crate::uart_print(b" model=");
+            match model_id {
+                Some(mid) => self.print_number_simple(mid as u64),
+                None => crate::uart_print(b"none"),
+            }
             crate::uart_print(b"\n");
         }
     }
@@ -1147,7 +1154,13 @@ impl Shell {
                     Err(_) => unsafe { crate::uart_print(b"[GRAPH] no active graph\n"); },
                 }
             }
-            _ => unsafe { crate::uart_print(b"Usage: graphctl <create|add-channel|add-operator|start|det|stats> ...\n"); }
+            "export-json" => {
+                match crate::control::export_graph_json() {
+                    Ok(()) => {},
+                    Err(_) => unsafe { crate::uart_print(b"[GRAPH] no active graph\n"); },
+                }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: graphctl <create|add-channel|add-operator|start|det|stats|show|export-json> ...\n"); }
         }
     }
 

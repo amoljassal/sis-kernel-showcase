@@ -239,9 +239,17 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
                         out_schema: if out_schema == 0 { None } else { Some(out_schema) },
                     };
                     ctrl_print(b"CTRL: inserting operator (typed)\n");
+                    let has_schema = spec.in_schema.is_some() || spec.out_schema.is_some();
                     let ok = g.add_operator_strict(spec);
-                    if !ok { ctrl_print(b"CTRL: operator rejected (typed schema mismatch)\n"); return Ok(()); }
-                    ctrl_print(b"CTRL: operator added (typed)\n");
+                    if !ok {
+                        ctrl_print(b"CTRL: operator rejected (schema mismatch)\n");
+                        return Ok(());
+                    }
+                    if has_schema {
+                        ctrl_print(b"CTRL: operator added (schema verified)\n");
+                    } else {
+                        ctrl_print(b"CTRL: operator added (untyped)\n");
+                    }
                     if let Some((ops, chans)) = current_graph_counts() {
                         metric_kv("graph_stats_ops", ops);
                         metric_kv("graph_stats_channels", chans);
@@ -293,12 +301,16 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
                     let wcet = u64::from_le_bytes([p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7]]);
                     let ok = crate::llm::load_model(Some(wcet));
                     llm::audit(1, 0, 0, wcet, 0, if ok { 0b001 } else { 0b010 });
-                    if ok { ctrl_print(b"CTRL: llm load ok\n"); } else { ctrl_print(b"CTRL: llm load fail\n"); }
+                    if ok {
+                        ctrl_print(b"CTRL: llm load ok (wcet configured)\n");
+                    } else {
+                        ctrl_print(b"CTRL: llm load fail\n");
+                    }
                     return Ok(());
                 } else {
                     let _ = crate::llm::load_model(None);
                     llm::audit(1, 0, 0, 0, 0, 0b001);
-                    ctrl_print(b"CTRL: llm load ok (default)\n");
+                    ctrl_print(b"CTRL: llm load ok (default wcet)\n");
                     return Ok(());
                 }
             }
@@ -362,19 +374,25 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
             #[cfg(feature = "llm")]
             {
                 let (id, n, done, items) = if infer_id != 0 { crate::llm::ctl_poll_id(infer_id, max) } else { crate::llm::ctl_poll(max) };
+                let (plen, model_id) = crate::llm::ctl_peek_meta(id);
                 ctrl_print(b"CTRL: llm poll\n");
                 #[cfg(feature = "virtio-console")]
                 {
                     // Compose a compact token response line
                     let mut line = heapless::String::<192>::new();
                     let _ = line.push_str("OK TOK id=");
-                    // id
-                    // append decimal id
                     let _ = write_decimal_u64(&mut line, id as u64);
                     let _ = line.push_str(" n=");
                     let _ = write_decimal_u64(&mut line, n as u64);
                     let _ = line.push_str(" done=");
                     let _ = write_decimal_u64(&mut line, done as u64);
+                    let _ = line.push_str(" plen=");
+                    let _ = write_decimal_u64(&mut line, plen as u64);
+                    let _ = line.push_str(" model=");
+                    match model_id {
+                        Some(mid) => { let _ = write_decimal_u64(&mut line, mid as u64); }
+                        None => { let _ = line.push_str("none"); }
+                    }
                     if items.len() > 0 {
                         let _ = line.push_str(" items=");
                         let _ = line.push_str(items.as_str());
@@ -391,6 +409,13 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
                     crate::shell::print_number_simple(n as u64);
                     crate::uart_print(b" done=");
                     crate::shell::print_number_simple(done as u64);
+                    crate::uart_print(b" plen=");
+                    crate::shell::print_number_simple(plen as u64);
+                    crate::uart_print(b" model=");
+                    match model_id {
+                        Some(mid) => crate::shell::print_number_simple(mid as u64),
+                        None => crate::uart_print(b"none"),
+                    }
                     crate::uart_print(b" items=");
                     crate::uart_print(items.as_bytes());
                     crate::uart_print(b"\n");
@@ -438,6 +463,17 @@ pub fn export_graph_text() -> Result<(), CtrlError> {
     }
 }
 
+pub fn export_graph_json() -> Result<(), CtrlError> {
+    unsafe {
+        if let Some(ref g) = CTRL_GRAPH {
+            g.export_json();
+            Ok(())
+        } else {
+            Err(CtrlError::NoGraph)
+        }
+    }
+}
+
 /// Directly add an operator (used by shell to avoid rare frame-path stalls)
 pub fn add_operator_direct(
     op_id: u32,
@@ -463,8 +499,15 @@ pub fn add_operator_direct(
             };
             ctrl_print(b"CTRL: begin add-operator (direct)\n");
             let ok = g.add_operator_strict(spec);
-            if !ok { ctrl_print(b"CTRL: operator rejected (direct schema mismatch)\n"); return Ok(()); }
-            ctrl_print(b"CTRL: operator added (direct)\n");
+            if !ok {
+                ctrl_print(b"CTRL: operator rejected (schema mismatch)\n");
+                return Ok(());
+            }
+            if in_schema.is_some() || out_schema.is_some() {
+                ctrl_print(b"CTRL: operator added (schema verified)\n");
+            } else {
+                ctrl_print(b"CTRL: operator added (untyped)\n");
+            }
             if let Some((ops, chans)) = current_graph_counts() {
                 metric_kv("graph_stats_ops", ops);
                 metric_kv("graph_stats_channels", chans);

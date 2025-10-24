@@ -16,6 +16,8 @@ bitflags = { version = "2.9.1", default-features = false }
 half = { version = "2.4.1", default-features = false, features = ["bytemuck"] }
 heapless = { version = "0.8", default-features = false }
 sha2 = { version = "0.10", default-features = false, features = ["force-soft"] }
+ed25519-dalek = { version = "2", default-features = false, features = ["alloc"] }
+signature = { version = "2", default-features = false }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 x86_64 = { version = "=0.14.13", default-features = false, features = ["instructions", "abi_x86_interrupt"] }
@@ -43,6 +45,7 @@ graph-spsc-debug = [] # Debug SPSC ring demo with progress prints
 virtio-console = []   # Enable VirtIO console driver path during bring-up
 graph-autostats = []  # Auto-create a baseline graph and emit graph_stats_* METRICs
 llm = []             # Kernel-resident LLM operator/service (feature-gated)
+crypto-real = []     # Enable real SHA-256 + Ed25519 cryptography (production mode)
 
 [build-dependencies]
 bootloader = { version = "=0.11.11", default-features = false, features = ["bios"] }

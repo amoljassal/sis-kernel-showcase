@@ -654,6 +654,15 @@ pub fn ctl_print_sessions() {
     }
 }
 
+/// Peek metadata for a given infer id: (prompt_len, model_id)
+pub fn ctl_peek_meta(infer_id: usize) -> (usize, Option<u32>) {
+    let tab = INFER_TABLE.lock();
+    if let Some(st) = tab.iter().find(|s| s.infer_id == infer_id) {
+        return (st.prompt_len, st.model_id);
+    }
+    (0, None)
+}
+
 // --- Demo model verification (uses simplified SHA-256 + Ed25519 stubs in model.rs) ---
 
 fn demo_sha256_like(data: &[u8]) -> [u8; 32] {
