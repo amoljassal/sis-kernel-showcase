@@ -120,6 +120,7 @@ impl Shell {
                 "ask-ai" => self.cmd_ask_ai(&parts[1..]),
                 "nnjson" => self.cmd_nn_json(),
                 "nnact" => self.cmd_nn_act(&parts[1..]),
+                "metrics" => self.cmd_metrics(&parts[1..]),
                 "temporaliso" => self.cmd_temporal_isolation_demo(),
                 "phase3validation" => self.cmd_phase3_validation(),
                 #[cfg(feature = "llm")]
@@ -233,6 +234,7 @@ impl Shell {
             crate::uart_print(b"  nnjson   - Print neural audit ring as JSON\n");
             crate::uart_print(b"  nnact    - Run action and log op=3: nnact <milli...>\n");
             crate::uart_print(b"  neuralctl learn on|off [limit N] | tick | dump | load <in> <hid> <out> | <weights...>\n");
+            crate::uart_print(b"  metrics  - Show recent metrics: metrics [ctx|mem|real]\n");
             crate::uart_print(b"  graphctl - Control graph: create | add-channel <cap> | add-operator <op_id> [--in N|none] [--out N|none] [--prio P] [--stage acquire|clean|explore|model|explain] [--in-schema S] [--out-schema S] | start <steps> | det <wcet_ns> <period_ns> <deadline_ns> | stats | show | export-json\n");
             crate::uart_print(b"  ctlhex   - Inject control frame as hex (Create/Add/Start)\n");
             #[cfg(feature = "virtio-console")]
@@ -359,6 +361,39 @@ impl Shell {
                     unsafe { crate::uart_print(b"[NN] load failed\n"); }
                 }
             }
+            "demo-metrics" => {
+                let n = if args.len() >= 2 { args[1].parse::<usize>().unwrap_or(1) } else { 1 };
+                // Snapshot and compute simple averages for last n values
+                let mut buf = [0usize; 8];
+                let mut take_avg = |s: fn(&mut [usize])->usize| -> usize {
+                    let m = s(&mut buf);
+                    let k = core::cmp::min(m, core::cmp::min(n, buf.len()));
+                    if k == 0 { 0 } else { let mut sum=0usize; for i in 0..k { sum += buf[i]; } sum / k }
+                };
+                let ctx = take_avg(crate::trace::metrics_snapshot_ctx_switch);
+                let mem = take_avg(crate::trace::metrics_snapshot_memory_alloc);
+                let rcs = take_avg(crate::trace::metrics_snapshot_real_ctx);
+                // Normalize to milli using fixed caps
+                let cap_ctx = 200_000usize; // 200us
+                let cap_mem = 50_000usize;  // 50us
+                let cap_rcs = 20_000usize;  // 20us
+                let mut f = [0i32; 3];
+                f[0] = core::cmp::min(1000, ctx.saturating_mul(1000)/cap_ctx) as i32;
+                f[1] = core::cmp::min(1000, mem.saturating_mul(1000)/cap_mem) as i32;
+                f[2] = core::cmp::min(1000, rcs.saturating_mul(1000)/cap_rcs) as i32;
+                let _ = crate::neural::infer_from_milli(&f);
+                crate::neural::print_status();
+                let mut out = [0i32; 8];
+                let k = crate::neural::last_outputs_milli(&mut out);
+                let mut argmax = 0usize; let mut vmax = i32::MIN;
+                for i in 0..k { if out[i] > vmax { vmax = out[i]; argmax = i; } }
+                let conf = if vmax <= 0 { 0 } else { (vmax as usize).min(1000) };
+                unsafe { crate::uart_print(b"[AI] demo-metrics hint: "); }
+                match argmax { 0 => unsafe { crate::uart_print(b"Network may be slow "); }, 1 => unsafe { crate::uart_print(b"Consider restart/fix "); }, _ => unsafe { crate::uart_print(b"No clear issue "); }, }
+                unsafe { crate::uart_print(b"confidence="); }
+                self.print_number_simple(conf as u64);
+                unsafe { crate::uart_print(b"/1000\n"); }
+            }
             "retrain" => {
                 if args.len() < 2 { unsafe { crate::uart_print(b"Usage: neuralctl retrain <count>\n"); } return; }
                 let n = match args[1].parse::<usize>() { Ok(v) => v, Err(_) => { unsafe { crate::uart_print(b"[NN] invalid count\n"); } return; } };
@@ -377,28 +412,36 @@ impl Shell {
         let mut text = alloc::string::String::new();
         for (i, s) in args.iter().enumerate() { if i>0 { text.push(' '); } text.push_str(s); }
         let t = text.to_ascii_lowercase();
-        // Feature mapping (3-dim for default agent): [net_slow, service_issue, command_error]
+        // Feature mapping (3-dim): [net_slow, service_issue, command_error]
         let mut f = [0i32; 3];
-        if t.contains("network") || t.contains("slow") || t.contains("latency") { f[0] = 1000; }
-        if t.contains("service") || t.contains("restart") || t.contains("crash") { f[1] = 1000; }
-        if t.contains("error") || t.contains("failed") || t.contains("fix") { f[2] = 1000; }
+        let net_kw = ["network","slow","latency","bandwidth","packet","jitter"];
+        let svc_kw = ["service","restart","crash","crashed","daemon","hung"];
+        let err_kw = ["error","failed","fix","bug","panic","fault"];
+        for k in &net_kw { if t.contains(k) { f[0] = 1000; } }
+        for k in &svc_kw { if t.contains(k) { f[1] = 1000; } }
+        for k in &err_kw { if t.contains(k) { f[2] = 1000; } }
+        // crude negations
+        if t.contains("not slow") || t.contains("no network") { f[0] = 0; }
+        if t.contains("not crashed") || t.contains("no restart") { f[1] = 0; }
+        if t.contains("no error") || t.contains("not failed") { f[2] = 0; }
         let _ = crate::neural::infer_from_milli(&f);
-        // Print status and a small hint based on outputs
+        // Fetch outputs and compute a simple confidence
+        let mut out = [0i32; 8];
+        let n = crate::neural::last_outputs_milli(&mut out);
         crate::neural::print_status();
+        // Argmax hint
+        let mut argmax = 0usize; let mut vmax = i32::MIN;
+        for i in 0..n { if out[i] > vmax { vmax = out[i]; argmax = i; } }
+        let conf = if vmax <= 0 { 0 } else { (vmax as usize).min(1000) };
         unsafe { crate::uart_print(b"[AI] hint: "); }
-        // Simple rule: output0 ~ alert, output1 ~ action
-        // Retrieve last_out via status-only; we’ll recompute the hint from features
-        let alert = if f[0] == 1000 { true } else { false };
-        let action = f[1] == 1000 || f[2] == 1000;
-        if alert && action {
-            unsafe { crate::uart_print(b"Investigate network and consider restart/fix\n"); }
-        } else if alert {
-            unsafe { crate::uart_print(b"Network may be slow; check bandwidth/latency\n"); }
-        } else if action {
-            unsafe { crate::uart_print(b"Consider restart or fix based on logs\n"); }
-        } else {
-            unsafe { crate::uart_print(b"No clear issue; gather more metrics\n"); }
+        match argmax {
+            0 => unsafe { crate::uart_print(b"Network may be slow; check bandwidth/latency "); },
+            1 => unsafe { crate::uart_print(b"Consider restart or fix based on logs "); },
+            _ => unsafe { crate::uart_print(b"No clear issue; gather more metrics "); },
         }
+        unsafe { crate::uart_print(b"confidence="); }
+        self.print_number_simple(conf as u64);
+        unsafe { crate::uart_print(b"/1000\n"); }
     }
 
     fn cmd_nn_json(&self) {
@@ -413,6 +456,49 @@ impl Shell {
         crate::neural::print_status();
         unsafe { crate::uart_print(b"[NN] action: noop suggested (safe) out_len="); }
         self.print_number_simple(out_len as u64);
+        unsafe { crate::uart_print(b"\n"); }
+    }
+
+    /// Show recent metrics captured into small rings
+    fn cmd_metrics(&self, args: &[&str]) {
+        let mut buf = [0usize; 8];
+        if let Some(which) = args.get(0) {
+            match *which {
+                "ctx" => {
+                    let n = crate::trace::metrics_snapshot_ctx_switch(&mut buf);
+                    unsafe { crate::uart_print(b"[METRICS] ctx_switch_ns:"); }
+                    for i in 0..n { unsafe { crate::uart_print(b" "); } self.print_number_simple(buf[i] as u64); }
+                    unsafe { crate::uart_print(b"\n"); }
+                    return;
+                }
+                "mem" => {
+                    let n = crate::trace::metrics_snapshot_memory_alloc(&mut buf);
+                    unsafe { crate::uart_print(b"[METRICS] memory_alloc_ns:"); }
+                    for i in 0..n { unsafe { crate::uart_print(b" "); } self.print_number_simple(buf[i] as u64); }
+                    unsafe { crate::uart_print(b"\n"); }
+                    return;
+                }
+                "real" => {
+                    let n = crate::trace::metrics_snapshot_real_ctx(&mut buf);
+                    unsafe { crate::uart_print(b"[METRICS] real_ctx_switch_ns:"); }
+                    for i in 0..n { unsafe { crate::uart_print(b" "); } self.print_number_simple(buf[i] as u64); }
+                    unsafe { crate::uart_print(b"\n"); }
+                    return;
+                }
+                _ => {}
+            }
+        }
+        let n1 = crate::trace::metrics_snapshot_ctx_switch(&mut buf);
+        unsafe { crate::uart_print(b"[METRICS] ctx_switch_ns:"); }
+        for i in 0..n1 { unsafe { crate::uart_print(b" "); } self.print_number_simple(buf[i] as u64); }
+        unsafe { crate::uart_print(b"\n"); }
+        let n2 = crate::trace::metrics_snapshot_memory_alloc(&mut buf);
+        unsafe { crate::uart_print(b"[METRICS] memory_alloc_ns:"); }
+        for i in 0..n2 { unsafe { crate::uart_print(b" "); } self.print_number_simple(buf[i] as u64); }
+        unsafe { crate::uart_print(b"\n"); }
+        let n3 = crate::trace::metrics_snapshot_real_ctx(&mut buf);
+        unsafe { crate::uart_print(b"[METRICS] real_ctx_switch_ns:"); }
+        for i in 0..n3 { unsafe { crate::uart_print(b" "); } self.print_number_simple(buf[i] as u64); }
         unsafe { crate::uart_print(b"\n"); }
     }
 

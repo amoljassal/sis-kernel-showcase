@@ -713,8 +713,7 @@ mod bringup {
     }
 
     unsafe fn gicv3_init_qemu() {
-        super::uart_print(b"GIC: DISTRIBUTOR\n");
-
+        super::uart_print(b"GIC:A\n");
         // QEMU ARM64 virt machine GICv3 addresses
         const GICD_BASE: u64 = 0x08000000; // GIC Distributor
         const GICR_BASE: u64 = 0x080A0000; // GIC Redistributor
@@ -737,80 +736,89 @@ mod bringup {
         const GICR_IPRIORITYR: u64 = 0x0400;
 
         // 1) Initialize GIC Distributor
+        super::uart_print(b"GIC:B\n");
         let gicd_ctlr = (GICD_BASE + GICD_CTLR) as *mut u32;
 
         // Check if already enabled
+        super::uart_print(b"GIC:C\n");
         let ctlr_val = core::ptr::read_volatile(gicd_ctlr);
+        super::uart_print(b"GIC:D\n");
         if (ctlr_val & 0x3) == 0 {
-            super::uart_print(b"GIC: ENABLING DISTRIBUTOR\n");
+            super::uart_print(b"GIC:E\n");
             // Enable Group 0 and Group 1 (both secure and non-secure)
             core::ptr::write_volatile(gicd_ctlr, 0x3);
+            core::arch::asm!("dsb sy", "isb", options(nostack, preserves_flags));
         } else {
-            super::uart_print(b"GIC: DISTRIBUTOR ALREADY ENABLED\n");
+            super::uart_print(b"GIC:F\n");
         }
 
         // 2) Wake up redistributor for CPU0
-        super::uart_print(b"GIC: REDISTRIBUTOR\n");
-        super::uart_print(b"GIC: ACCESSING GICR_WAKER\n");
+        super::uart_print(b"GIC:G\n");
         let waker = (GICR_BASE + GICR_WAKER) as *mut u32;
-        super::uart_print(b"GIC: READING WAKER VALUE\n");
+        super::uart_print(b"GIC:H\n");
 
         // Clear ProcessorSleep bit [1]
         let mut w: u32 = core::ptr::read_volatile(waker);
+        super::uart_print(b"GIC:I\n");
         if (w & (1 << 1)) != 0 {
-            super::uart_print(b"GIC: WAKING UP CPU0\n");
+            super::uart_print(b"GIC:J\n");
             w &= !(1 << 1);
             core::ptr::write_volatile(waker, w);
+            core::arch::asm!("dsb sy", "isb", options(nostack, preserves_flags));
 
             // Wait for ChildrenAsleep bit [2] to clear with timeout
             let mut timeout = 1000000;
             loop {
                 let v = core::ptr::read_volatile(waker);
                 if (v & (1 << 2)) == 0 {
-                    super::uart_print(b"GIC: CPU0 AWAKE\n");
+                    super::uart_print(b"GIC:K\n");
                     break;
                 }
                 timeout -= 1;
                 if timeout == 0 {
-                    super::uart_print(b"GIC: WAKER TIMEOUT\n");
+                    super::uart_print(b"GIC:L\n");
                     break;
                 }
             }
         } else {
-            super::uart_print(b"GIC: CPU0 ALREADY AWAKE\n");
+            super::uart_print(b"GIC:M\n");
         }
 
         // 3) Configure PPI 27 (virtual timer) as Group 1 (non-secure)
-        super::uart_print(b"GIC: CONFIGURE PPI27\n");
+        super::uart_print(b"GIC:N\n");
         let igroupr0 = (GICR_BASE + GICR_IGROUPR0) as *mut u32;
         let mut grp = core::ptr::read_volatile(igroupr0);
         grp |= 1 << 27;
         core::ptr::write_volatile(igroupr0, grp);
+        core::arch::asm!("dsb sy", "isb", options(nostack, preserves_flags));
 
         // 4) Set priority for PPI 27
         let iprio = (GICR_BASE + GICR_IPRIORITYR) as *mut u32;
         let prio_reg = iprio.add(27 / 4); // 4 priorities per 32-bit register
         let shift = (27 % 4) * 8;
+        super::uart_print(b"GIC:O\n");
         let mut prio_val = core::ptr::read_volatile(prio_reg);
         prio_val &= !(0xFF << shift);
         prio_val |= 0x80 << shift; // Medium priority
         core::ptr::write_volatile(prio_reg, prio_val);
+        core::arch::asm!("dsb sy", "isb", options(nostack, preserves_flags));
 
         // 5) Enable PPI 27
         super::uart_print(b"GIC: ENABLE PPI27\n");
         let isenabler0 = (GICR_BASE + GICR_ISENABLER0) as *mut u32;
         core::ptr::write_volatile(isenabler0, 1 << 27);
+        core::arch::asm!("dsb sy", "isb", options(nostack, preserves_flags));
 
-        super::uart_print(b"GIC: READY\n");
+        super::uart_print(b"GIC:P\n");
 
         // CPU interface via system registers
-        super::uart_print(b"GIC: CPU IF\n");
+        super::uart_print(b"GIC:Q\n");
         let pmr: u64 = 0xFF; // unmask all priorities
         asm!("msr icc_pmr_el1, {x}", x = in(reg) pmr);
         let grp1: u64 = 1;
         asm!("msr icc_igrpen1_el1, {x}", x = in(reg) grp1);
         asm!("isb", options(nostack, preserves_flags));
-        super::uart_print(b"GIC: DONE\n");
+        super::uart_print(b"GIC:R\n");
     }
 
     /// Helper function to print numbers
