@@ -91,7 +91,7 @@ impl Shell {
 
         unsafe {
             let cmd_str = core::str::from_utf8_unchecked(&CMD_BUFFER[..cmd_len]);
-            let parts: heapless::Vec<&str, 16> = cmd_str.split_whitespace().collect();
+            let parts: heapless::Vec<&str, 64> = cmd_str.split_whitespace().collect();
 
             if parts.is_empty() {
                 return;
@@ -116,6 +116,10 @@ impl Shell {
                 "npudemo" => self.cmd_npu_demo(),
                 "npudriver" => self.cmd_npu_driver_demo(),
                 "rtaivalidation" => self.cmd_realtime_ai_validation(),
+                "neuralctl" => self.cmd_neuralctl(&parts[1..]),
+                "ask-ai" => self.cmd_ask_ai(&parts[1..]),
+                "nnjson" => self.cmd_nn_json(),
+                "nnact" => self.cmd_nn_act(&parts[1..]),
                 "temporaliso" => self.cmd_temporal_isolation_demo(),
                 "phase3validation" => self.cmd_phase3_validation(),
                 #[cfg(feature = "llm")]
@@ -224,6 +228,11 @@ impl Shell {
             crate::uart_print(b"  rtaivalidation - Run comprehensive real-time AI inference validation\n");
             crate::uart_print(b"  temporaliso - Run AI temporal isolation demonstration\n");
             crate::uart_print(b"  phase3validation - Run complete Phase 3 AI-native kernel validation\n");
+            crate::uart_print(b"  neuralctl - Neural agent: infer <milli...> | status | reset | update <milli...> | teach <in...>|<out...> | selftest\n");
+            crate::uart_print(b"  ask-ai   - Ask a simple question: ask-ai \"<text>\" (maps to features, runs agent)\n");
+            crate::uart_print(b"  nnjson   - Print neural audit ring as JSON\n");
+            crate::uart_print(b"  nnact    - Run action and log op=3: nnact <milli...>\n");
+            crate::uart_print(b"  neuralctl learn on|off [limit N] | tick | dump | load <in> <hid> <out> | <weights...>\n");
             crate::uart_print(b"  graphctl - Control graph: create | add-channel <cap> | add-operator <op_id> [--in N|none] [--out N|none] [--prio P] [--stage acquire|clean|explore|model|explain] [--in-schema S] [--out-schema S] | start <steps> | det <wcet_ns> <period_ns> <deadline_ns> | stats | show | export-json\n");
             crate::uart_print(b"  ctlhex   - Inject control frame as hex (Create/Add/Start)\n");
             #[cfg(feature = "virtio-console")]
@@ -240,6 +249,171 @@ impl Shell {
             crate::uart_print(b"  clear    - Clear screen\n");
             crate::uart_print(b"  exit     - Exit shell\n");
         }
+    }
+
+    // --- Neural agent commands ---
+    fn cmd_neuralctl(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: neuralctl <infer|status|reset|update> ...\n"); }
+            return;
+        }
+        match args[0] {
+            "status" => {
+                crate::neural::print_status();
+            }
+            "reset" => {
+                crate::neural::reset();
+                unsafe { crate::uart_print(b"[NN] reset\n"); }
+            }
+            "infer" => {
+                if args.len() < 2 {
+                    unsafe { crate::uart_print(b"Usage: neuralctl infer <m1 m2 ...> (values in milli)\n"); }
+                    return;
+                }
+                let mut vals: heapless::Vec<i32, 32> = heapless::Vec::new();
+                for a in &args[1..] {
+                    if let Ok(v) = a.parse::<i32>() { let _ = vals.push(v); }
+                }
+                let n = crate::neural::infer_from_milli(&vals);
+                crate::neural::print_status();
+                unsafe { crate::uart_print(b"[NN] out_len="); }
+                self.print_number_simple(n as u64);
+                unsafe { crate::uart_print(b"\n"); }
+            }
+            "update" => {
+                if args.len() < 2 {
+                    unsafe { crate::uart_print(b"Usage: neuralctl update <weights in milli: w1(h*in),b1(h),w2(out*h),b2(out)>\n"); }
+                    return;
+                }
+                let mut vals: heapless::Vec<i32, 1024> = heapless::Vec::new();
+                for a in &args[1..] {
+                    if let Ok(v) = a.parse::<i32>() { let _ = vals.push(v); }
+                }
+                if crate::neural::update_from_milli(&vals) {
+                    unsafe { crate::uart_print(b"[NN] weights updated\n"); }
+                } else {
+                    unsafe { crate::uart_print(b"[NN] update failed (count mismatch)\n"); }
+                }
+            }
+            "teach" => {
+                // Format: neuralctl teach <i1 i2 ...>|<t1 t2 ...>
+                if args.len() < 2 { unsafe { crate::uart_print(b"Usage: neuralctl teach <i...>|<t...> (milli)\n"); } return; }
+                let mut inputs: heapless::Vec<i32, 32> = heapless::Vec::new();
+                let mut targets: heapless::Vec<i32, 32> = heapless::Vec::new();
+                let mut sep = false;
+                for a in &args[1..] {
+                    if *a == "|" { sep = true; continue; }
+                    if let Ok(v) = a.parse::<i32>() {
+                        if !sep { let _ = inputs.push(v); } else { let _ = targets.push(v); }
+                    }
+                }
+                let ok = crate::neural::teach_milli(&inputs, &targets);
+                unsafe { crate::uart_print(if ok { b"[NN] teach ok\n" } else { b"[NN] teach failed\n" }); }
+            }
+            "selftest" => {
+                let ok = crate::neural::selftest();
+                unsafe { crate::uart_print(if ok { b"[NN] selftest: PASS\n" } else { b"[NN] selftest: FAIL\n" }); }
+                crate::neural::print_status();
+            }
+            "learn" => {
+                if args.len() < 2 { unsafe { crate::uart_print(b"Usage: neuralctl learn on|off [limit N]\n"); } return; }
+                match args[1] {
+                    "on" => {
+                        let mut limit: Option<usize> = None;
+                        if args.len() >= 4 && args[2] == "limit" {
+                            if let Ok(v) = args[3].parse::<usize>() { limit = Some(v); }
+                        }
+                        crate::neural::learn_set(true, limit);
+                        unsafe { crate::uart_print(b"[NN] learn: ON\n"); }
+                    }
+                    "off" => { crate::neural::learn_set(false, None); unsafe { crate::uart_print(b"[NN] learn: OFF\n"); } }
+                    _ => unsafe { crate::uart_print(b"Usage: neuralctl learn on|off [limit N]\n"); }
+                }
+            }
+            "tick" => {
+                let applied = crate::neural::learn_tick();
+                unsafe { crate::uart_print(b"[NN] tick applied="); }
+                self.print_number_simple(applied as u64);
+                unsafe { crate::uart_print(b"\n"); }
+            }
+            "dump" => {
+                crate::neural::dump_milli();
+            }
+            "load" => {
+                // Format: neuralctl load <in> <hid> <out> | <weights...>
+                let mut i = 1usize;
+                if args.len() < 5 { unsafe { crate::uart_print(b"Usage: neuralctl load <in> <hid> <out> | <weights...>\n"); } return; }
+                let di = match args[i].parse::<usize>() { Ok(v)=>v, Err(_)=>{ unsafe{ crate::uart_print(b"[NN] bad in\n"); } return; } }; i+=1;
+                let dh = match args[i].parse::<usize>() { Ok(v)=>v, Err(_)=>{ unsafe{ crate::uart_print(b"[NN] bad hid\n"); } return; } }; i+=1;
+                let do_ = match args[i].parse::<usize>() { Ok(v)=>v, Err(_)=>{ unsafe{ crate::uart_print(b"[NN] bad out\n"); } return; } }; i+=1;
+                if args[i] != "|" { unsafe { crate::uart_print(b"[NN] expect '|' before weights\n"); } return; }
+                i += 1;
+                let mut weights: heapless::Vec<i32, 1024> = heapless::Vec::new();
+                while i < args.len() {
+                    if let Ok(v) = args[i].parse::<i32>() { let _ = weights.push(v); }
+                    i += 1;
+                }
+                if crate::neural::load_all_milli((di, dh, do_), &weights) {
+                    unsafe { crate::uart_print(b"[NN] load ok\n"); }
+                } else {
+                    unsafe { crate::uart_print(b"[NN] load failed\n"); }
+                }
+            }
+            "retrain" => {
+                if args.len() < 2 { unsafe { crate::uart_print(b"Usage: neuralctl retrain <count>\n"); } return; }
+                let n = match args[1].parse::<usize>() { Ok(v) => v, Err(_) => { unsafe { crate::uart_print(b"[NN] invalid count\n"); } return; } };
+                let applied = crate::neural::retrain(n);
+                unsafe { crate::uart_print(b"[NN] retrain applied="); }
+                self.print_number_simple(applied as u64);
+                unsafe { crate::uart_print(b"\n"); }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: neuralctl <infer|status|reset|update> ...\n"); }
+        }
+    }
+
+    fn cmd_ask_ai(&self, args: &[&str]) {
+        if args.is_empty() { unsafe { crate::uart_print(b"Usage: ask-ai \"<text>\"\n"); } return; }
+        // Build a single text line
+        let mut text = alloc::string::String::new();
+        for (i, s) in args.iter().enumerate() { if i>0 { text.push(' '); } text.push_str(s); }
+        let t = text.to_ascii_lowercase();
+        // Feature mapping (3-dim for default agent): [net_slow, service_issue, command_error]
+        let mut f = [0i32; 3];
+        if t.contains("network") || t.contains("slow") || t.contains("latency") { f[0] = 1000; }
+        if t.contains("service") || t.contains("restart") || t.contains("crash") { f[1] = 1000; }
+        if t.contains("error") || t.contains("failed") || t.contains("fix") { f[2] = 1000; }
+        let _ = crate::neural::infer_from_milli(&f);
+        // Print status and a small hint based on outputs
+        crate::neural::print_status();
+        unsafe { crate::uart_print(b"[AI] hint: "); }
+        // Simple rule: output0 ~ alert, output1 ~ action
+        // Retrieve last_out via status-only; we’ll recompute the hint from features
+        let alert = if f[0] == 1000 { true } else { false };
+        let action = f[1] == 1000 || f[2] == 1000;
+        if alert && action {
+            unsafe { crate::uart_print(b"Investigate network and consider restart/fix\n"); }
+        } else if alert {
+            unsafe { crate::uart_print(b"Network may be slow; check bandwidth/latency\n"); }
+        } else if action {
+            unsafe { crate::uart_print(b"Consider restart or fix based on logs\n"); }
+        } else {
+            unsafe { crate::uart_print(b"No clear issue; gather more metrics\n"); }
+        }
+    }
+
+    fn cmd_nn_json(&self) {
+        crate::neural::audit_print_json();
+    }
+
+    fn cmd_nn_act(&self, args: &[&str]) {
+        if args.is_empty() { unsafe { crate::uart_print(b"Usage: nnact <milli...>\n"); } return; }
+        let mut vals: heapless::Vec<i32, 32> = heapless::Vec::new();
+        for a in args { if let Ok(v) = a.parse::<i32>() { let _ = vals.push(v); } }
+        let out_len = crate::neural::act_milli(&vals);
+        crate::neural::print_status();
+        unsafe { crate::uart_print(b"[NN] action: noop suggested (safe) out_len="); }
+        self.print_number_simple(out_len as u64);
+        unsafe { crate::uart_print(b"\n"); }
     }
 
     #[cfg(feature = "virtio-console")]

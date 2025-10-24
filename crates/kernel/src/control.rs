@@ -434,6 +434,115 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
             ctrl_print(b"CTRL: llm cancel\n");
             Ok(())
         }
+        0x20 => { // NeuralInfer { count_u8, i16[milli]*count }
+            let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            check_token(tok)?;
+            if p.len() < 1 { return Err(CtrlError::BadFrame); }
+            let cnt = p[0] as usize;
+            if p.len() < 1 + cnt*2 { return Err(CtrlError::BadFrame); }
+            let mut vals: heapless::Vec<i32, 32> = heapless::Vec::new();
+            let mut off = 1usize;
+            for _ in 0..cnt {
+                let v = i16::from_le_bytes([p[off], p[off+1]]) as i32; off += 2;
+                let _ = vals.push(v as i32);
+            }
+            let _out_len = crate::neural::infer_from_milli(&vals);
+            ctrl_print(b"CTRL: nn infer\n");
+            #[cfg(feature = "virtio-console")]
+            {
+                let mut line = HString::<192>::new();
+                let (di, dh, do_) = crate::neural::dims();
+                let _ = line.push_str("OK NN infer dims=");
+                let _ = write_decimal_u64(&mut line, di as u64);
+                let _ = line.push(',');
+                let _ = write_decimal_u64(&mut line, dh as u64);
+                let _ = line.push(',');
+                let _ = write_decimal_u64(&mut line, do_ as u64);
+                let _ = line.push_str(" out=");
+                let _ = write_decimal_u64(&mut line, _out_len as u64);
+                let _ = line.push('\n');
+                let drv = crate::virtio_console::get_virtio_console_driver();
+                let _ = drv.write_data(line.as_bytes());
+            }
+            Ok(())
+        }
+        0x21 => { // NeuralUpdate { count_u8, i16[milli]*count }
+            let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            check_token(tok)?;
+            if p.len() < 1 { return Err(CtrlError::BadFrame); }
+            let cnt = p[0] as usize;
+            if p.len() < 1 + cnt*2 { return Err(CtrlError::BadFrame); }
+            let mut vals: heapless::Vec<i32, 128> = heapless::Vec::new();
+            let mut off = 1usize;
+            for _ in 0..cnt { let v = i16::from_le_bytes([p[off],p[off+1]]) as i32; off+=2; let _ = vals.push(v); }
+            let ok = crate::neural::update_from_milli(&vals);
+            ctrl_print(if ok { b"CTRL: nn update ok\n" } else { b"CTRL: nn update fail\n" });
+            #[cfg(feature = "virtio-console")]
+            {
+                let mut line = HString::<192>::new();
+                let (di, dh, do_) = crate::neural::dims();
+                let _ = line.push_str(if ok { "OK NN update dims=" } else { "ERR NN update dims=" });
+                let _ = write_decimal_u64(&mut line, di as u64);
+                let _ = line.push(',');
+                let _ = write_decimal_u64(&mut line, dh as u64);
+                let _ = line.push(',');
+                let _ = write_decimal_u64(&mut line, do_ as u64);
+                let _ = line.push('\n');
+                let drv = crate::virtio_console::get_virtio_console_driver();
+                let _ = drv.write_data(line.as_bytes());
+            }
+            Ok(())
+        }
+        0x22 => { // NeuralTeach { in_count_u8, out_count_u8, i16[in]*, i16[out]* }
+            let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            check_token(tok)?;
+            if p.len() < 2 { return Err(CtrlError::BadFrame); }
+            let in_cnt = p[0] as usize;
+            let out_cnt = p[1] as usize;
+            if p.len() < 2 + in_cnt*2 + out_cnt*2 { return Err(CtrlError::BadFrame); }
+            let mut inputs: heapless::Vec<i32, 32> = heapless::Vec::new();
+            let mut targets: heapless::Vec<i32, 32> = heapless::Vec::new();
+            let mut off = 2usize;
+            for _ in 0..in_cnt { let v = i16::from_le_bytes([p[off],p[off+1]]) as i32; off+=2; let _ = inputs.push(v); }
+            for _ in 0..out_cnt { let v = i16::from_le_bytes([p[off],p[off+1]]) as i32; off+=2; let _ = targets.push(v); }
+            let ok = crate::neural::teach_milli(&inputs, &targets);
+            ctrl_print(if ok { b"CTRL: nn teach ok\n" } else { b"CTRL: nn teach fail\n" });
+            #[cfg(feature = "virtio-console")]
+            {
+                let mut line = HString::<192>::new();
+                let (di, dh, do_) = crate::neural::dims();
+                let _ = line.push_str(if ok { "OK NN teach dims=" } else { "ERR NN teach dims=" });
+                let _ = write_decimal_u64(&mut line, di as u64);
+                let _ = line.push(',');
+                let _ = write_decimal_u64(&mut line, dh as u64);
+                let _ = line.push(',');
+                let _ = write_decimal_u64(&mut line, do_ as u64);
+                let _ = line.push('\n');
+                let drv = crate::virtio_console::get_virtio_console_driver();
+                let _ = drv.write_data(line.as_bytes());
+            }
+            Ok(())
+        }
+        0x23 => { // NeuralStatus {}
+            let (tok, _p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            check_token(tok)?;
+            crate::neural::print_status();
+            #[cfg(feature = "virtio-console")]
+            {
+                let mut line = HString::<192>::new();
+                let (di, dh, do_) = crate::neural::dims();
+                let _ = line.push_str("OK NN status dims=");
+                let _ = write_decimal_u64(&mut line, di as u64);
+                let _ = line.push(',');
+                let _ = write_decimal_u64(&mut line, dh as u64);
+                let _ = line.push(',');
+                let _ = write_decimal_u64(&mut line, do_ as u64);
+                let _ = line.push('\n');
+                let drv = crate::virtio_console::get_virtio_console_driver();
+                let _ = drv.write_data(line.as_bytes());
+            }
+            Ok(())
+        }
         _ => Err(CtrlError::Unsupported),
     }
 }
