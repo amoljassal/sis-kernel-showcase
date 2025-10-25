@@ -1869,8 +1869,19 @@ Structured graphs section
 
 ## Roadmap (near term)
 
+- **Neural Phase 3**: ✅ COMPLETE - Cross-agent communication (Week 1), meta-agent coordination (Week 2), advanced ML techniques (Week 3), policy gradient methods (Week 4)
+- **Neural Phase 4**: 📋 PLANNED - See `docs/NEURAL-PHASE-4-INTEGRATION-PLAN.md`
+  - **Part 1: Integration & Autonomy (Weeks 5-7)**
+    - Week 5: Autonomous meta-agent execution (timer-driven, not shell-driven)
+    - Week 6: Closed-loop learning with prediction tracking and validation
+    - Week 7: Stress testing and quantified performance validation
+  - **Part 2: AI-Powered OS Features (Weeks 8-12)**
+    - Week 8: Predictive memory management with neural allocation strategies
+    - Week 9: AI-driven scheduling with learned operator prioritization
+    - Week 10: Command execution prediction and resource pre-allocation
+    - Week 11: Simple networking stack with AI-enhanced flow control
+    - Week 12: Integration, documentation, and comprehensive showcase
 - **Phase 2 Completion**: Validate Phase 2 deterministic scheduler and model security on real hardware.
-- **Phase 3 Planning**: Begin implementation of Phase 3 features per AI-ML-KERNEL-IMPLEMENTATION-PLAN.md.
 - Separate real process/thread context switch measurement from syscall proxy.
 - Improve device support (complete VirtIO console path, add more drivers).
 - Make kernel-side JSON metrics export optional for UEFI-only runs.
