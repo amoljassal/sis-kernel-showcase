@@ -36,6 +36,13 @@ pub struct GraphDemo {
     op_b_idx: usize,
     ch_ab_idx: usize,
     ch_bc_idx: usize,
+    // Neural scheduling state
+    op_a_recent_latency_us: u32,
+    op_b_recent_latency_us: u32,
+    op_a_priority: u8,
+    op_b_priority: u8,
+    neural_adjustments: usize,
+    neural_predictions: usize,
 }
 
 impl GraphDemo {
@@ -45,7 +52,21 @@ impl GraphDemo {
         let ch_bc_idx = graph.add_channel(ChannelSpec { capacity: 64 });
         let op_a_idx = graph.add_operator(OperatorSpec { id: 1, func: op_a_run, in_ch: None, out_ch: Some(ch_ab_idx), priority: 10, stage: None, in_schema: None, out_schema: Some(1) });
         let op_b_idx = graph.add_operator(OperatorSpec { id: 2, func: op_b_run, in_ch: Some(ch_ab_idx), out_ch: Some(ch_bc_idx), priority: 5, stage: None, in_schema: Some(1), out_schema: None });
-        Self { n_items, arena: BumpArena::new(), graph, op_a_idx, op_b_idx, ch_ab_idx, ch_bc_idx }
+        Self {
+            n_items,
+            arena: BumpArena::new(),
+            graph,
+            op_a_idx,
+            op_b_idx,
+            ch_ab_idx,
+            ch_bc_idx,
+            op_a_recent_latency_us: 100, // Initial estimate: 100us
+            op_b_recent_latency_us: 100,
+            op_a_priority: 10, // Match initial priority from OperatorSpec
+            op_b_priority: 5,
+            neural_adjustments: 0,
+            neural_predictions: 0,
+        }
     }
 
     /// Run a trivial A->B pipeline to demonstrate scheduling and metrics.
@@ -89,6 +110,29 @@ impl GraphDemo {
 
         let t0 = now_cycles();
         for i in 0..self.n_items {
+            // Neural-driven scheduling for Operator A
+            let depth_a = self.graph.channel(self.ch_ab_idx).depth();
+            let (conf_a, will_meet_a) = crate::neural::predict_operator_health(
+                1, // op_id for operator A
+                self.op_a_recent_latency_us,
+                depth_a,
+                self.op_a_priority
+            );
+            self.neural_predictions += 1;
+
+            // Autonomous decision: boost priority if prediction shows unhealthy with high confidence
+            if !will_meet_a && conf_a > 700 {
+                let old_prio = self.op_a_priority;
+                self.op_a_priority = self.op_a_priority.saturating_add(20);
+                self.neural_adjustments += 1;
+                if i < 5 { // Log first few adjustments for visibility
+                    metric_kv("neural_boost_op", 1);
+                    metric_kv("neural_boost_old_prio", old_prio as usize);
+                    metric_kv("neural_boost_new_prio", self.op_a_priority as usize);
+                    metric_kv("neural_boost_confidence", conf_a as usize);
+                }
+            }
+
             // Producer work (no channel dependency)
             let ta0 = now_cycles();
             #[cfg(feature = "perf-verbose")]
@@ -136,6 +180,13 @@ impl GraphDemo {
             }
             op_a_runs += 1;
 
+            // Record neural outcome for operator A
+            let latency_a_us = (cycles_to_ns(cyc_a) / 1000) as u32;
+            self.op_a_recent_latency_us = (self.op_a_recent_latency_us * 7 + latency_a_us) / 8; // EMA
+            // For demo, assume deadline is 200us; missed if latency exceeds it
+            let missed_deadline_a = latency_a_us > 200;
+            crate::neural::record_operator_outcome(1, latency_a_us, missed_deadline_a);
+
             // Consumer work; track channel AB depth for backpressure visibility
             let d = self.graph.channel(self.ch_ab_idx).depth();
             if d > ch_ab_depth_max { ch_ab_depth_max = d; }
@@ -152,6 +203,30 @@ impl GraphDemo {
                     }
                 }
             }
+
+            // Neural-driven scheduling for Operator B
+            let depth_b = self.graph.channel(self.ch_bc_idx).depth();
+            let (conf_b, will_meet_b) = crate::neural::predict_operator_health(
+                2, // op_id for operator B
+                self.op_b_recent_latency_us,
+                depth_b,
+                self.op_b_priority
+            );
+            self.neural_predictions += 1;
+
+            // Autonomous decision: boost priority if prediction shows unhealthy with high confidence
+            if !will_meet_b && conf_b > 700 {
+                let old_prio = self.op_b_priority;
+                self.op_b_priority = self.op_b_priority.saturating_add(20);
+                self.neural_adjustments += 1;
+                if i < 5 { // Log first few adjustments for visibility
+                    metric_kv("neural_boost_op", 2);
+                    metric_kv("neural_boost_old_prio", old_prio as usize);
+                    metric_kv("neural_boost_new_prio", self.op_b_priority as usize);
+                    metric_kv("neural_boost_confidence", conf_b as usize);
+                }
+            }
+
             let tb0 = now_cycles();
             #[cfg(feature = "perf-verbose")]
             let s0b = unsafe { pmu::read_snapshot() };
@@ -171,10 +246,26 @@ impl GraphDemo {
                 op_b_l1d = op_b_l1d.saturating_add(s1b.l1d_refill.saturating_sub(s0b.l1d_refill));
             }
             op_b_runs += 1;
+
+            // Record neural outcome for operator B
+            let latency_b_us = (cycles_to_ns(cyc_b) / 1000) as u32;
+            self.op_b_recent_latency_us = (self.op_b_recent_latency_us * 7 + latency_b_us) / 8; // EMA
+            let missed_deadline_b = latency_b_us > 200;
+            crate::neural::record_operator_outcome(2, latency_b_us, missed_deadline_b);
+
             if (i & 7) == 7 {
                 crate::trace::trace("GRAPH DEMO: progressed 8 items");
             }
         }
+
+        // Periodic auto-retraining from accumulated operator outcomes
+        if self.neural_predictions > 0 {
+            let retrain_count = crate::neural::retrain_from_feedback(10);
+            if retrain_count > 0 {
+                metric_kv("neural_auto_retrain_steps", retrain_count);
+            }
+        }
+
         let t1 = now_cycles();
         let ns = cycles_to_ns(t1.saturating_sub(t0));
         metric_kv("graph_demo_total_ns", ns as usize);
@@ -220,6 +311,14 @@ impl GraphDemo {
         }
         // Arena remaining bytes (sanity check for bump behavior)
         metric_kv("arena_remaining_bytes", self.arena.remaining());
+
+        // Neural scheduling metrics
+        metric_kv("neural_predictions_total", self.neural_predictions);
+        metric_kv("neural_priority_adjustments", self.neural_adjustments);
+        if self.neural_predictions > 0 {
+            let adjustment_rate = (self.neural_adjustments * 1000) / self.neural_predictions;
+            metric_kv("neural_adjustment_rate_per_1000", adjustment_rate);
+        }
     }
 }
 

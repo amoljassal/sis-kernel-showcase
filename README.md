@@ -114,12 +114,31 @@ Commands:
 
 Features extracted: recent latency (0-10ms normalized), channel backpressure (0-64 depth), operator priority (0-255). Network predicts: HEALTHY (will meet deadline) vs UNHEALTHY (may miss deadline) with confidence score.
 
+**Autonomous Neural-Driven Scheduling (Closed Loop):**
+
+The graph execution loop integrates neural predictions to make **real scheduling decisions autonomously**:
+
+1. **Pre-execution prediction**: Before each operator run, the kernel predicts deadline compliance based on recent latency (EMA), channel depth, and current priority.
+
+2. **Autonomous priority adjustment**: If the prediction shows UNHEALTHY with high confidence (>700/1000), the kernel automatically boosts operator priority by 20 points to prevent deadline misses.
+
+3. **Post-execution learning**: After execution, actual latency is recorded, deadline status is computed (200us threshold for demo), and the outcome is fed to the neural network for learning.
+
+4. **Auto-retraining**: After graph execution completes, the kernel automatically retrains from accumulated operator outcomes, closing the learning loop without user intervention.
+
+This demonstrates a true "neural-first" kernel where ML predictions drive real kernel scheduling decisions, not just provide observability. The neural network is an integral part of the scheduler, not a separate advisory system.
+
 **Metrics emitted:**
 - Prediction confidence scores (0-1000 milli-units)
 - Command outcomes (1=success, 3=error)
 - Operator deadline status (1=met, 2=missed)
 - Feedback labels (1=helpful, 2=not_helpful, 3=expected)
 - Training iterations applied
+- `neural_predictions_total` — Total predictions made during graph execution
+- `neural_priority_adjustments` — Number of autonomous priority boosts
+- `neural_adjustment_rate_per_1000` — Adjustment rate per 1000 predictions
+- `neural_auto_retrain_steps` — Auto-retraining iterations applied
+- `neural_boost_op`, `neural_boost_confidence` — Individual boost events (first 5 logged)
 
 This is a proof-of-concept for kernel-level online learning. The audit ring stores the last 8 predictions (limited by static allocation constraints). All computation is fixed-point arithmetic in no_std environment with bounded execution time. The network learns from both command execution and operator performance, retraining with `neuralctl retrain 10` applies feedback from both subsystems.
 
