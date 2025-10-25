@@ -255,7 +255,7 @@ impl Shell {
             crate::uart_print(b"  neuralctl learn on|off [limit N] | tick | dump | load <in> <hid> <out> | <weights...>\n");
             crate::uart_print(b"  metricsctl - Runtime metric capture: on | off | status\n");
             crate::uart_print(b"  metrics  - Show recent metrics: metrics [ctx|mem|real]\n");
-            crate::uart_print(b"  graphctl - Control graph: create | add-channel <cap> | add-operator <op_id> [--in N|none] [--out N|none] [--prio P] [--stage acquire|clean|explore|model|explain] [--in-schema S] [--out-schema S] | start <steps> | det <wcet_ns> <period_ns> <deadline_ns> | stats | show | export-json\n");
+            crate::uart_print(b"  graphctl - Control graph: create | add-channel <cap> | add-operator <op_id> [--in N|none] [--out N|none] [--prio P] [--stage acquire|clean|explore|model|explain] [--in-schema S] [--out-schema S] | start <steps> | det <wcet_ns> <period_ns> <deadline_ns> | stats | show | export-json | predict <op_id> <latency_us> <depth> [prio] | feedback <op_id> <helpful|not_helpful|expected>\n");
             crate::uart_print(b"  ctlhex   - Inject control frame as hex (Create/Add/Start)\n");
             #[cfg(feature = "virtio-console")]
             crate::uart_print(b"  vconwrite- Send text to host via virtio-console: vconwrite <text>\n");
@@ -1521,7 +1521,79 @@ impl Shell {
                     Err(_) => unsafe { crate::uart_print(b"[GRAPH] no active graph\n"); },
                 }
             }
-            _ => unsafe { crate::uart_print(b"Usage: graphctl <create|add-channel|add-operator|start|det|stats|show|export-json> ...\n"); }
+            "predict" => {
+                if args.len() < 4 {
+                    unsafe { crate::uart_print(b"Usage: graphctl predict <op_id> <recent_latency_us> <channel_depth> <priority>\n"); }
+                    return;
+                }
+                let op_id = match args[1].parse::<u32>() {
+                    Ok(v) => v,
+                    Err(_) => { unsafe { crate::uart_print(b"[GRAPH] invalid op_id\n"); } return; }
+                };
+                let latency_us = match args[2].parse::<u32>() {
+                    Ok(v) => v,
+                    Err(_) => { unsafe { crate::uart_print(b"[GRAPH] invalid latency\n"); } return; }
+                };
+                let depth = match args[3].parse::<usize>() {
+                    Ok(v) => v,
+                    Err(_) => { unsafe { crate::uart_print(b"[GRAPH] invalid depth\n"); } return; }
+                };
+                let priority = if args.len() > 4 {
+                    match args[4].parse::<u8>() {
+                        Ok(v) => v,
+                        Err(_) => 10u8
+                    }
+                } else {
+                    10u8
+                };
+
+                let (confidence, will_meet_deadline) = crate::neural::predict_operator_health(op_id, latency_us, depth, priority);
+                unsafe {
+                    crate::uart_print(b"[GRAPH] Operator ");
+                }
+                self.print_number_simple(op_id as u64);
+                unsafe {
+                    crate::uart_print(b" prediction: ");
+                    if will_meet_deadline {
+                        crate::uart_print(b"HEALTHY (will meet deadline)");
+                    } else {
+                        crate::uart_print(b"UNHEALTHY (may miss deadline)");
+                    }
+                    crate::uart_print(b"\n[GRAPH] Confidence: ");
+                }
+                self.print_number_simple(confidence as u64);
+                unsafe { crate::uart_print(b"/1000\n"); }
+            }
+            "feedback" => {
+                if args.len() < 3 {
+                    unsafe { crate::uart_print(b"Usage: graphctl feedback <op_id> <helpful|not_helpful|expected>\n"); }
+                    return;
+                }
+                let op_id = match args[1].parse::<u32>() {
+                    Ok(v) => v,
+                    Err(_) => { unsafe { crate::uart_print(b"[GRAPH] invalid op_id\n"); } return; }
+                };
+                let feedback_code = match args[2] {
+                    "helpful" => 1u8,
+                    "not_helpful" | "not-helpful" => 2u8,
+                    "expected" => 3u8,
+                    _ => {
+                        unsafe { crate::uart_print(b"[GRAPH] Invalid feedback. Use: helpful, not_helpful, or expected\n"); }
+                        return;
+                    }
+                };
+                crate::neural::record_operator_feedback(op_id, feedback_code);
+                unsafe {
+                    crate::uart_print(b"[GRAPH] Feedback recorded for operator ");
+                }
+                self.print_number_simple(op_id as u64);
+                unsafe {
+                    crate::uart_print(b": ");
+                    crate::uart_print(args[2].as_bytes());
+                    crate::uart_print(b"\n[GRAPH] Use 'neuralctl retrain 10' to apply feedback to network\n");
+                }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: graphctl <create|add-channel|add-operator|start|det|stats|show|export-json|predict|feedback> ...\n"); }
         }
     }
 
