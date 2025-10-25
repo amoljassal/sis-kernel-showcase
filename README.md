@@ -181,6 +181,75 @@ This enables:
 
 This is a proof-of-concept for kernel-level online learning. The audit ring stores the last 32 scheduling events for production observability. All computation is fixed-point arithmetic in no_std environment with bounded execution time. The network learns from both command execution and operator performance, retraining with `neuralctl retrain 10` applies feedback from both subsystems.
 
+## Memory Subsystem Neural Agent
+
+**Multi-subsystem neural architecture with autonomous OOM prevention and fragmentation detection.**
+
+Expanding on the neural-first kernel architecture, the memory subsystem features a dedicated neural network (separate from command and scheduling agents) that predicts memory health and compaction needs in real-time.
+
+**Architecture:**
+- Dedicated MEMORY_AGENT: 4 inputs → 8 hidden neurons → 2 outputs
+- Inputs: free memory %, allocation rate (/sec), fragmentation level %, recent failures
+- Outputs: memory health score (negative = unhealthy), compaction need (positive = needed)
+- Q8.8 fixed-point MLP with identity initialization
+
+**How it works:**
+
+1. **Telemetry collection**: Real-time tracking of heap statistics from linked_list_allocator
+   - Free memory percentage (0-100%)
+   - Allocation rate (allocations per second, windowed)
+   - Fragmentation heuristic (peak vs current utilization + churn)
+   - Recent allocation failures (count)
+
+2. **Health prediction**: Neural network predicts OOM risk and compaction need with confidence scoring
+   - OOM risk: Negative health score < -300 (on scale of -1000 to 1000)
+   - Compaction needed: Positive compaction score > 300
+   - Confidence: Average of absolute output values (0-1000)
+
+3. **Autonomous warnings**: High-confidence predictions trigger automatic alerts
+   - `[MEMORY AGENT] AUTONOMOUS WARNING: OOM RISK DETECTED`
+   - `[MEMORY AGENT] AUTONOMOUS WARNING: COMPACTION RECOMMENDED`
+   - Minimum confidence threshold: 300/1000 (30%)
+
+**Commands:**
+
+```bash
+memctl status     # Show telemetry + prediction (free %, rate, fragmentation, failures)
+memctl predict    # Run prediction and display results
+memctl stress 100 # Allocation stress test with live monitoring every 20 iterations
+```
+
+**Demo workflow:**
+
+```bash
+# View current memory state
+memctl status
+
+# Run stress test to trigger warnings
+memctl stress 100
+# Autonomous warnings emitted as fragmentation increases:
+# [MEMORY AGENT] AUTONOMOUS WARNING: COMPACTION RECOMMENDED (conf=984/1000)
+#   Fragmentation: 32%
+```
+
+**Metrics emitted:**
+- `memory_agent_init=1` — Memory agent initialized at boot
+- `mem_health_milli` — Memory health prediction (-1000 to 1000)
+- `mem_compact_milli` — Compaction need prediction (-1000 to 1000)
+- `memory_oom_warning` — OOM warning confidence (0-1000)
+- `memory_compact_warning` — Compaction warning confidence (0-1000)
+- `nn_infer_us` — Inference latency (16-20 microseconds per prediction)
+- `nn_infer_count` — Total inferences across all neural agents
+
+**Multi-subsystem demonstration:**
+This implementation proves the kernel's multi-subsystem neural architecture, where independent neural networks operate concurrently for different kernel subsystems (commands, scheduling, memory). Each agent:
+- Has its own network dimensions tuned to subsystem requirements
+- Operates on subsystem-specific telemetry
+- Makes autonomous decisions without cross-agent coordination
+- Maintains separate audit trails and metrics
+
+Future expansion: Network scheduling agent, filesystem prediction agent, security anomaly detection agent.
+
 ## Security & Audit
 
 - Audit ring (printed by `llmjson`):

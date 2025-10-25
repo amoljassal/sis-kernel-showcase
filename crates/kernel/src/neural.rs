@@ -38,8 +38,8 @@ pub struct NeuralAgent {
     pub last_in_len: usize,
     pub last_out: [i16; MAX_OUT],
     pub last_out_len: usize,
-    infer_count: usize,
-    teach_count: usize,
+    pub infer_count: usize,
+    pub teach_count: usize,
 }
 
 impl NeuralAgent {
@@ -1063,5 +1063,218 @@ pub fn print_scheduling_audit() {
 
     if count == 0 {
         unsafe { crate::uart_print(b"  (no events yet)\n"); }
+    }
+}
+
+// --- Memory Subsystem Neural Agent ---
+
+/// Memory neural agent: separate network for memory management predictions
+static MEMORY_AGENT: Mutex<NeuralAgent> = Mutex::new(NeuralAgent::new());
+
+/// Memory telemetry for neural predictions
+struct MemoryTelemetry {
+    free_memory_percent: u32,      // 0-100
+    allocation_rate: u32,           // Allocs per second (windowed)
+    fragmentation_level: u32,       // 0-100 (estimated)
+    recent_failures: u32,           // Failed allocations in last window
+    last_update_ns: u64,            // Timestamp of last telemetry update
+    prev_alloc_count: usize,        // Previous allocation count for rate calculation
+}
+
+impl MemoryTelemetry {
+    const fn new() -> Self {
+        Self {
+            free_memory_percent: 100,
+            allocation_rate: 0,
+            fragmentation_level: 0,
+            recent_failures: 0,
+            last_update_ns: 0,
+            prev_alloc_count: 0,
+        }
+    }
+}
+
+static MEMORY_TELEMETRY: Mutex<MemoryTelemetry> = Mutex::new(MemoryTelemetry::new());
+
+/// Initialize memory neural agent with proper dimensions
+pub fn init_memory_agent() {
+    let mut agent = MEMORY_AGENT.lock();
+    // 4 inputs, 8 hidden, 2 outputs
+    agent.set_dims(4, 8, 2);
+    agent.infer_count = 1;  // Prevent lazy init from resetting dims on first inference
+    metric_kv("memory_agent_init", 1);
+}
+
+/// Update memory telemetry from heap stats
+pub fn update_memory_telemetry() {
+    let stats = crate::heap::get_heap_stats();
+    let mut telem = MEMORY_TELEMETRY.lock();
+
+    // Calculate free memory percentage
+    let heap_size: usize = 100 * 1024; // 100 KiB (from heap.rs HEAP_SIZE)
+    let used = stats.current_allocated();
+    let free = heap_size.saturating_sub(used);
+    telem.free_memory_percent = ((free * 100) / heap_size).min(100) as u32;
+
+    // Calculate allocation rate (allocations per second)
+    let now_ns = crate::graph::cycles_to_ns(crate::graph::now_cycles());
+    if telem.last_update_ns > 0 {
+        let delta_ns = now_ns.saturating_sub(telem.last_update_ns);
+        if delta_ns > 0 {
+            let delta_allocs = stats.total_allocations().saturating_sub(telem.prev_alloc_count);
+            // Convert to per-second rate
+            let rate = (delta_allocs as u64 * 1_000_000_000) / delta_ns;
+            telem.allocation_rate = rate.min(1000) as u32; // Cap at 1000 allocs/sec
+        }
+    }
+
+    // Estimate fragmentation (simple heuristic: peak vs current usage)
+    if stats.peak_allocated() > 0 {
+        let utilization = (stats.current_allocated() * 100) / stats.peak_allocated();
+        // Lower utilization with many allocs/deallocs = higher fragmentation
+        let churn = stats.total_deallocations().saturating_sub(stats.total_allocations() / 2);
+        let frag_estimate = if churn > 10 {
+            100u32.saturating_sub(utilization as u32)
+        } else {
+            0
+        };
+        telem.fragmentation_level = frag_estimate.min(100);
+    }
+
+    // Track recent allocation failures
+    telem.recent_failures = stats.allocation_failures().min(10) as u32;
+
+    // Update tracking state
+    telem.last_update_ns = now_ns;
+    telem.prev_alloc_count = stats.total_allocations();
+}
+
+/// Predict memory health and compaction need
+/// Returns: (confidence, oom_risk, compact_needed)
+pub fn predict_memory_health() -> (u16, bool, bool) {
+    // Update telemetry before prediction
+    update_memory_telemetry();
+
+    let telem = MEMORY_TELEMETRY.lock();
+
+    // Convert telemetry to Q8.8 inputs for neural network
+    // Milli-units (0-1000) -> Q8.8 (0-256 for 100%)
+    let inputs_q88 = [
+        ((telem.free_memory_percent * 256 / 100).min(256)) as i16,      // Free memory %
+        ((telem.allocation_rate * 256 / 1000).min(256)) as i16,         // Allocation rate (max 1000/sec)
+        ((telem.fragmentation_level * 256 / 100).min(256)) as i16,      // Fragmentation %
+        ((telem.recent_failures * 256 / 10).min(256)) as i16,           // Recent failures (max 10)
+    ];
+
+    drop(telem);
+
+    // Run inference on MEMORY_AGENT
+    let mut agent = MEMORY_AGENT.lock();
+    let out_len = agent.infer(&inputs_q88);
+
+    if out_len < 2 {
+        drop(agent);
+        return (0, false, false); // Not enough outputs
+    }
+
+    let out0 = agent.last_out[0]; // Memory health (Q8.8)
+    let out1 = agent.last_out[1]; // Compaction need (Q8.8)
+    drop(agent);
+
+    // Convert Q8.8 to milli-units (0-1000)
+    let health_milli = ((out0 as i32) * 1000 / 256).clamp(-1000, 1000);
+    let compact_milli = ((out1 as i32) * 1000 / 256).clamp(-1000, 1000);
+
+    // Compute confidence (average absolute value of outputs)
+    let confidence = ((health_milli.abs() + compact_milli.abs()) / 2).min(1000) as u16;
+
+    // Threshold for decisions
+    let oom_risk = health_milli < -300;  // Negative output = unhealthy
+    let compact_needed = compact_milli > 300;  // Positive output = compact needed
+
+    (confidence, oom_risk, compact_needed)
+}
+
+/// Print memory agent status
+pub fn print_memory_agent_status() {
+    let telem = MEMORY_TELEMETRY.lock();
+    unsafe { crate::uart_print(b"[MEM AGENT] Telemetry:\n"); }
+    unsafe { crate::uart_print(b"  Free Memory: "); }
+    crate::shell::print_number_simple(telem.free_memory_percent as u64);
+    unsafe { crate::uart_print(b"%\n"); }
+    unsafe { crate::uart_print(b"  Allocation Rate: "); }
+    crate::shell::print_number_simple(telem.allocation_rate as u64);
+    unsafe { crate::uart_print(b" /sec\n"); }
+    unsafe { crate::uart_print(b"  Fragmentation: "); }
+    crate::shell::print_number_simple(telem.fragmentation_level as u64);
+    unsafe { crate::uart_print(b"%\n"); }
+    unsafe { crate::uart_print(b"  Recent Failures: "); }
+    crate::shell::print_number_simple(telem.recent_failures as u64);
+    unsafe { crate::uart_print(b"\n"); }
+
+    drop(telem);
+
+    // Run prediction and show results
+    let (conf, oom_risk, compact_needed) = predict_memory_health();
+
+    unsafe { crate::uart_print(b"[MEM AGENT] Prediction:\n"); }
+    unsafe { crate::uart_print(b"  Confidence: "); }
+    crate::shell::print_number_simple(conf as u64);
+    unsafe { crate::uart_print(b"/1000\n"); }
+    unsafe { crate::uart_print(b"  OOM Risk: "); }
+    if oom_risk {
+        unsafe { crate::uart_print(b"YES\n"); }
+    } else {
+        unsafe { crate::uart_print(b"NO\n"); }
+    }
+    unsafe { crate::uart_print(b"  Compaction Needed: "); }
+    if compact_needed {
+        unsafe { crate::uart_print(b"YES\n"); }
+    } else {
+        unsafe { crate::uart_print(b"NO\n"); }
+    }
+}
+
+/// Check memory health and emit autonomous warnings if issues detected
+/// Call this periodically or after significant allocations
+pub fn check_autonomous_memory_warnings() {
+    let (conf, oom_risk, compact_needed) = predict_memory_health();
+
+    // Only emit warnings if confidence is sufficient (>= 300/1000 = 30%)
+    const MIN_CONFIDENCE: u16 = 300;
+
+    if conf >= MIN_CONFIDENCE {
+        if oom_risk {
+            unsafe { crate::uart_print(b"\n[MEMORY AGENT] AUTONOMOUS WARNING: OOM RISK DETECTED (conf="); }
+            crate::shell::print_number_simple(conf as u64);
+            unsafe { crate::uart_print(b"/1000)\n"); }
+
+            // Print current telemetry for debugging
+            let telem = MEMORY_TELEMETRY.lock();
+            unsafe { crate::uart_print(b"  Free Memory: "); }
+            crate::shell::print_number_simple(telem.free_memory_percent as u64);
+            unsafe { crate::uart_print(b"%\n"); }
+            unsafe { crate::uart_print(b"  Alloc Rate: "); }
+            crate::shell::print_number_simple(telem.allocation_rate as u64);
+            unsafe { crate::uart_print(b"/sec\n"); }
+            unsafe { crate::uart_print(b"  Recent Failures: "); }
+            crate::shell::print_number_simple(telem.recent_failures as u64);
+            unsafe { crate::uart_print(b"\n"); }
+
+            metric_kv("memory_oom_warning", conf as usize);
+        }
+
+        if compact_needed {
+            unsafe { crate::uart_print(b"\n[MEMORY AGENT] AUTONOMOUS WARNING: COMPACTION RECOMMENDED (conf="); }
+            crate::shell::print_number_simple(conf as u64);
+            unsafe { crate::uart_print(b"/1000)\n"); }
+
+            let telem = MEMORY_TELEMETRY.lock();
+            unsafe { crate::uart_print(b"  Fragmentation: "); }
+            crate::shell::print_number_simple(telem.fragmentation_level as u64);
+            unsafe { crate::uart_print(b"%\n"); }
+
+            metric_kv("memory_compact_warning", conf as usize);
+        }
     }
 }

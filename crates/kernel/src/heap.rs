@@ -34,6 +34,14 @@ pub struct HeapStats {
     allocation_failures: usize,
 }
 
+impl HeapStats {
+    pub fn total_allocations(&self) -> usize { self.total_allocations }
+    pub fn total_deallocations(&self) -> usize { self.total_deallocations }
+    pub fn current_allocated(&self) -> usize { self.current_allocated }
+    pub fn peak_allocated(&self) -> usize { self.peak_allocated }
+    pub fn allocation_failures(&self) -> usize { self.allocation_failures }
+}
+
 static HEAP_STATS: Mutex<HeapStats> = Mutex::new(HeapStats {
     total_allocations: 0,
     total_deallocations: 0,
@@ -228,12 +236,13 @@ pub fn print_heap_stats() {
 
 /// Get current heap usage statistics
 pub fn get_heap_stats() -> HeapStats {
+    let stats = HEAP_STATS.lock();
     HeapStats {
-        total_allocations: HEAP_STATS.lock().total_allocations,
-        total_deallocations: HEAP_STATS.lock().total_deallocations,
-        current_allocated: HEAP_STATS.lock().current_allocated,
-        peak_allocated: HEAP_STATS.lock().peak_allocated,
-        allocation_failures: HEAP_STATS.lock().allocation_failures,
+        total_allocations: stats.total_allocations,
+        total_deallocations: stats.total_deallocations,
+        current_allocated: stats.current_allocated,
+        peak_allocated: stats.peak_allocated,
+        allocation_failures: stats.allocation_failures,
     }
 }
 

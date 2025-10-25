@@ -131,6 +131,7 @@ impl Shell {
                 "npudriver" => { self.cmd_npu_driver_demo(); true },
                 "rtaivalidation" => { self.cmd_realtime_ai_validation(); true },
                 "neuralctl" => { self.cmd_neuralctl(&parts[1..]); true },
+                "memctl" => { self.cmd_memctl(&parts[1..]); true },
                 "ask-ai" => { self.cmd_ask_ai(&parts[1..]); true },
                 "nnjson" => { self.cmd_nn_json(); true },
                 "nnact" => { self.cmd_nn_act(&parts[1..]); true },
@@ -249,6 +250,7 @@ impl Shell {
             crate::uart_print(b"  temporaliso - Run AI temporal isolation demonstration\n");
             crate::uart_print(b"  phase3validation - Run complete Phase 3 AI-native kernel validation\n");
             crate::uart_print(b"  neuralctl - Neural agent: status | feedback <helpful|not_helpful|expected> | retrain <N> | autonomous <on|off|status> | config --confidence N --boost N --max-boosts N | audit\n");
+            crate::uart_print(b"  memctl   - Memory neural agent: status | predict | stress [N]\n");
             crate::uart_print(b"  ask-ai   - Ask a simple question: ask-ai \"<text>\" (maps to features, runs agent)\n");
             crate::uart_print(b"  nnjson   - Print neural audit ring as JSON\n");
             crate::uart_print(b"  nnact    - Run action and log op=3: nnact <milli...>\n");
@@ -560,6 +562,84 @@ impl Shell {
                 crate::neural::print_scheduling_audit();
             }
             _ => unsafe { crate::uart_print(b"Usage: neuralctl <infer|status|reset|update|feedback|autonomous|config|audit> ...\n"); }
+        }
+    }
+
+    fn cmd_memctl(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress> ...\n"); }
+            return;
+        }
+        match args[0] {
+            "status" => {
+                // Show memory agent status with telemetry and predictions
+                crate::neural::print_memory_agent_status();
+            }
+            "predict" => {
+                // Run prediction and show results
+                let (conf, oom_risk, compact_needed) = crate::neural::predict_memory_health();
+                unsafe { crate::uart_print(b"[MEM] Prediction:\n"); }
+                unsafe { crate::uart_print(b"  Confidence: "); }
+                self.print_number_simple(conf as u64);
+                unsafe { crate::uart_print(b"/1000\n"); }
+                unsafe { crate::uart_print(b"  OOM Risk: "); }
+                if oom_risk {
+                    unsafe { crate::uart_print(b"YES (Low memory predicted)\n"); }
+                } else {
+                    unsafe { crate::uart_print(b"NO (Memory healthy)\n"); }
+                }
+                unsafe { crate::uart_print(b"  Compaction Needed: "); }
+                if compact_needed {
+                    unsafe { crate::uart_print(b"YES (Fragmentation detected)\n"); }
+                } else {
+                    unsafe { crate::uart_print(b"NO (Memory compact)\n"); }
+                }
+            }
+            "stress" => {
+                // Stress test memory with allocations
+                let iterations = if args.len() > 1 {
+                    args[1].parse::<usize>().unwrap_or(100)
+                } else {
+                    100
+                };
+
+                unsafe { crate::uart_print(b"[MEM] Running allocation stress test: "); }
+                self.print_number_simple(iterations as u64);
+                unsafe { crate::uart_print(b" iterations\n"); }
+
+                // Allocate and deallocate to stress the allocator
+                let mut allocations: heapless::Vec<alloc::vec::Vec<u8>, 16> = heapless::Vec::new();
+
+                for i in 0..iterations {
+                    // Allocate varying sizes
+                    let size = 128 + (i % 512);
+                    let mut v = alloc::vec::Vec::new();
+                    if v.try_reserve_exact(size).is_ok() {
+                        v.resize(size, (i % 256) as u8);
+                        let _ = allocations.push(v);
+                    }
+
+                    // Periodically deallocate to create fragmentation
+                    if i % 5 == 0 && !allocations.is_empty() {
+                        allocations.remove(0);
+                    }
+
+                    // Check memory health every 20 iterations
+                    if i % 20 == 0 {
+                        unsafe { crate::uart_print(b"[MEM] Iteration "); }
+                        self.print_number_simple(i as u64);
+                        unsafe { crate::uart_print(b"...\n"); }
+                        crate::neural::check_autonomous_memory_warnings();
+                    }
+                }
+
+                // Clean up
+                allocations.clear();
+
+                unsafe { crate::uart_print(b"[MEM] Stress test complete\n"); }
+                crate::heap::print_heap_stats();
+            }
+            _ => unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress> ...\n"); }
         }
     }
 
