@@ -1,0 +1,64 @@
+# Neural Learning Training Script
+# Copy-paste these commands into the kernel shell to train the network
+# Or use: cat scripts/neural_training.txt | grep -v '^#' | while read cmd; do echo "$cmd"; done
+
+# Phase 1: Execute valid commands and provide feedback
+help
+neuralctl feedback helpful
+echo test
+neuralctl feedback helpful
+info
+neuralctl feedback helpful
+neuralctl status
+neuralctl feedback helpful
+
+# Phase 2: Execute invalid commands and provide feedback
+invalidcmd
+neuralctl feedback helpful
+foobar
+neuralctl feedback helpful
+blahblah
+neuralctl feedback helpful
+notacommand
+neuralctl feedback helpful
+
+# Phase 3: First retraining session (8 examples accumulated)
+neuralctl retrain 10
+
+# Phase 4: More valid commands to reinforce learning
+graphctl list
+neuralctl feedback helpful
+metricsctl status
+neuralctl feedback helpful
+mem
+neuralctl feedback helpful
+
+# Phase 5: More invalid commands
+xyz123
+neuralctl feedback helpful
+random
+neuralctl feedback helpful
+garbage
+neuralctl feedback helpful
+
+# Phase 6: Second retraining session (6 more examples)
+neuralctl retrain 10
+
+# Phase 7: Test mixed commands - observe improved predictions
+help
+echo improved predictions
+invalidtest
+graphctl status
+randomcmd
+neuralctl status
+
+# Phase 8: Final retraining with all accumulated examples
+neuralctl retrain 10
+
+# Phase 9: Validation - these should now have high confidence predictions
+help
+info
+notvalid
+graphctl list
+badcommand
+neuralctl status

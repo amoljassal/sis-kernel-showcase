@@ -97,81 +97,99 @@ impl Shell {
                 return;
             }
 
-            match parts[0] {
-                "help" => self.cmd_help(),
-                "echo" => self.cmd_echo(&parts[1..]),
-                "info" => self.cmd_info(),
-                "test" => self.cmd_test(),
-                "perf" => self.cmd_perf(),
-                "bench" => self.cmd_bench(),
-                "stress" => self.cmd_stress(),
-                "overhead" => self.cmd_overhead(),
-                "graphdemo" => self.cmd_graph_demo(),
-                "imagedemo" => self.cmd_image_demo(),
-                "detdemo" => self.cmd_deterministic_demo(),
-                "aidemo" => self.cmd_ai_scheduler_demo(),
-                "cbsdemo" => self.cmd_cbs_budget_demo(),
-                "mldemo" => self.cmd_ml_demo(),
-                "infdemo" => self.cmd_inference_demo(),
-                "npudemo" => self.cmd_npu_demo(),
-                "npudriver" => self.cmd_npu_driver_demo(),
-                "rtaivalidation" => self.cmd_realtime_ai_validation(),
-                "neuralctl" => self.cmd_neuralctl(&parts[1..]),
-                "ask-ai" => self.cmd_ask_ai(&parts[1..]),
-                "nnjson" => self.cmd_nn_json(),
-                "nnact" => self.cmd_nn_act(&parts[1..]),
-                "metricsctl" => self.cmd_metricsctl(&parts[1..]),
-                "metrics" => self.cmd_metrics(&parts[1..]),
-                "temporaliso" => self.cmd_temporal_isolation_demo(),
-                "phase3validation" => self.cmd_phase3_validation(),
-                #[cfg(feature = "llm")]
-                "llmctl" => self.cmd_llmctl(&parts[1..]),
-                #[cfg(feature = "llm")]
-                "llminfer" => self.cmd_llminfer(&parts[1..]),
-                #[cfg(feature = "llm")]
-                "llmstats" => self.cmd_llmstats(),
-                #[cfg(feature = "llm")]
-                "llmstream" => self.cmd_llmstream(&parts[1..]),
-                #[cfg(feature = "llm")]
-                "llmgraph" => self.cmd_llmgraph(&parts[1..]),
-                #[cfg(feature = "llm")]
-                "llmjson" => self.cmd_llm_audit_json(),
-                #[cfg(feature = "llm")]
-                "llmsig" => self.cmd_llmsig(&parts[1..]),
-                #[cfg(feature = "llm")]
-                "llmpoll" => self.cmd_llmpoll(&parts[1..]),
-                #[cfg(feature = "llm")]
-                "llmcancel" => self.cmd_llmcancel(&parts[1..]),
-                #[cfg(feature = "llm")]
-                "llmsummary" => self.cmd_llm_summary(),
-                #[cfg(feature = "llm")]
-                "llmverify" => self.cmd_llm_verify(),
-                #[cfg(feature = "llm")]
-                "llmhash" => self.cmd_llm_hash(&parts[1..]),
-                #[cfg(feature = "llm")]
-                "llmkey" => self.cmd_llm_key(),
-                "ctlkey" => self.cmd_ctlkey(&parts[1..]),
-                "ctladmin" => self.cmd_ctladmin(&parts[1..]),
-                "ctlsubmit" => self.cmd_ctlsubmit(&parts[1..]),
-                "ctlembed" => self.cmd_ctlembed(&parts[1..]),
-                "det" => self.cmd_det(&parts[1..]),
-                "graphctl" => self.cmd_graphctl(&parts[1..]),
-                "ctlhex" => self.cmd_ctlhex(&parts[1..]),
-                #[cfg(feature = "virtio-console")]
-                "vconwrite" => self.cmd_vconwrite(&parts[1..]),
-                "pmu" => self.cmd_pmu_demo(),
-                "mem" => self.cmd_mem(),
-                "regs" => self.cmd_regs(),
-                "dtb" => self.cmd_dtb(),
-                "vector" => self.cmd_vector(),
-                "board" => self.cmd_board(),
-                "verify" => self.cmd_verify(),
-                "perf_test" => self.cmd_perf_test(),
-                "ai_bench" => self.cmd_ai_bench(),
-                "clear" => self.cmd_clear(),
-                "exit" => self.cmd_exit(),
-                _ => self.cmd_unknown(parts[0]),
+            // Phase 2: Predict command outcome before execution
+            let (confidence, predicted_success) = crate::neural::predict_command(parts[0]);
+            if confidence > 100 { // Only show prediction if confidence is meaningful
+                crate::uart_print(b"[AI] Predicting: ");
+                if predicted_success {
+                    crate::uart_print(b"likely success");
+                } else {
+                    crate::uart_print(b"likely fail");
+                }
+                crate::uart_print(b" (confidence: ");
+                self.print_number_simple(confidence as u64);
+                crate::uart_print(b"/1000)\n");
             }
+
+            let cmd_is_known = match parts[0] {
+                "help" => { self.cmd_help(); true },
+                "echo" => { self.cmd_echo(&parts[1..]); true },
+                "info" => { self.cmd_info(); true },
+                "test" => { self.cmd_test(); true },
+                "perf" => { self.cmd_perf(); true },
+                "bench" => { self.cmd_bench(); true },
+                "stress" => { self.cmd_stress(); true },
+                "overhead" => { self.cmd_overhead(); true },
+                "graphdemo" => { self.cmd_graph_demo(); true },
+                "imagedemo" => { self.cmd_image_demo(); true },
+                "detdemo" => { self.cmd_deterministic_demo(); true },
+                "aidemo" => { self.cmd_ai_scheduler_demo(); true },
+                "cbsdemo" => { self.cmd_cbs_budget_demo(); true },
+                "mldemo" => { self.cmd_ml_demo(); true },
+                "infdemo" => { self.cmd_inference_demo(); true },
+                "npudemo" => { self.cmd_npu_demo(); true },
+                "npudriver" => { self.cmd_npu_driver_demo(); true },
+                "rtaivalidation" => { self.cmd_realtime_ai_validation(); true },
+                "neuralctl" => { self.cmd_neuralctl(&parts[1..]); true },
+                "ask-ai" => { self.cmd_ask_ai(&parts[1..]); true },
+                "nnjson" => { self.cmd_nn_json(); true },
+                "nnact" => { self.cmd_nn_act(&parts[1..]); true },
+                "metricsctl" => { self.cmd_metricsctl(&parts[1..]); true },
+                "metrics" => { self.cmd_metrics(&parts[1..]); true },
+                "temporaliso" => { self.cmd_temporal_isolation_demo(); true },
+                "phase3validation" => { self.cmd_phase3_validation(); true },
+                #[cfg(feature = "llm")]
+                "llmctl" => { self.cmd_llmctl(&parts[1..]); true },
+                #[cfg(feature = "llm")]
+                "llminfer" => { self.cmd_llminfer(&parts[1..]); true },
+                #[cfg(feature = "llm")]
+                "llmstats" => { self.cmd_llmstats(); true },
+                #[cfg(feature = "llm")]
+                "llmstream" => { self.cmd_llmstream(&parts[1..]); true },
+                #[cfg(feature = "llm")]
+                "llmgraph" => { self.cmd_llmgraph(&parts[1..]); true },
+                #[cfg(feature = "llm")]
+                "llmjson" => { self.cmd_llm_audit_json(); true },
+                #[cfg(feature = "llm")]
+                "llmsig" => { self.cmd_llmsig(&parts[1..]); true },
+                #[cfg(feature = "llm")]
+                "llmpoll" => { self.cmd_llmpoll(&parts[1..]); true },
+                #[cfg(feature = "llm")]
+                "llmcancel" => { self.cmd_llmcancel(&parts[1..]); true },
+                #[cfg(feature = "llm")]
+                "llmsummary" => { self.cmd_llm_summary(); true },
+                #[cfg(feature = "llm")]
+                "llmverify" => { self.cmd_llm_verify(); true },
+                #[cfg(feature = "llm")]
+                "llmhash" => { self.cmd_llm_hash(&parts[1..]); true },
+                #[cfg(feature = "llm")]
+                "llmkey" => { self.cmd_llm_key(); true },
+                "ctlkey" => { self.cmd_ctlkey(&parts[1..]); true },
+                "ctladmin" => { self.cmd_ctladmin(&parts[1..]); true },
+                "ctlsubmit" => { self.cmd_ctlsubmit(&parts[1..]); true },
+                "ctlembed" => { self.cmd_ctlembed(&parts[1..]); true },
+                "det" => { self.cmd_det(&parts[1..]); true },
+                "graphctl" => { self.cmd_graphctl(&parts[1..]); true },
+                "ctlhex" => { self.cmd_ctlhex(&parts[1..]); true },
+                #[cfg(feature = "virtio-console")]
+                "vconwrite" => { self.cmd_vconwrite(&parts[1..]); true },
+                "pmu" => { self.cmd_pmu_demo(); true },
+                "mem" => { self.cmd_mem(); true },
+                "regs" => { self.cmd_regs(); true },
+                "dtb" => { self.cmd_dtb(); true },
+                "vector" => { self.cmd_vector(); true },
+                "board" => { self.cmd_board(); true },
+                "verify" => { self.cmd_verify(); true },
+                "perf_test" => { self.cmd_perf_test(); true },
+                "ai_bench" => { self.cmd_ai_bench(); true },
+                "clear" => { self.cmd_clear(); true },
+                "exit" => { self.cmd_exit(); true },
+                _ => { self.cmd_unknown(parts[0]); false },
+            };
+
+            // Phase 2: Record actual command outcome
+            let outcome = if cmd_is_known { 1 } else { 3 }; // 1=success, 3=error
+            crate::neural::record_command_outcome(parts[0], outcome);
         }
     }
 
@@ -399,12 +417,40 @@ impl Shell {
             "retrain" => {
                 if args.len() < 2 { unsafe { crate::uart_print(b"Usage: neuralctl retrain <count>\n"); } return; }
                 let n = match args[1].parse::<usize>() { Ok(v) => v, Err(_) => { unsafe { crate::uart_print(b"[NN] invalid count\n"); } return; } };
-                let applied = crate::neural::retrain(n);
-                unsafe { crate::uart_print(b"[NN] retrain applied="); }
+                // Phase 4: Use feedback-driven learning from command predictions
+                let applied = crate::neural::retrain_from_feedback(n);
+                unsafe { crate::uart_print(b"[NEURAL] Learning from feedback: "); }
                 self.print_number_simple(applied as u64);
-                unsafe { crate::uart_print(b"\n"); }
+                unsafe { crate::uart_print(b" examples applied\n"); }
+                if applied > 0 {
+                    unsafe { crate::uart_print(b"[NEURAL] Network updated! Predictions should improve.\n"); }
+                } else {
+                    unsafe { crate::uart_print(b"[NEURAL] No feedback found. Use commands and provide feedback first.\n"); }
+                }
             }
-            _ => unsafe { crate::uart_print(b"Usage: neuralctl <infer|status|reset|update> ...\n"); }
+            "feedback" => {
+                // Phase 3: Record user feedback for last command prediction
+                if args.len() < 2 {
+                    unsafe { crate::uart_print(b"Usage: neuralctl feedback <helpful|not_helpful|expected>\n"); }
+                    return;
+                }
+                let feedback_code = match args[1] {
+                    "helpful" => 1u8,
+                    "not_helpful" | "not-helpful" => 2u8,
+                    "expected" => 3u8,
+                    _ => {
+                        unsafe { crate::uart_print(b"Invalid feedback. Use: helpful, not_helpful, or expected\n"); }
+                        return;
+                    }
+                };
+                crate::neural::record_feedback(feedback_code);
+                unsafe {
+                    crate::uart_print(b"[NEURAL] Feedback recorded: ");
+                    crate::uart_print(args[1].as_bytes());
+                    crate::uart_print(b"\n[NEURAL] Use 'neuralctl retrain 10' to apply feedback to network\n");
+                }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: neuralctl <infer|status|reset|update|feedback> ...\n"); }
         }
     }
 

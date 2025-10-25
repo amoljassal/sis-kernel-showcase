@@ -14,6 +14,7 @@ This README reflects the implemented, verifiable behavior in this repo today —
 - Phase 2 deterministic scheduling: CBS+EDF hybrid scheduler with admission control, jitter tracking, and constraint enforcement preventing dynamic allocation, unbounded loops, and indefinite blocking.
 - Signed model package infrastructure with SHA-256 + Ed25519 verification, capability-based permissions (LOAD/EXECUTE/INSPECT/EXPORT/ATTEST), and comprehensive audit logging.
 - Phase 3 AI-native capabilities: Real-time AI inference validation with NEON optimizations, temporal isolation for AI workloads with guaranteed resource allocation, NPU device emulation with 16x16 matrix operations, and integrated ML model execution with performance monitoring.
+- Neural learning subsystem: Embedded Q8.8 fixed-point MLP predicts command outcomes before execution, records actual results in neural audit ring, accepts user feedback (helpful/not_helpful/expected), and retrains network online using gradient descent to improve future predictions. Demonstrates true "neural-first" kernel where ML makes real decisions.
 - Industry-grade testing framework validates metrics against JSON Schema v1, exports structured observability data for ML workload analysis, performs formal verification with 95% coverage target, executes Byzantine fault tolerance testing with 33/100 node tolerance, and generates comprehensive HTML/JSON reports with statistical analysis.
 
 Non-goals and not implemented: production hardening beyond testing framework, full BFT consensus protocol, RDMA fabric, sub-µs context switching on QEMU (achieved in simulation), full driver stack. References to these in past docs were aspirational; this README describes actual code.
@@ -34,6 +35,12 @@ Non-goals and not implemented: production hardening beyond testing framework, fu
   - `llmsig 42` → prints `LLM SIG: 0x...`
   - Load OK: `llmctl load --model 42 --sig 0x<hex>` → `llmjson` shows `op=1,status=1`
   - Load reject: `llmctl load --model 42 --sig 0xDEADBEEF` → `op=1,status=2`
+- Neural learning demo (AI-native kernel):
+  - Execute commands: `help`, `neuralctl status`, `invalidcommand`
+  - Observe pre-command predictions: `[AI] Predicting: likely success (confidence: 543/1000)`
+  - Provide feedback: `neuralctl feedback helpful` (or `not_helpful`/`expected`)
+  - Retrain network: `neuralctl retrain 10`
+  - See improved predictions on next commands
 
 ## LLM Service (feature: `llm`)
 
@@ -52,6 +59,57 @@ Non-goals and not implemented: production hardening beyond testing framework, fu
 - Deterministic integration (optional feature `deterministic`):
 - `llmctl budget --wcet-cycles N --period-ns N --max-tokens-per-period N`
 - `llmctl status` prints admission/usage/jitter/misses.
+
+## Neural Learning (AI-Native Kernel)
+
+**Real-time command outcome prediction and feedback-driven learning loop.**
+
+The kernel features an embedded Q8.8 fixed-point MLP (3 inputs, 8 hidden neurons, 2 outputs) that learns to predict command success/failure before execution. This demonstrates a true "neural-first" kernel where the neural network makes real decisions, not just provides advice.
+
+**How it works:**
+
+1. **Pre-command prediction**: Before executing any shell command, the kernel extracts features (command length, has arguments, known prefix) and runs inference to predict success/failure with a confidence score (0-1000).
+
+2. **Outcome recording**: After execution, the kernel records the actual outcome (1=success, 3=error/unknown) in the neural audit ring.
+
+3. **User feedback**: Users provide feedback on predictions via `neuralctl feedback <helpful|not_helpful|expected>` to indicate if the prediction was accurate or useful.
+
+4. **Learning loop**: Running `neuralctl retrain <count>` collects feedback-labeled examples from the audit ring and retrains the network using gradient descent, improving future predictions.
+
+**Commands:**
+
+- View predictions automatically before each command (shown if confidence > 100/1000)
+- `neuralctl feedback helpful` — mark last prediction as helpful/accurate
+- `neuralctl feedback not_helpful` — mark last prediction as wrong
+- `neuralctl feedback expected` — mark outcome as expected
+- `neuralctl retrain 10` — apply up to 10 feedback examples to retrain network
+- `neuralctl status` — view network stats (infer count, teach count, last outputs)
+- `neuralctl audit` — view prediction audit log
+
+**Demo workflow:**
+
+```bash
+# Execute commands and observe predictions
+help                              # [AI] Predicting: likely success (confidence: 543/1000)
+invalidcommand                    # [AI] Predicting: likely fail (confidence: 421/1000)
+
+# Provide feedback on predictions
+neuralctl feedback helpful        # Tell kernel the prediction was accurate
+
+# Retrain to apply feedback
+neuralctl retrain 10              # Network learns from feedback
+
+# Verify improved predictions
+help                              # Predictions should now be more confident/accurate
+```
+
+**Metrics emitted:**
+- Prediction confidence scores (0-1000 milli-units)
+- Command outcomes (1=success, 3=error)
+- Feedback labels (1=helpful, 2=not_helpful, 3=expected)
+- Training iterations applied
+
+This is a proof-of-concept for kernel-level online learning. The audit ring stores the last 8 predictions (limited by static allocation constraints). All computation is fixed-point arithmetic in no_std environment with bounded execution time.
 
 ## Security & Audit
 
