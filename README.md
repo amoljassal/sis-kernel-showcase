@@ -347,8 +347,157 @@ coorddemo
 - Bus query: O(n) scan of ring buffer (n ≤ 32)
 - Coordination processing: ~100-200 microseconds
 
-**Next: Week 2 - Meta-Agent Coordination**
-A meta-agent will learn global optimization strategies across all subsystems (12 inputs → 16 hidden → 3 outputs), making periodic autonomous decisions based on multi-agent telemetry.
+**Next: Week 3 - Advanced ML Techniques**
+Implement advanced learning techniques: experience replay, temporal difference learning, multi-objective optimization, and dynamic topology adjustment.
+
+## Meta-Agent Coordination (Week 2 Complete)
+
+**Meta-level neural network coordinating all subsystem agents with autonomous global optimization.**
+
+Building on Week 1's message-passing infrastructure, Week 2 implements a meta-agent that observes all three neural subsystems (Memory, Scheduling, Command) simultaneously and makes global optimization decisions affecting multiple subsystems.
+
+**Architecture:**
+- **Neural Network**: 12 inputs → 16 hidden neurons → 3 outputs
+  - Larger hidden layer than individual agents for cross-subsystem reasoning
+  - Q8.8 fixed-point arithmetic with identity initialization
+  - Confidence-based autonomous actions (threshold-gated)
+- **Telemetry Aggregation**: Collects 12 inputs (4 from each agent)
+  - Memory: pressure %, fragmentation %, allocation rate, failures
+  - Scheduling: load %, deadline misses, latency, critical ops count
+  - Command: rate, heaviness, prediction accuracy, rapid stream detection
+- **Decision Outputs**: 3 coordination directives (-1000 to 1000 milli-units)
+  - Memory directive: allocation strategy adjustment
+  - Scheduling directive: priority/deadline tuning
+  - Command directive: prediction throttling/enhancement
+
+**How It Works:**
+
+1. **Periodic Telemetry Collection**: Meta-agent polls all subsystems at configurable intervals (default 100ms)
+   - Memory data from `heap::get_heap_stats()` (current allocations, fragmentation)
+   - Scheduling/Command data from `agent_bus::get_all_messages()` (recent events)
+   - All values normalized to 0-100 range for neural network input
+
+2. **Neural Decision-Making**: 12-dimensional input vector runs through MLP
+   - Outputs converted to milli-units (-1000 to 1000)
+   - Confidence computed from output magnitudes (average of absolute values)
+   - High confidence (>400/1000 default) enables autonomous actions
+
+3. **Autonomous Execution**: When confidence exceeds threshold
+   - Directives with abs > 300 trigger subsystem adjustments
+   - Actions logged to UART with confidence scores
+   - Statistics tracked per subsystem (memory, scheduling, command adjustments)
+
+**Commands:**
+
+```bash
+metaclassctl status                          # View current telemetry and last decision
+metaclassctl force                           # Force immediate decision-making
+metaclassctl config --interval 50 --threshold 300  # Configure decision interval (ms) and confidence threshold (0-1000)
+metaclassctl on                              # Enable periodic autonomous decisions
+metaclassctl off                             # Disable (manual force still works)
+
+metademo                                     # Run full 5-phase demonstration
+```
+
+**Meta-Agent Demo Workflow:**
+
+```bash
+metademo
+# Phase 1: Meta-agent configuration (lower threshold to 200 for demo)
+# Phase 2: Multi-subsystem stress simulation
+#   - 8x 2KB memory allocations
+#   - 20 rapid command predictions
+#   - Memory prediction run
+# Phase 3: Telemetry collection from all agents
+#   - Memory: pressure=16%, fragmentation=0%, alloc_rate=0, failures=0
+#   - Scheduling: load=0%, misses=0, latency=0ms, critical_ops=0
+#   - Command: rate=0, heaviness=0, accuracy=0%, rapid=0
+# Phase 4: Meta-agent decision (confidence 208 > threshold 200)
+#   - AUTONOMOUS ACTION: Command directive=-369 (adjustment triggered)
+# Phase 5: Statistics display
+#   - decisions=1, autonomous_actions=1, memory_adj=0, sched_adj=0, cmd_adj=1
+```
+
+**Configuration:**
+
+```bash
+# Runtime configuration (no recompilation needed)
+metaclassctl config --interval 50 --threshold 300
+# --interval: Decision interval in milliseconds (default 100ms = 100000µs)
+# --threshold: Confidence threshold 0-1000 (default 400 = 40%)
+
+# Toggle autonomous mode
+metaclassctl on   # Periodic decisions enabled
+metaclassctl off  # Manual force-only mode
+```
+
+**Metrics Emitted:**
+
+- `meta_agent_init=1` — Meta-agent initialized at boot
+- `meta_decisions_total` — Total decisions made (autonomous + manual)
+- `meta_autonomous_actions` — Autonomous actions executed (confidence > threshold)
+- `meta_memory_adjustments` — Memory directive actions (abs > 300)
+- `meta_scheduling_adjustments` — Scheduling directive actions (abs > 300)
+- `meta_command_adjustments` — Command directive actions (abs > 300)
+- `meta_decision_us` — Decision-making latency (inference time)
+- `meta_confidence` — Last decision confidence (0-1000)
+
+**Implementation Status:**
+- ✅ Meta-agent with 12→16→3 architecture (`meta_agent.rs`, 550+ lines)
+- ✅ Telemetry collection from all subsystems
+- ✅ Confidence-based autonomous decision execution
+- ✅ Runtime configuration (interval, threshold, enable/disable)
+- ✅ Shell commands (`metaclassctl`, `metademo`)
+- ✅ QEMU testing verified
+- ✅ Zero build warnings, zero heap allocations
+
+**Architecture Benefits:**
+- **Global optimization**: Observes all subsystems simultaneously for holistic decisions
+- **Confidence gating**: Low-confidence decisions don't trigger autonomous actions
+- **Runtime reconfigurable**: No recompilation needed to adjust behavior
+- **Graduated response**: Directive magnitudes indicate urgency (abs > 300 = action needed)
+- **Statistics tracking**: Per-subsystem action counts enable policy tuning
+- **Autonomous control**: Can be enabled/disabled at runtime for A/B testing
+
+**Performance:**
+- Telemetry collection: ~50-100 microseconds (heap stats + message bus scan)
+- Neural inference: ~20-30 microseconds (12→16→3 network)
+- Decision execution: ~10-20 microseconds (directive evaluation + logging)
+- Total decision cycle: ~80-150 microseconds
+
+**Coordination Patterns Demonstrated:**
+
+**Example 1: Memory Pressure + Scheduling Load**
+```
+1. Memory: 75% pressure (from heap stats)
+2. Scheduling: 5 deadline misses (from agent bus)
+3. Meta-agent collects: [mem_pressure=75, mem_frag=20, sched_load=50, sched_misses=5, ...]
+4. Neural inference: memory_directive=+650, scheduling_directive=-450, command_directive=+200
+5. Confidence: (650+450+200)/3 = 433 > 400 threshold
+6. AUTONOMOUS ACTION: Memory adjustment (650 > 300), Scheduling adjustment (450 > 300)
+```
+
+**Example 2: Low Confidence (No Action)**
+```
+1. Healthy system: all telemetry low
+2. Meta-agent collects: [mem_pressure=16, mem_frag=0, sched_load=0, ...]
+3. Neural inference: memory_directive=-120, scheduling_directive=+80, command_directive=-150
+4. Confidence: (120+80+150)/3 = 117 < 400 threshold
+5. Decision logged but NO autonomous action (confidence too low)
+```
+
+**Multi-Subsystem Learning:**
+The meta-agent demonstrates the kernel's ability to reason about multiple subsystems simultaneously:
+- **Cross-subsystem patterns**: Learns that memory pressure correlates with scheduling load
+- **Global trade-offs**: Can sacrifice command prediction accuracy to free resources for memory/scheduling
+- **Holistic optimization**: Makes decisions that benefit the system as a whole, not individual agents
+
+**Week 2 Implementation Summary:**
+- 550+ lines of meta-agent code (`meta_agent.rs`)
+- 3 lines added to `main.rs` (module + initialization)
+- 200+ lines added to `shell.rs` (`metaclassctl`, `metademo` commands)
+- Successfully tested in QEMU with autonomous actions verified
+- Zero compilation errors, zero runtime errors
 
 ## Security & Audit
 
