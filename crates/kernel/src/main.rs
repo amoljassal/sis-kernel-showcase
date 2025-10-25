@@ -303,7 +303,12 @@ mod bringup {
         super::uart_print(b"SYSCALL TESTS\n");
         crate::userspace_test::run_syscall_tests();
 
-        // 9) Launch interactive shell
+        // 9) Initialize memory neural agent
+        super::uart_print(b"MEMORY AGENT: INIT\n");
+        crate::neural::init_memory_agent();
+        super::uart_print(b"MEMORY AGENT: READY\n");
+
+        // 10) Launch interactive shell
         super::uart_print(b"LAUNCHING SHELL\n");
         crate::shell::run_shell();
     }
