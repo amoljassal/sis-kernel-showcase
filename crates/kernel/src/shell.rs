@@ -248,7 +248,7 @@ impl Shell {
             crate::uart_print(b"  rtaivalidation - Run comprehensive real-time AI inference validation\n");
             crate::uart_print(b"  temporaliso - Run AI temporal isolation demonstration\n");
             crate::uart_print(b"  phase3validation - Run complete Phase 3 AI-native kernel validation\n");
-            crate::uart_print(b"  neuralctl - Neural agent: infer <milli...> | status | reset | update <milli...> | teach <in...>|<out...> | selftest\n");
+            crate::uart_print(b"  neuralctl - Neural agent: status | feedback <helpful|not_helpful|expected> | retrain <N> | autonomous <on|off|status> | config --confidence N --boost N --max-boosts N | audit\n");
             crate::uart_print(b"  ask-ai   - Ask a simple question: ask-ai \"<text>\" (maps to features, runs agent)\n");
             crate::uart_print(b"  nnjson   - Print neural audit ring as JSON\n");
             crate::uart_print(b"  nnact    - Run action and log op=3: nnact <milli...>\n");
@@ -450,7 +450,116 @@ impl Shell {
                     crate::uart_print(b"\n[NEURAL] Use 'neuralctl retrain 10' to apply feedback to network\n");
                 }
             }
-            _ => unsafe { crate::uart_print(b"Usage: neuralctl <infer|status|reset|update|feedback> ...\n"); }
+            "autonomous" => {
+                // Control autonomous scheduling on/off/status
+                if args.len() < 2 {
+                    unsafe { crate::uart_print(b"Usage: neuralctl autonomous <on|off|status>\n"); }
+                    return;
+                }
+                match args[1] {
+                    "on" => {
+                        crate::neural::set_autonomous_enabled(true);
+                        unsafe { crate::uart_print(b"[NEURAL] Autonomous scheduling: ENABLED\n"); }
+                    }
+                    "off" => {
+                        crate::neural::set_autonomous_enabled(false);
+                        unsafe { crate::uart_print(b"[NEURAL] Autonomous scheduling: DISABLED\n"); }
+                    }
+                    "status" => {
+                        let (enabled, threshold, boost, max_boosts) = crate::neural::get_scheduling_config();
+                        unsafe { crate::uart_print(b"[NEURAL] Autonomous Scheduling Status:\n"); }
+                        unsafe { crate::uart_print(b"  Mode: "); }
+                        if enabled {
+                            unsafe { crate::uart_print(b"ENABLED\n"); }
+                        } else {
+                            unsafe { crate::uart_print(b"DISABLED\n"); }
+                        }
+                        unsafe { crate::uart_print(b"  Confidence Threshold: "); }
+                        self.print_number_simple(threshold as u64);
+                        unsafe { crate::uart_print(b"/1000\n"); }
+                        unsafe { crate::uart_print(b"  Priority Boost: "); }
+                        self.print_number_simple(boost as u64);
+                        unsafe { crate::uart_print(b"\n"); }
+                        unsafe { crate::uart_print(b"  Max Boosts Per Window: "); }
+                        self.print_number_simple(max_boosts as u64);
+                        unsafe { crate::uart_print(b"\n"); }
+                    }
+                    _ => unsafe { crate::uart_print(b"Usage: neuralctl autonomous <on|off|status>\n"); }
+                }
+            }
+            "config" => {
+                // Set scheduling configuration: neuralctl config --confidence 700 --boost 20 --max-boosts 100
+                let mut confidence: Option<u16> = None;
+                let mut boost: Option<u8> = None;
+                let mut max_boosts: Option<usize> = None;
+
+                let mut i = 1;
+                while i < args.len() {
+                    match args[i] {
+                        "--confidence" => {
+                            if i + 1 < args.len() {
+                                confidence = args[i + 1].parse::<u16>().ok();
+                                i += 2;
+                            } else {
+                                unsafe { crate::uart_print(b"[NN] --confidence requires value\n"); }
+                                return;
+                            }
+                        }
+                        "--boost" => {
+                            if i + 1 < args.len() {
+                                boost = args[i + 1].parse::<u8>().ok();
+                                i += 2;
+                            } else {
+                                unsafe { crate::uart_print(b"[NN] --boost requires value\n"); }
+                                return;
+                            }
+                        }
+                        "--max-boosts" => {
+                            if i + 1 < args.len() {
+                                max_boosts = args[i + 1].parse::<usize>().ok();
+                                i += 2;
+                            } else {
+                                unsafe { crate::uart_print(b"[NN] --max-boosts requires value\n"); }
+                                return;
+                            }
+                        }
+                        _ => {
+                            unsafe { crate::uart_print(b"[NN] unknown option: "); }
+                            unsafe { crate::uart_print(args[i].as_bytes()); }
+                            unsafe { crate::uart_print(b"\n"); }
+                            return;
+                        }
+                    }
+                }
+
+                if confidence.is_none() && boost.is_none() && max_boosts.is_none() {
+                    unsafe { crate::uart_print(b"Usage: neuralctl config --confidence <0-1000> --boost <N> --max-boosts <N>\n"); }
+                    return;
+                }
+
+                // Get current config and update only specified values
+                let (_, curr_threshold, curr_boost, curr_max) = crate::neural::get_scheduling_config();
+                let new_threshold = confidence.unwrap_or(curr_threshold);
+                let new_boost = boost.unwrap_or(curr_boost);
+                let new_max = max_boosts.unwrap_or(curr_max);
+
+                crate::neural::set_scheduling_config(new_threshold, new_boost, new_max);
+                unsafe { crate::uart_print(b"[NEURAL] Configuration updated:\n"); }
+                unsafe { crate::uart_print(b"  Confidence Threshold: "); }
+                self.print_number_simple(new_threshold as u64);
+                unsafe { crate::uart_print(b"/1000\n"); }
+                unsafe { crate::uart_print(b"  Priority Boost: "); }
+                self.print_number_simple(new_boost as u64);
+                unsafe { crate::uart_print(b"\n"); }
+                unsafe { crate::uart_print(b"  Max Boosts Per Window: "); }
+                self.print_number_simple(new_max as u64);
+                unsafe { crate::uart_print(b"\n"); }
+            }
+            "audit" => {
+                // Print scheduling audit log
+                crate::neural::print_scheduling_audit();
+            }
+            _ => unsafe { crate::uart_print(b"Usage: neuralctl <infer|status|reset|update|feedback|autonomous|config|audit> ...\n"); }
         }
     }
 

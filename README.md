@@ -128,6 +128,44 @@ The graph execution loop integrates neural predictions to make **real scheduling
 
 This demonstrates a true "neural-first" kernel where ML predictions drive real kernel scheduling decisions, not just provide observability. The neural network is an integral part of the scheduler, not a separate advisory system.
 
+**Configuration and Control:**
+
+Autonomous scheduling can be dynamically controlled without recompilation:
+
+```bash
+# Toggle autonomous scheduling on/off
+neuralctl autonomous on              # Enable autonomous priority adjustments
+neuralctl autonomous off             # Disable (predictions still logged, no actions)
+neuralctl autonomous status          # Show current mode and configuration
+
+# Configure scheduling thresholds
+neuralctl config --confidence 500 --boost 10 --max-boosts 50
+
+# View scheduling audit log (last 32 events)
+neuralctl audit
+```
+
+**Configuration Parameters:**
+- `--confidence` (0-1000): Minimum confidence threshold to trigger autonomous boost (default: 700)
+- `--boost` (0-255): Priority boost amount when unhealthy predicted (default: 20)
+- `--max-boosts` (1-N): Maximum boosts per graph run for rate limiting (default: 100)
+
+**Audit Log:**
+
+The scheduling audit ring buffer stores the last 32 scheduling events with full observability:
+- Timestamp (microseconds)
+- Operator ID
+- Event type: PREDICT (prediction made), BOOST (priority adjusted), RETRAIN (network retrained)
+- Confidence score
+- Priority changes (old → new)
+- Latency and deadline status
+
+This enables:
+- **A/B testing**: Run with autonomous ON vs OFF to compare performance
+- **Production tuning**: Adjust confidence threshold for different workload sensitivity
+- **Post-mortem analysis**: Review audit log to understand why priorities were adjusted
+- **Safe rollout**: Disable autonomous mode while still collecting prediction data
+
 **Metrics emitted:**
 - Prediction confidence scores (0-1000 milli-units)
 - Command outcomes (1=success, 3=error)
@@ -139,8 +177,9 @@ This demonstrates a true "neural-first" kernel where ML predictions drive real k
 - `neural_adjustment_rate_per_1000` — Adjustment rate per 1000 predictions
 - `neural_auto_retrain_steps` — Auto-retraining iterations applied
 - `neural_boost_op`, `neural_boost_confidence` — Individual boost events (first 5 logged)
+- `neural_autonomous_mode` — Current autonomous scheduling state (0=off, 1=on)
 
-This is a proof-of-concept for kernel-level online learning. The audit ring stores the last 8 predictions (limited by static allocation constraints). All computation is fixed-point arithmetic in no_std environment with bounded execution time. The network learns from both command execution and operator performance, retraining with `neuralctl retrain 10` applies feedback from both subsystems.
+This is a proof-of-concept for kernel-level online learning. The audit ring stores the last 32 scheduling events for production observability. All computation is fixed-point arithmetic in no_std environment with bounded execution time. The network learns from both command execution and operator performance, retraining with `neuralctl retrain 10` applies feedback from both subsystems.
 
 ## Security & Audit
 
