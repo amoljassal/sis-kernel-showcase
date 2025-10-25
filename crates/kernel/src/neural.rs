@@ -527,6 +527,29 @@ fn extract_command_features(cmd: &str) -> [i16; MAX_IN] {
     features
 }
 
+/// Command telemetry for tracking command patterns
+struct CommandTelemetry {
+    last_command_ts_us: u64,
+    commands_last_second: u16,
+    last_second_start_us: u64,
+    total_predictions: u32,
+    accurate_predictions: u32,
+}
+
+impl CommandTelemetry {
+    const fn new() -> Self {
+        CommandTelemetry {
+            last_command_ts_us: 0,
+            commands_last_second: 0,
+            last_second_start_us: 0,
+            total_predictions: 0,
+            accurate_predictions: 0,
+        }
+    }
+}
+
+static COMMAND_TELEMETRY: Mutex<CommandTelemetry> = Mutex::new(CommandTelemetry::new());
+
 /// Predict command outcome before execution; returns (confidence_0_1000, predicted_success)
 pub fn predict_command(cmd: &str) -> (u16, bool) {
     let mut n = NEURAL.lock();
@@ -565,6 +588,70 @@ pub fn predict_command(cmd: &str) -> (u16, bool) {
     for i in 0..2 { entry.outputs_q88[i] = n.last_out[i]; }
     NN_AUDIT.lock().push(entry);
 
+    // Update command telemetry and publish messages
+    let timestamp = crate::agent_bus::get_timestamp_us();
+    let mut telem = COMMAND_TELEMETRY.lock();
+
+    // Track command rate
+    if timestamp / 1_000_000 > telem.last_second_start_us / 1_000_000 {
+        // New second started
+        telem.commands_last_second = 1;
+        telem.last_second_start_us = timestamp;
+    } else {
+        telem.commands_last_second += 1;
+    }
+    telem.last_command_ts_us = timestamp;
+    telem.total_predictions += 1;
+
+    // Publish messages to agent bus for cross-subsystem coordination
+    if confidence >= 300 {  // Only publish if confidence is sufficient (30%+)
+        // Check if this is a "heavy" command (long string, high complexity)
+        let cmd_len = cmd.len();
+        let is_heavy = cmd_len > 20 || cmd.contains("stress") || cmd.contains("test");
+
+        if is_heavy {
+            crate::agent_bus::publish_message(crate::agent_bus::AgentMessage::CommandHeavyPredicted {
+                command_hash: cmd_hash,
+                confidence,
+                timestamp_us: timestamp,
+            });
+        }
+
+        // Detect rapid command stream
+        if telem.commands_last_second >= 10 {
+            crate::agent_bus::publish_message(crate::agent_bus::AgentMessage::CommandRapidStream {
+                commands_per_sec: telem.commands_last_second,
+                confidence,
+                timestamp_us: timestamp,
+            });
+        }
+
+        // Check prediction accuracy
+        let accuracy_percent = if telem.total_predictions > 10 {
+            (telem.accurate_predictions * 100 / telem.total_predictions).min(100) as u8
+        } else {
+            50  // Default to 50% if not enough data
+        };
+
+        if accuracy_percent < 50 && telem.total_predictions > 20 {
+            crate::agent_bus::publish_message(crate::agent_bus::AgentMessage::CommandLowAccuracy {
+                recent_accuracy: accuracy_percent,
+                timestamp_us: timestamp,
+            });
+        }
+    }
+
+    // Check for quiet period (no commands in last 5 seconds)
+    if timestamp - telem.last_command_ts_us > 5_000_000 {
+        let idle_seconds = ((timestamp - telem.last_command_ts_us) / 1_000_000).min(65535) as u16;
+        crate::agent_bus::publish_message(crate::agent_bus::AgentMessage::CommandQuiet {
+            idle_seconds,
+            timestamp_us: timestamp,
+        });
+    }
+
+    drop(telem);
+
     (confidence, predicted_success)
 }
 
@@ -572,6 +659,9 @@ pub fn predict_command(cmd: &str) -> (u16, bool) {
 pub fn record_command_outcome(cmd: &str, outcome: u8) {
     let cmd_hash = hash_command(cmd);
     let mut audit = NN_AUDIT.lock();
+
+    let mut predicted_success = false;
+    let mut found = false;
 
     // Find most recent prediction entry for this command
     let start = if audit.filled { audit.buf.len() } else { audit.idx };
@@ -584,7 +674,23 @@ pub fn record_command_outcome(cmd: &str, outcome: u8) {
 
         if audit.buf[idx].op == 3 && audit.buf[idx].command_hash == cmd_hash && audit.buf[idx].outcome == 0 {
             audit.buf[idx].outcome = outcome;
+            // Check if prediction was correct (output[0] > output[1] means predicted success)
+            predicted_success = audit.buf[idx].outputs_q88[0] >= audit.buf[idx].outputs_q88[1];
+            found = true;
             break;
+        }
+    }
+
+    drop(audit);
+
+    // Update accuracy telemetry if we found a prediction
+    if found {
+        let actual_success = outcome == 1;  // outcome 1 = success
+        let was_accurate = predicted_success == actual_success;
+
+        let mut telem = COMMAND_TELEMETRY.lock();
+        if was_accurate {
+            telem.accurate_predictions += 1;
         }
     }
 }
@@ -753,7 +859,63 @@ pub fn predict_operator_health(op_id: u32, recent_latency_us: u32, channel_depth
     drop(n); // Drop neural lock before acquiring audit lock
     NN_AUDIT.lock().push(entry);
 
+    // Publish messages to agent bus for cross-subsystem coordination
+    if confidence >= 300 {  // Only publish if confidence is sufficient (30%+)
+        let timestamp = crate::agent_bus::get_timestamp_us();
+
+        if !will_meet_deadline {
+            // Operator is predicted to miss deadline
+            if priority > 200 {  // Critical operator (high priority)
+                crate::agent_bus::publish_message(crate::agent_bus::AgentMessage::SchedulingCriticalOperatorLatency {
+                    operator_id: op_id,
+                    latency_us: recent_latency_us,
+                    confidence,
+                    timestamp_us: timestamp,
+                });
+            } else {
+                // General high load situation
+                // Calculate deadline misses from recent audit history
+                let recent_misses = count_recent_deadline_misses();
+                crate::agent_bus::publish_message(crate::agent_bus::AgentMessage::SchedulingLoadHigh {
+                    deadline_misses: recent_misses,
+                    avg_latency_us: recent_latency_us,
+                    confidence,
+                    timestamp_us: timestamp,
+                });
+            }
+        } else if recent_latency_us < 1000 && channel_depth == 0 {
+            // Low load: fast execution, no backpressure
+            let idle_percent = ((10000 - recent_latency_us) * 100 / 10000).min(100);
+            crate::agent_bus::publish_message(crate::agent_bus::AgentMessage::SchedulingLoadLow {
+                idle_percent: idle_percent as u8,
+                timestamp_us: timestamp,
+            });
+        }
+    }
+
     (confidence, will_meet_deadline)
+}
+
+/// Count recent deadline misses from audit log
+fn count_recent_deadline_misses() -> u8 {
+    let audit = NN_AUDIT.lock();
+    let start = if audit.filled { audit.buf.len() } else { audit.idx };
+    let mut misses = 0;
+
+    // Check last 20 entries for deadline misses
+    let check_count = start.min(20);
+    for i in 0..check_count {
+        let idx = if audit.idx == 0 {
+            start - 1 - i
+        } else {
+            (audit.idx + audit.buf.len() - 1 - i) % audit.buf.len()
+        };
+        if audit.buf[idx].deadline_miss == 2 {  // 2 = missed
+            misses += 1;
+        }
+    }
+
+    misses.min(255) as u8
 }
 
 /// Record actual operator outcome after execution
@@ -1192,6 +1354,37 @@ pub fn predict_memory_health() -> (u16, bool, bool) {
     let oom_risk = health_milli < -300;  // Negative output = unhealthy
     let compact_needed = compact_milli > 300;  // Positive output = compact needed
 
+    // Publish messages to agent bus for cross-subsystem coordination
+    if confidence >= 300 {  // Only publish if confidence is sufficient (30%+)
+        let timestamp = crate::agent_bus::get_timestamp_us();
+        let telem = MEMORY_TELEMETRY.lock();
+
+        if oom_risk || telem.free_memory_percent < 20 {
+            // High memory pressure
+            let pressure_level = (100 - telem.free_memory_percent).min(100) as u8;
+            crate::agent_bus::publish_message(crate::agent_bus::AgentMessage::MemoryPressure {
+                level: pressure_level,
+                fragmentation: telem.fragmentation_level.min(100) as u8,
+                confidence,
+                timestamp_us: timestamp,
+            });
+        } else if compact_needed {
+            // Compaction needed
+            let urgency = ((compact_milli - 300) * 100 / 700).min(100) as u8;
+            crate::agent_bus::publish_message(crate::agent_bus::AgentMessage::MemoryCompactionNeeded {
+                urgency,
+                confidence,
+                timestamp_us: timestamp,
+            });
+        } else if telem.free_memory_percent >= 50 {
+            // Memory is healthy
+            crate::agent_bus::publish_message(crate::agent_bus::AgentMessage::MemoryHealthy {
+                headroom_percent: telem.free_memory_percent.min(100) as u8,
+                timestamp_us: timestamp,
+            });
+        }
+    }
+
     (confidence, oom_risk, compact_needed)
 }
 
@@ -1277,4 +1470,177 @@ pub fn check_autonomous_memory_warnings() {
             metric_kv("memory_compact_warning", conf as usize);
         }
     }
+}
+
+// --- Cross-Agent Coordination ---
+
+/// Check agent bus and coordinate actions based on other agents' messages
+/// This should be called periodically (e.g., every 100ms or on key events)
+pub fn process_agent_coordination() {
+    // Get recent messages from the last second (1,000,000 microseconds)
+    let timestamp = crate::agent_bus::get_timestamp_us();
+    let one_second_ago = timestamp.saturating_sub(1_000_000);
+    let messages = crate::agent_bus::get_messages_since(one_second_ago);
+
+    if messages.is_empty() {
+        return; // No recent activity
+    }
+
+    // Track coordination actions taken
+    let mut memory_pressure_detected = false;
+    let mut scheduling_load_high = false;
+    let mut rapid_commands_detected = false;
+
+    // Scan for critical messages
+    for msg in messages.iter() {
+        match msg {
+            crate::agent_bus::AgentMessage::MemoryPressure { level, confidence, .. } => {
+                if *level > 70 && *confidence >= 300 {
+                    memory_pressure_detected = true;
+                }
+            }
+            crate::agent_bus::AgentMessage::SchedulingLoadHigh { deadline_misses, confidence, .. } => {
+                if *deadline_misses > 3 && *confidence >= 300 {
+                    scheduling_load_high = true;
+                }
+            }
+            crate::agent_bus::AgentMessage::CommandRapidStream { commands_per_sec, .. } => {
+                if *commands_per_sec > 15 {
+                    rapid_commands_detected = true;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Take coordinated actions
+
+    // 1. Memory pressure → Scheduling should lower non-critical operators
+    if memory_pressure_detected {
+        unsafe { crate::uart_print(b"[COORDINATION] Memory pressure detected, adjusting scheduling\n"); }
+        metric_kv("coord_memory_pressure_action", 1);
+        // In a full implementation, this would call:
+        // crate::graph::lower_noncritical_operator_priorities();
+    }
+
+    // 2. High scheduling load → Memory should be conservative
+    if scheduling_load_high {
+        unsafe { crate::uart_print(b"[COORDINATION] High scheduling load, memory entering conservative mode\n"); }
+        metric_kv("coord_scheduling_load_action", 1);
+        // Could reduce memory allocation aggressiveness or trigger early GC
+    }
+
+    // 3. Rapid commands → All agents enter defensive mode
+    if rapid_commands_detected {
+        unsafe { crate::uart_print(b"[COORDINATION] Rapid command stream detected, defensive mode\n"); }
+        metric_kv("coord_rapid_commands_action", 1);
+        // Could throttle predictions, increase confidence thresholds
+    }
+
+    // 4. Combined stress: all three conditions
+    if memory_pressure_detected && scheduling_load_high && rapid_commands_detected {
+        unsafe { crate::uart_print(b"[COORDINATION] CRITICAL: Multi-subsystem stress detected!\n"); }
+        metric_kv("coord_multi_stress", 1);
+        // Emergency coordination: shed load, reject new work, log alert
+    }
+}
+
+/// Scheduling agent checks for memory pressure and adjusts priorities
+pub fn scheduling_check_memory_coordination() -> bool {
+    let timestamp = crate::agent_bus::get_timestamp_us();
+    let recent_window = timestamp.saturating_sub(500_000); // Last 500ms
+    let messages = crate::agent_bus::get_messages_since(recent_window);
+
+    for msg in messages.iter() {
+        if let crate::agent_bus::AgentMessage::MemoryPressure { level, confidence, .. } = msg {
+            if *level > 70 && *confidence >= 400 {
+                // High confidence memory pressure
+                unsafe { crate::uart_print(b"[SCHED] Detected memory pressure, lowering non-critical priority\n"); }
+                metric_kv("sched_memory_coordination", 1);
+                return true; // Signal to lower priorities
+            }
+        }
+    }
+    false
+}
+
+/// Memory agent checks for scheduling stress and becomes conservative
+pub fn memory_check_scheduling_coordination() -> bool {
+    let timestamp = crate::agent_bus::get_timestamp_us();
+    let recent_window = timestamp.saturating_sub(500_000); // Last 500ms
+    let messages = crate::agent_bus::get_messages_since(recent_window);
+
+    for msg in messages.iter() {
+        if let crate::agent_bus::AgentMessage::SchedulingLoadHigh { deadline_misses, confidence, .. } = msg {
+            if *deadline_misses > 5 && *confidence >= 400 {
+                // High confidence scheduling stress
+                unsafe { crate::uart_print(b"[MEM] Detected scheduling stress, entering conservative mode\n"); }
+                metric_kv("mem_scheduling_coordination", 1);
+                return true; // Signal to be conservative
+            }
+        }
+    }
+    false
+}
+
+/// Command agent checks for system stress and adjusts predictions
+pub fn command_check_system_stress() -> bool {
+    let timestamp = crate::agent_bus::get_timestamp_us();
+    let recent_window = timestamp.saturating_sub(1_000_000); // Last 1 second
+    let messages = crate::agent_bus::get_messages_since(recent_window);
+
+    let mut stress_indicators = 0;
+
+    for msg in messages.iter() {
+        match msg {
+            crate::agent_bus::AgentMessage::MemoryPressure { level, .. } if *level > 80 => {
+                stress_indicators += 1;
+            }
+            crate::agent_bus::AgentMessage::SchedulingLoadHigh { deadline_misses, .. } if *deadline_misses > 5 => {
+                stress_indicators += 1;
+            }
+            _ => {}
+        }
+    }
+
+    if stress_indicators >= 2 {
+        unsafe { crate::uart_print(b"[CMD] Detected system stress, throttling predictions\n"); }
+        metric_kv("cmd_system_stress_coordination", 1);
+        return true;
+    }
+    false
+}
+
+/// Get coordination statistics
+pub fn get_coordination_stats() -> (usize, usize, usize) {
+    let timestamp = crate::agent_bus::get_timestamp_us();
+    let recent_window = timestamp.saturating_sub(5_000_000); // Last 5 seconds
+    let messages = crate::agent_bus::get_messages_since(recent_window);
+
+    let mut memory_events = 0;
+    let mut scheduling_events = 0;
+    let mut command_events = 0;
+
+    for msg in messages.iter() {
+        match msg {
+            crate::agent_bus::AgentMessage::MemoryPressure { .. }
+            | crate::agent_bus::AgentMessage::MemoryCompactionNeeded { .. }
+            | crate::agent_bus::AgentMessage::MemoryHealthy { .. } => {
+                memory_events += 1;
+            }
+            crate::agent_bus::AgentMessage::SchedulingLoadHigh { .. }
+            | crate::agent_bus::AgentMessage::SchedulingLoadLow { .. }
+            | crate::agent_bus::AgentMessage::SchedulingCriticalOperatorLatency { .. } => {
+                scheduling_events += 1;
+            }
+            crate::agent_bus::AgentMessage::CommandHeavyPredicted { .. }
+            | crate::agent_bus::AgentMessage::CommandRapidStream { .. }
+            | crate::agent_bus::AgentMessage::CommandLowAccuracy { .. }
+            | crate::agent_bus::AgentMessage::CommandQuiet { .. } => {
+                command_events += 1;
+            }
+        }
+    }
+
+    (memory_events, scheduling_events, command_events)
 }

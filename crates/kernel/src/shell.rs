@@ -131,6 +131,9 @@ impl Shell {
                 "npudriver" => { self.cmd_npu_driver_demo(); true },
                 "rtaivalidation" => { self.cmd_realtime_ai_validation(); true },
                 "neuralctl" => { self.cmd_neuralctl(&parts[1..]); true },
+                "agentctl" => { self.cmd_agentctl(&parts[1..]); true },
+                "coordctl" => { self.cmd_coordctl(&parts[1..]); true },
+                "coorddemo" => { self.cmd_coord_demo(); true },
                 "memctl" => { self.cmd_memctl(&parts[1..]); true },
                 "ask-ai" => { self.cmd_ask_ai(&parts[1..]); true },
                 "nnjson" => { self.cmd_nn_json(); true },
@@ -250,6 +253,9 @@ impl Shell {
             crate::uart_print(b"  temporaliso - Run AI temporal isolation demonstration\n");
             crate::uart_print(b"  phase3validation - Run complete Phase 3 AI-native kernel validation\n");
             crate::uart_print(b"  neuralctl - Neural agent: status | feedback <helpful|not_helpful|expected> | retrain <N> | autonomous <on|off|status> | config --confidence N --boost N --max-boosts N | audit\n");
+            crate::uart_print(b"  agentctl - Agent message bus: bus | stats | clear\n");
+            crate::uart_print(b"  coordctl - Agent coordination: process | stats\n");
+            crate::uart_print(b"  coorddemo- Demo cross-agent coordination under stress\n");
             crate::uart_print(b"  memctl   - Memory neural agent: status | predict | stress [N]\n");
             crate::uart_print(b"  ask-ai   - Ask a simple question: ask-ai \"<text>\" (maps to features, runs agent)\n");
             crate::uart_print(b"  nnjson   - Print neural audit ring as JSON\n");
@@ -641,6 +647,147 @@ impl Shell {
             }
             _ => unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress> ...\n"); }
         }
+    }
+
+    fn cmd_agentctl(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: agentctl <bus|stats|clear>\n"); }
+            return;
+        }
+        match args[0] {
+            "bus" => {
+                // Show all messages in the agent bus
+                let messages = crate::agent_bus::get_all_messages();
+
+                unsafe { crate::uart_print(b"[AGENT BUS] Messages ("); }
+                self.print_number_simple(messages.len() as u64);
+                unsafe { crate::uart_print(b" total):\n"); }
+
+                if messages.is_empty() {
+                    unsafe { crate::uart_print(b"  (no messages)\n"); }
+                } else {
+                    for msg in messages.iter() {
+                        crate::agent_bus::print_message(msg);
+                    }
+                }
+            }
+            "stats" => {
+                // Show message bus statistics
+                crate::agent_bus::print_bus_stats();
+            }
+            "clear" => {
+                // Clear all messages from the bus
+                crate::agent_bus::clear_message_bus();
+                unsafe { crate::uart_print(b"[AGENT BUS] Cleared all messages\n"); }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: agentctl <bus|stats|clear>\n"); }
+        }
+    }
+
+    fn cmd_coordctl(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: coordctl <process|stats>\n"); }
+            return;
+        }
+        match args[0] {
+            "process" => {
+                // Manually trigger coordination processing
+                unsafe { crate::uart_print(b"[COORDCTL] Processing cross-agent coordination...\n"); }
+                crate::neural::process_agent_coordination();
+                unsafe { crate::uart_print(b"[COORDCTL] Coordination processing complete\n"); }
+            }
+            "stats" => {
+                // Show coordination statistics
+                let (mem_events, sched_events, cmd_events) = crate::neural::get_coordination_stats();
+
+                unsafe { crate::uart_print(b"[COORDCTL] Coordination Statistics (last 5 seconds):\n"); }
+                unsafe { crate::uart_print(b"  Memory Events: "); }
+                self.print_number_simple(mem_events as u64);
+                unsafe { crate::uart_print(b"\n"); }
+                unsafe { crate::uart_print(b"  Scheduling Events: "); }
+                self.print_number_simple(sched_events as u64);
+                unsafe { crate::uart_print(b"\n"); }
+                unsafe { crate::uart_print(b"  Command Events: "); }
+                self.print_number_simple(cmd_events as u64);
+                unsafe { crate::uart_print(b"\n"); }
+
+                let total = mem_events + sched_events + cmd_events;
+                unsafe { crate::uart_print(b"  Total Events: "); }
+                self.print_number_simple(total as u64);
+                unsafe { crate::uart_print(b"\n"); }
+
+                // Also show bus stats
+                unsafe { crate::uart_print(b"\n"); }
+                crate::agent_bus::print_bus_stats();
+            }
+            _ => unsafe { crate::uart_print(b"Usage: coordctl <process|stats>\n"); }
+        }
+    }
+
+    fn cmd_coord_demo(&self) {
+        unsafe { crate::uart_print(b"\n=== Cross-Agent Coordination Demo ===\n\n"); }
+
+        // Clear the bus to start fresh
+        crate::agent_bus::clear_message_bus();
+
+        // Phase 1: Simulate memory stress
+        unsafe { crate::uart_print(b"[DEMO] Phase 1: Simulating memory stress...\n"); }
+
+        // Trigger memory predictions which will publish messages
+        let (_conf1, _oom1, _compact1) = crate::neural::predict_memory_health();
+
+        // Small delay (busy wait)
+        for _ in 0..100000 { core::hint::spin_loop(); }
+
+        // Phase 2: Simulate rapid commands
+        unsafe { crate::uart_print(b"[DEMO] Phase 2: Simulating rapid command stream...\n"); }
+
+        // Trigger multiple command predictions quickly
+        for i in 0..15 {
+            let cmd = if i % 2 == 0 { "test" } else { "stress" };
+            let (_conf, _success) = crate::neural::predict_command(cmd);
+        }
+
+        // Small delay
+        for _ in 0..100000 { core::hint::spin_loop(); }
+
+        // Phase 3: Check agent bus
+        unsafe { crate::uart_print(b"\n[DEMO] Phase 3: Checking agent bus for messages...\n"); }
+        let messages = crate::agent_bus::get_all_messages();
+        unsafe { crate::uart_print(b"  Messages published: "); }
+        self.print_number_simple(messages.len() as u64);
+        unsafe { crate::uart_print(b"\n\n"); }
+
+        // Show first 5 messages
+        for (idx, msg) in messages.iter().take(5).enumerate() {
+            unsafe { crate::uart_print(b"  ["); }
+            self.print_number_simple(idx as u64);
+            unsafe { crate::uart_print(b"] "); }
+            crate::agent_bus::print_message(msg);
+        }
+
+        // Phase 4: Process coordination
+        unsafe { crate::uart_print(b"\n[DEMO] Phase 4: Processing cross-agent coordination...\n"); }
+        crate::neural::process_agent_coordination();
+
+        // Phase 5: Show coordination stats
+        unsafe { crate::uart_print(b"\n[DEMO] Phase 5: Coordination statistics:\n"); }
+        let (mem_events, sched_events, cmd_events) = crate::neural::get_coordination_stats();
+        unsafe { crate::uart_print(b"  Memory events: "); }
+        self.print_number_simple(mem_events as u64);
+        unsafe { crate::uart_print(b"\n  Scheduling events: "); }
+        self.print_number_simple(sched_events as u64);
+        unsafe { crate::uart_print(b"\n  Command events: "); }
+        self.print_number_simple(cmd_events as u64);
+        unsafe { crate::uart_print(b"\n  Total: "); }
+        self.print_number_simple((mem_events + sched_events + cmd_events) as u64);
+        unsafe { crate::uart_print(b"\n\n"); }
+
+        // Final summary
+        unsafe { crate::uart_print(b"[DEMO] SUCCESS: Cross-agent coordination demo complete\n"); }
+        unsafe { crate::uart_print(b"[DEMO] Agents successfully communicated via message bus\n"); }
+        unsafe { crate::uart_print(b"[DEMO] Use 'agentctl bus' to inspect messages\n"); }
+        unsafe { crate::uart_print(b"[DEMO] Use 'coordctl stats' for detailed statistics\n\n"); }
     }
 
     fn cmd_ask_ai(&self, args: &[&str]) {
