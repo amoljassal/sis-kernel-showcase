@@ -134,6 +134,8 @@ impl Shell {
                 "agentctl" => { self.cmd_agentctl(&parts[1..]); true },
                 "coordctl" => { self.cmd_coordctl(&parts[1..]); true },
                 "coorddemo" => { self.cmd_coord_demo(); true },
+                "metaclassctl" => { self.cmd_metaclassctl(&parts[1..]); true },
+                "metademo" => { self.cmd_meta_demo(); true },
                 "memctl" => { self.cmd_memctl(&parts[1..]); true },
                 "ask-ai" => { self.cmd_ask_ai(&parts[1..]); true },
                 "nnjson" => { self.cmd_nn_json(); true },
@@ -256,6 +258,8 @@ impl Shell {
             crate::uart_print(b"  agentctl - Agent message bus: bus | stats | clear\n");
             crate::uart_print(b"  coordctl - Agent coordination: process | stats\n");
             crate::uart_print(b"  coorddemo- Demo cross-agent coordination under stress\n");
+            crate::uart_print(b"  metaclassctl - Meta-agent: status | force | config --interval N --threshold N | on | off\n");
+            crate::uart_print(b"  metademo - Demo meta-agent with multi-subsystem stress\n");
             crate::uart_print(b"  memctl   - Memory neural agent: status | predict | stress [N]\n");
             crate::uart_print(b"  ask-ai   - Ask a simple question: ask-ai \"<text>\" (maps to features, runs agent)\n");
             crate::uart_print(b"  nnjson   - Print neural audit ring as JSON\n");
@@ -788,6 +792,236 @@ impl Shell {
         unsafe { crate::uart_print(b"[DEMO] Agents successfully communicated via message bus\n"); }
         unsafe { crate::uart_print(b"[DEMO] Use 'agentctl bus' to inspect messages\n"); }
         unsafe { crate::uart_print(b"[DEMO] Use 'coordctl stats' for detailed statistics\n\n"); }
+    }
+
+    fn cmd_metaclassctl(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: metaclassctl <status|force|config|on|off>\n"); }
+            return;
+        }
+        match args[0] {
+            "status" => {
+                // Show meta-agent status
+                crate::meta_agent::print_meta_status();
+            }
+            "force" => {
+                // Force immediate meta-agent decision
+                unsafe { crate::uart_print(b"[META] Forcing immediate decision...\n"); }
+
+                // Collect fresh telemetry
+                let state = crate::meta_agent::collect_telemetry();
+                unsafe { crate::uart_print(b"[META] Telemetry collected\n"); }
+
+                // Force decision
+                let decision = crate::meta_agent::force_meta_decision();
+
+                unsafe { crate::uart_print(b"[META] Decision executed:\n"); }
+                unsafe { crate::uart_print(b"  Memory directive: "); }
+                self.print_number_simple(decision.memory_directive.abs() as u64);
+                unsafe { crate::uart_print(if decision.memory_directive < 0 { b" (negative)\n" } else { b" (positive)\n" }); }
+                unsafe { crate::uart_print(b"  Scheduling directive: "); }
+                self.print_number_simple(decision.scheduling_directive.abs() as u64);
+                unsafe { crate::uart_print(if decision.scheduling_directive < 0 { b" (negative)\n" } else { b" (positive)\n" }); }
+                unsafe { crate::uart_print(b"  Command directive: "); }
+                self.print_number_simple(decision.command_directive.abs() as u64);
+                unsafe { crate::uart_print(if decision.command_directive < 0 { b" (negative)\n" } else { b" (positive)\n" }); }
+                unsafe { crate::uart_print(b"  Confidence: "); }
+                self.print_number_simple(decision.confidence as u64);
+                unsafe { crate::uart_print(b"/1000\n"); }
+
+                unsafe { crate::uart_print(b"\n[META] State at decision time:\n"); }
+                unsafe { crate::uart_print(b"  Memory pressure: "); }
+                self.print_number_simple(state.memory_pressure as u64);
+                unsafe { crate::uart_print(b"%\n"); }
+            }
+            "config" => {
+                // Configure meta-agent parameters
+                let mut config = crate::meta_agent::get_meta_config();
+
+                // Parse arguments
+                let mut i = 1;
+                while i < args.len() {
+                    match args[i] {
+                        "--interval" if i + 1 < args.len() => {
+                            if let Ok(ms) = args[i + 1].parse::<u64>() {
+                                config.decision_interval_us = ms * 1000; // Convert ms to us
+                                i += 2;
+                            } else {
+                                unsafe { crate::uart_print(b"Invalid interval value\n"); }
+                                return;
+                            }
+                        }
+                        "--threshold" if i + 1 < args.len() => {
+                            if let Ok(thresh) = args[i + 1].parse::<u16>() {
+                                config.confidence_threshold = thresh.min(1000);
+                                i += 2;
+                            } else {
+                                unsafe { crate::uart_print(b"Invalid threshold value\n"); }
+                                return;
+                            }
+                        }
+                        _ => {
+                            unsafe { crate::uart_print(b"Unknown config option\n"); }
+                            return;
+                        }
+                    }
+                }
+
+                crate::meta_agent::set_meta_config(config);
+                unsafe { crate::uart_print(b"[META] Configuration updated\n"); }
+                unsafe { crate::uart_print(b"  Interval: "); }
+                self.print_number_simple((config.decision_interval_us / 1000) as u64);
+                unsafe { crate::uart_print(b" ms\n"); }
+                unsafe { crate::uart_print(b"  Threshold: "); }
+                self.print_number_simple(config.confidence_threshold as u64);
+                unsafe { crate::uart_print(b"/1000\n"); }
+            }
+            "on" => {
+                // Enable meta-agent
+                let mut config = crate::meta_agent::get_meta_config();
+                config.enabled = true;
+                crate::meta_agent::set_meta_config(config);
+                unsafe { crate::uart_print(b"[META] Meta-agent enabled\n"); }
+            }
+            "off" => {
+                // Disable meta-agent
+                let mut config = crate::meta_agent::get_meta_config();
+                config.enabled = false;
+                crate::meta_agent::set_meta_config(config);
+                unsafe { crate::uart_print(b"[META] Meta-agent disabled\n"); }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: metaclassctl <status|force|config|on|off>\n"); }
+        }
+    }
+
+    fn cmd_meta_demo(&self) {
+        unsafe { crate::uart_print(b"\n=== Meta-Agent Coordination Demo ===\n\n"); }
+
+        // Phase 1: Setup - lower threshold for demo
+        unsafe { crate::uart_print(b"[DEMO] Phase 1: Configuring meta-agent...\n"); }
+        let mut config = crate::meta_agent::get_meta_config();
+        let original_threshold = config.confidence_threshold;
+        config.confidence_threshold = 200; // Lower threshold for demo
+        config.enabled = true;
+        crate::meta_agent::set_meta_config(config);
+        unsafe { crate::uart_print(b"  Threshold: 200/1000 (lowered for demo)\n"); }
+        unsafe { crate::uart_print(b"  Enabled: YES\n\n"); }
+
+        // Phase 2: Create multi-subsystem stress
+        unsafe { crate::uart_print(b"[DEMO] Phase 2: Simulating multi-subsystem stress...\n"); }
+
+        // Memory stress
+        unsafe { crate::uart_print(b"  Allocating memory...\n"); }
+        let mut allocations: heapless::Vec<alloc::vec::Vec<u8>, 8> = heapless::Vec::new();
+        for i in 0..8 {
+            let mut v = alloc::vec::Vec::new();
+            if v.try_reserve_exact(2048).is_ok() {
+                v.resize(2048, (i % 256) as u8);
+                let _ = allocations.push(v);
+            }
+        }
+
+        // Rapid commands
+        unsafe { crate::uart_print(b"  Generating rapid commands...\n"); }
+        for i in 0..20 {
+            let cmd = if i % 3 == 0 { "stress" } else { "test" };
+            let _ = crate::neural::predict_command(cmd);
+        }
+
+        // Memory prediction
+        unsafe { crate::uart_print(b"  Running memory prediction...\n"); }
+        let _ = crate::neural::predict_memory_health();
+
+        // Small delay
+        for _ in 0..100000 { core::hint::spin_loop(); }
+
+        unsafe { crate::uart_print(b"\n[DEMO] Phase 3: Collecting telemetry from all agents...\n"); }
+        let state = crate::meta_agent::collect_telemetry();
+
+        unsafe { crate::uart_print(b"  Memory: pressure="); }
+        self.print_number_simple(state.memory_pressure as u64);
+        unsafe { crate::uart_print(b"% frag="); }
+        self.print_number_simple(state.memory_fragmentation as u64);
+        unsafe { crate::uart_print(b"%\n"); }
+
+        unsafe { crate::uart_print(b"  Scheduling: load="); }
+        self.print_number_simple(state.scheduling_load as u64);
+        unsafe { crate::uart_print(b"% misses="); }
+        self.print_number_simple(state.deadline_misses as u64);
+        unsafe { crate::uart_print(b"\n"); }
+
+        unsafe { crate::uart_print(b"  Command: rate="); }
+        self.print_number_simple(state.command_rate as u64);
+        unsafe { crate::uart_print(b" heavy="); }
+        self.print_number_simple(state.command_heaviness as u64);
+        unsafe { crate::uart_print(b"\n\n"); }
+
+        // Phase 4: Force meta-agent decision
+        unsafe { crate::uart_print(b"[DEMO] Phase 4: Meta-agent making coordination decision...\n"); }
+        let decision = crate::meta_agent::force_meta_decision();
+
+        unsafe { crate::uart_print(b"  Decision:\n"); }
+        unsafe { crate::uart_print(b"    Memory directive: "); }
+        if decision.memory_directive < 0 {
+            unsafe { crate::uart_print(b"-"); }
+            self.print_number_simple((-decision.memory_directive) as u64);
+        } else {
+            unsafe { crate::uart_print(b"+"); }
+            self.print_number_simple(decision.memory_directive as u64);
+        }
+        unsafe { crate::uart_print(b"/1000\n"); }
+
+        unsafe { crate::uart_print(b"    Scheduling directive: "); }
+        if decision.scheduling_directive < 0 {
+            unsafe { crate::uart_print(b"-"); }
+            self.print_number_simple((-decision.scheduling_directive) as u64);
+        } else {
+            unsafe { crate::uart_print(b"+"); }
+            self.print_number_simple(decision.scheduling_directive as u64);
+        }
+        unsafe { crate::uart_print(b"/1000\n"); }
+
+        unsafe { crate::uart_print(b"    Command directive: "); }
+        if decision.command_directive < 0 {
+            unsafe { crate::uart_print(b"-"); }
+            self.print_number_simple((-decision.command_directive) as u64);
+        } else {
+            unsafe { crate::uart_print(b"+"); }
+            self.print_number_simple(decision.command_directive as u64);
+        }
+        unsafe { crate::uart_print(b"/1000\n"); }
+
+        unsafe { crate::uart_print(b"    Confidence: "); }
+        self.print_number_simple(decision.confidence as u64);
+        unsafe { crate::uart_print(b"/1000\n\n"); }
+
+        // Phase 5: Show statistics
+        unsafe { crate::uart_print(b"[DEMO] Phase 5: Meta-agent statistics:\n"); }
+        let stats = crate::meta_agent::get_meta_stats();
+        unsafe { crate::uart_print(b"  Total decisions: "); }
+        self.print_number_simple(stats.total_decisions as u64);
+        unsafe { crate::uart_print(b"\n  Autonomous actions: "); }
+        self.print_number_simple(stats.autonomous_actions as u64);
+        unsafe { crate::uart_print(b"\n  Memory adjustments: "); }
+        self.print_number_simple(stats.memory_adjustments as u64);
+        unsafe { crate::uart_print(b"\n  Scheduling adjustments: "); }
+        self.print_number_simple(stats.scheduling_adjustments as u64);
+        unsafe { crate::uart_print(b"\n  Command adjustments: "); }
+        self.print_number_simple(stats.command_adjustments as u64);
+        unsafe { crate::uart_print(b"\n\n"); }
+
+        // Cleanup: restore original threshold
+        unsafe { crate::uart_print(b"[DEMO] Restoring original configuration...\n"); }
+        config.confidence_threshold = original_threshold;
+        crate::meta_agent::set_meta_config(config);
+
+        // Free allocations
+        drop(allocations);
+
+        unsafe { crate::uart_print(b"\n[DEMO] SUCCESS: Meta-agent coordination demo complete\n"); }
+        unsafe { crate::uart_print(b"[DEMO] Meta-agent observed 12 inputs from 3 agents\n"); }
+        unsafe { crate::uart_print(b"[DEMO] Neural network made global coordination decision\n"); }
+        unsafe { crate::uart_print(b"[DEMO] Use 'metaclassctl status' to inspect state\n\n"); }
     }
 
     fn cmd_ask_ai(&self, args: &[&str]) {

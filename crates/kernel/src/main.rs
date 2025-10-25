@@ -39,6 +39,7 @@ pub mod interrupts;
 pub mod control;
 pub mod neural;
 pub mod agent_bus;
+pub mod meta_agent;
 // PMU helpers (feature-gated usage)
 pub mod pmu;
 // Deterministic scheduler scaffolding (feature-gated)
@@ -309,7 +310,12 @@ mod bringup {
         crate::neural::init_memory_agent();
         super::uart_print(b"MEMORY AGENT: READY\n");
 
-        // 10) Launch interactive shell
+        // 10) Initialize meta-agent for global coordination
+        super::uart_print(b"META-AGENT: INIT\n");
+        crate::meta_agent::init_meta_agent();
+        super::uart_print(b"META-AGENT: READY\n");
+
+        // 11) Launch interactive shell
         super::uart_print(b"LAUNCHING SHELL\n");
         crate::shell::run_shell();
     }
