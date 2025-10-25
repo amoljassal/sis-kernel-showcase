@@ -136,6 +136,8 @@ impl Shell {
                 "coorddemo" => { self.cmd_coord_demo(); true },
                 "metaclassctl" => { self.cmd_metaclassctl(&parts[1..]); true },
                 "metademo" => { self.cmd_meta_demo(); true },
+                "mlctl" => { self.cmd_mlctl(&parts[1..]); true },
+                "mladvdemo" => { self.cmd_ml_advanced_demo(); true },
                 "memctl" => { self.cmd_memctl(&parts[1..]); true },
                 "ask-ai" => { self.cmd_ask_ai(&parts[1..]); true },
                 "nnjson" => { self.cmd_nn_json(); true },
@@ -260,6 +262,8 @@ impl Shell {
             crate::uart_print(b"  coorddemo- Demo cross-agent coordination under stress\n");
             crate::uart_print(b"  metaclassctl - Meta-agent: status | force | config --interval N --threshold N | on | off\n");
             crate::uart_print(b"  metademo - Demo meta-agent with multi-subsystem stress\n");
+            crate::uart_print(b"  mlctl - Advanced ML: status | replay N | weights P W L | features --replay on/off --td on/off --topology on/off\n");
+            crate::uart_print(b"  mladvdemo - Demo advanced ML features (experience replay, TD learning, topology)\n");
             crate::uart_print(b"  memctl   - Memory neural agent: status | predict | stress [N]\n");
             crate::uart_print(b"  ask-ai   - Ask a simple question: ask-ai \"<text>\" (maps to features, runs agent)\n");
             crate::uart_print(b"  nnjson   - Print neural audit ring as JSON\n");
@@ -1022,6 +1026,238 @@ impl Shell {
         unsafe { crate::uart_print(b"[DEMO] Meta-agent observed 12 inputs from 3 agents\n"); }
         unsafe { crate::uart_print(b"[DEMO] Neural network made global coordination decision\n"); }
         unsafe { crate::uart_print(b"[DEMO] Use 'metaclassctl status' to inspect state\n\n"); }
+    }
+
+    fn cmd_mlctl(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: mlctl <status|replay N|weights P W L|features>\n"); }
+            return;
+        }
+
+        match args[0] {
+            "status" => {
+                crate::meta_agent::print_advanced_ml_status();
+            }
+            "replay" => {
+                if args.len() < 2 {
+                    unsafe { crate::uart_print(b"Usage: mlctl replay <batch_size>\n"); }
+                    return;
+                }
+                let batch_size = args[1].parse::<usize>().unwrap_or(10);
+                unsafe {
+                    crate::uart_print(b"[ML] Training from replay buffer (batch_size=");
+                    self.print_number_simple(batch_size as u64);
+                    crate::uart_print(b")...\n");
+                }
+                crate::meta_agent::train_from_replay(batch_size);
+                let (count, capacity) = crate::meta_agent::get_replay_stats();
+                unsafe {
+                    crate::uart_print(b"[ML] Replay buffer: ");
+                    self.print_number_simple(count as u64);
+                    crate::uart_print(b"/");
+                    self.print_number_simple(capacity as u64);
+                    crate::uart_print(b" entries\n");
+                }
+            }
+            "weights" => {
+                if args.len() < 4 {
+                    unsafe { crate::uart_print(b"Usage: mlctl weights <perf> <power> <latency>\n"); }
+                    return;
+                }
+                let perf = args[1].parse::<u8>().unwrap_or(40).min(100);
+                let power = args[2].parse::<u8>().unwrap_or(30).min(100);
+                let latency = args[3].parse::<u8>().unwrap_or(30).min(100);
+
+                let mut config = crate::meta_agent::get_meta_config();
+                config.performance_weight = perf;
+                config.power_weight = power;
+                config.latency_weight = latency;
+                crate::meta_agent::set_meta_config(config);
+
+                unsafe {
+                    crate::uart_print(b"[ML] Reward weights updated:\n");
+                    crate::uart_print(b"  Performance: ");
+                    self.print_number_simple(perf as u64);
+                    crate::uart_print(b"%\n");
+                    crate::uart_print(b"  Power: ");
+                    self.print_number_simple(power as u64);
+                    crate::uart_print(b"%\n");
+                    crate::uart_print(b"  Latency: ");
+                    self.print_number_simple(latency as u64);
+                    crate::uart_print(b"%\n");
+                }
+            }
+            "features" => {
+                let mut config = crate::meta_agent::get_meta_config();
+
+                // Parse feature flags
+                let mut i = 1;
+                while i < args.len() {
+                    match args[i] {
+                        "--replay" if i + 1 < args.len() => {
+                            config.replay_enabled = args[i + 1] == "on";
+                            i += 2;
+                        }
+                        "--td" if i + 1 < args.len() => {
+                            config.td_learning_enabled = args[i + 1] == "on";
+                            i += 2;
+                        }
+                        "--topology" if i + 1 < args.len() => {
+                            config.topology_adapt_enabled = args[i + 1] == "on";
+                            i += 2;
+                        }
+                        _ => {
+                            i += 1;
+                        }
+                    }
+                }
+
+                crate::meta_agent::set_meta_config(config);
+
+                unsafe {
+                    crate::uart_print(b"[ML] Feature configuration updated:\n");
+                    crate::uart_print(b"  Experience Replay: ");
+                    crate::uart_print(if config.replay_enabled { b"ON\n" } else { b"OFF\n" });
+                    crate::uart_print(b"  TD Learning: ");
+                    crate::uart_print(if config.td_learning_enabled { b"ON\n" } else { b"OFF\n" });
+                    crate::uart_print(b"  Topology Adaptation: ");
+                    crate::uart_print(if config.topology_adapt_enabled { b"ON\n" } else { b"OFF\n" });
+                }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: mlctl <status|replay N|weights P W L|features>\n"); }
+        }
+    }
+
+    fn cmd_ml_advanced_demo(&self) {
+        unsafe { crate::uart_print(b"\n=== Advanced ML Features Demo ===\n\n"); }
+
+        // Phase 1: Enable all advanced features
+        unsafe { crate::uart_print(b"[DEMO] Phase 1: Enabling advanced ML features...\n"); }
+        let mut config = crate::meta_agent::get_meta_config();
+        let original_replay = config.replay_enabled;
+        let original_td = config.td_learning_enabled;
+        let original_topology = config.topology_adapt_enabled;
+        let original_threshold = config.confidence_threshold;
+
+        config.replay_enabled = true;
+        config.td_learning_enabled = true;
+        config.topology_adapt_enabled = false; // Keep off for demo stability
+        config.confidence_threshold = 200; // Lower for demo
+        config.performance_weight = 50;
+        config.power_weight = 30;
+        config.latency_weight = 20;
+        crate::meta_agent::set_meta_config(config);
+
+        unsafe {
+            crate::uart_print(b"  Experience Replay: ON\n");
+            crate::uart_print(b"  TD Learning: ON\n");
+            crate::uart_print(b"  Topology Adaptation: OFF (stable for demo)\n");
+            crate::uart_print(b"  Reward weights: 50/30/20 (perf/power/lat)\n\n");
+        }
+
+        // Phase 2: Create varied workload patterns
+        unsafe { crate::uart_print(b"[DEMO] Phase 2: Generating workload patterns...\n"); }
+
+        for episode in 0..5 {
+            unsafe {
+                crate::uart_print(b"  Episode ");
+                self.print_number_simple((episode + 1) as u64);
+                crate::uart_print(b"/5: ");
+            }
+
+            // Vary the workload
+            match episode % 3 {
+                0 => {
+                    unsafe { crate::uart_print(b"Memory stress\n"); }
+                    let mut v = alloc::vec::Vec::new();
+                    if v.try_reserve_exact(4096).is_ok() {
+                        v.resize(4096, 0xAA);
+                    }
+                    drop(v);
+                }
+                1 => {
+                    unsafe { crate::uart_print(b"Rapid commands\n"); }
+                    for _ in 0..15 {
+                        let _ = crate::neural::predict_command("test");
+                    }
+                }
+                2 => {
+                    unsafe { crate::uart_print(b"Mixed load\n"); }
+                    let _ = crate::neural::predict_memory_health();
+                    for _ in 0..5 {
+                        let _ = crate::neural::predict_command("stress");
+                    }
+                }
+                _ => {}
+            }
+
+            // Collect telemetry and trigger learning
+            let state = crate::meta_agent::collect_telemetry();
+            crate::meta_agent::update_meta_state_with_learning(state);
+
+            // Make decision
+            let _ = crate::meta_agent::force_meta_decision();
+
+            // Small delay
+            for _ in 0..50000 { core::hint::spin_loop(); }
+        }
+
+        unsafe { crate::uart_print(b"\n[DEMO] Phase 3: Training from experience replay...\n"); }
+        crate::meta_agent::train_from_replay(10);
+
+        let (replay_count, replay_capacity) = crate::meta_agent::get_replay_stats();
+        unsafe {
+            crate::uart_print(b"  Replay buffer: ");
+            self.print_number_simple(replay_count as u64);
+            crate::uart_print(b"/");
+            self.print_number_simple(replay_capacity as u64);
+            crate::uart_print(b" entries\n\n");
+        }
+
+        // Phase 4: Show learning statistics
+        unsafe { crate::uart_print(b"[DEMO] Phase 4: Learning statistics:\n"); }
+        let stats = crate::meta_agent::get_meta_stats();
+
+        unsafe {
+            crate::uart_print(b"  Total decisions: ");
+            self.print_number_simple(stats.total_decisions as u64);
+            crate::uart_print(b"\n  Replay samples: ");
+            self.print_number_simple(stats.replay_samples as u64);
+            crate::uart_print(b"\n  TD updates: ");
+            self.print_number_simple(stats.td_updates as u64);
+            crate::uart_print(b"\n  Average reward: ");
+            if stats.avg_reward < 0 {
+                crate::uart_print(b"-");
+                self.print_number_simple((-stats.avg_reward) as u64);
+            } else {
+                crate::uart_print(b"+");
+                self.print_number_simple(stats.avg_reward as u64);
+            }
+            crate::uart_print(b"/1000\n");
+            crate::uart_print(b"  Reward samples: ");
+            self.print_number_simple(stats.reward_samples as u64);
+            crate::uart_print(b"\n\n");
+        }
+
+        // Cleanup: restore original configuration
+        unsafe { crate::uart_print(b"[DEMO] Restoring original configuration...\n"); }
+        config.replay_enabled = original_replay;
+        config.td_learning_enabled = original_td;
+        config.topology_adapt_enabled = original_topology;
+        config.confidence_threshold = original_threshold;
+        crate::meta_agent::set_meta_config(config);
+
+        unsafe {
+            crate::uart_print(b"\n[DEMO] SUCCESS: Advanced ML demo complete\n");
+            crate::uart_print(b"[DEMO] Experience replay recorded ");
+            self.print_number_simple(stats.replay_samples as u64);
+            crate::uart_print(b" samples\n");
+            crate::uart_print(b"[DEMO] TD learning updated value function ");
+            self.print_number_simple(stats.td_updates as u64);
+            crate::uart_print(b" times\n");
+            crate::uart_print(b"[DEMO] Multi-objective rewards computed with weighted sum\n");
+            crate::uart_print(b"[DEMO] Use 'mlctl status' to inspect advanced ML state\n\n");
+        }
     }
 
     fn cmd_ask_ai(&self, args: &[&str]) {
