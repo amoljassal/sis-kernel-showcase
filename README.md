@@ -103,13 +103,25 @@ neuralctl retrain 10              # Network learns from feedback
 help                              # Predictions should now be more confident/accurate
 ```
 
+**Operator Health Prediction:**
+
+The same neural network predicts operator health and deadline compliance before execution, enabling proactive scheduling decisions.
+
+Commands:
+- `graphctl predict <op_id> <recent_latency_us> <channel_depth> [priority]` — predict operator health
+- `graphctl feedback <op_id> <helpful|not_helpful|expected>` — provide feedback on prediction
+- Predictions logged to audit ring with actual outcomes for learning
+
+Features extracted: recent latency (0-10ms normalized), channel backpressure (0-64 depth), operator priority (0-255). Network predicts: HEALTHY (will meet deadline) vs UNHEALTHY (may miss deadline) with confidence score.
+
 **Metrics emitted:**
 - Prediction confidence scores (0-1000 milli-units)
 - Command outcomes (1=success, 3=error)
+- Operator deadline status (1=met, 2=missed)
 - Feedback labels (1=helpful, 2=not_helpful, 3=expected)
 - Training iterations applied
 
-This is a proof-of-concept for kernel-level online learning. The audit ring stores the last 8 predictions (limited by static allocation constraints). All computation is fixed-point arithmetic in no_std environment with bounded execution time.
+This is a proof-of-concept for kernel-level online learning. The audit ring stores the last 8 predictions (limited by static allocation constraints). All computation is fixed-point arithmetic in no_std environment with bounded execution time. The network learns from both command execution and operator performance, retraining with `neuralctl retrain 10` applies feedback from both subsystems.
 
 ## Security & Audit
 

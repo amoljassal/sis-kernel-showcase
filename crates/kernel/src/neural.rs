@@ -176,7 +176,7 @@ static NEURAL: Mutex<NeuralAgent> = Mutex::new(NeuralAgent::new());
 // --- Audit ring for observability ---
 #[derive(Copy, Clone)]
 struct NnAuditEntry {
-    op: u8,            // 1=infer, 2=teach, 3=command_predict
+    op: u8,            // 1=infer, 2=teach, 3=command_predict, 4=operator_predict
     in_len: u8,
     out_len: u8,
     ts_ns: u64,
@@ -189,6 +189,11 @@ struct NnAuditEntry {
     outcome: u8,        // 0=pending, 1=success, 2=fail, 3=error
     feedback: u8,       // 0=none, 1=helpful, 2=not_helpful, 3=expected
     confidence: u16,    // Predicted confidence (0-1000)
+    // Operator health prediction (op=4)
+    operator_id: u32,       // Operator ID being predicted
+    predicted_latency: u32, // Predicted latency in microseconds
+    actual_latency: u32,    // Actual latency after execution
+    deadline_miss: u8,      // 0=pending, 1=met_deadline, 2=missed_deadline
 }
 
 const NN_AUDIT_ZERO: NnAuditEntry = NnAuditEntry {
@@ -204,6 +209,10 @@ const NN_AUDIT_ZERO: NnAuditEntry = NnAuditEntry {
     outcome: 0,
     feedback: 0,
     confidence: 0,
+    operator_id: 0,
+    predicted_latency: 0,
+    actual_latency: 0,
+    deadline_miss: 0,
 };
 
 struct NnAuditRing<const N: usize> {
@@ -522,17 +531,37 @@ pub fn retrain_from_feedback(max_steps: usize) -> usize {
 
             let entry = &audit.buf[idx];
 
-            // Only retrain on command predictions with feedback or confirmed outcomes
-            if entry.op != 3 { continue; }
-            if entry.feedback == 0 && entry.outcome == 0 { continue; }
+            // Only retrain on command/operator predictions with feedback or confirmed outcomes
+            if entry.op != 3 && entry.op != 4 { continue; }
+
+            // For commands: check outcome or feedback
+            // For operators: check deadline_miss or feedback
+            let has_data = if entry.op == 3 {
+                entry.feedback != 0 || entry.outcome != 0
+            } else { // op == 4
+                entry.feedback != 0 || entry.deadline_miss != 0
+            };
+            if !has_data { continue; }
 
             // Determine target based on outcome or feedback
-            let target_success = match (entry.outcome, entry.feedback) {
-                (1, _) => true,  // outcome=success
-                (2, _) | (3, _) => false, // outcome=fail or error
-                (_, 1) | (_, 3) => true,  // feedback=helpful or expected
-                (_, 2) => false, // feedback=not_helpful
-                _ => continue,
+            let target_success = if entry.op == 3 {
+                // Command prediction
+                match (entry.outcome, entry.feedback) {
+                    (1, _) => true,  // outcome=success
+                    (2, _) | (3, _) => false, // outcome=fail or error
+                    (_, 1) | (_, 3) => true,  // feedback=helpful or expected
+                    (_, 2) => false, // feedback=not_helpful
+                    _ => continue,
+                }
+            } else {
+                // Operator prediction (op == 4)
+                match (entry.deadline_miss, entry.feedback) {
+                    (1, _) => true,  // met_deadline
+                    (2, _) => false, // missed_deadline
+                    (_, 1) | (_, 3) => true,  // feedback=helpful or expected
+                    (_, 2) => false, // feedback=not_helpful
+                    _ => continue,
+                }
             };
 
             // Create training targets: [success_target, fail_target]
@@ -565,6 +594,103 @@ pub fn retrain_from_feedback(max_steps: usize) -> usize {
 
     metric_kv("nn_retrain_steps", trained);
     trained
+}
+
+// ===================================================================
+// Operator Health Prediction
+// ===================================================================
+
+/// Extract features from operator metrics for health prediction
+/// Features: [avg_recent_latency, channel_depth, operator_priority]
+fn extract_operator_features(_op_id: u32, recent_latency_us: u32, channel_depth: usize, priority: u8) -> [i16; MAX_IN] {
+    let mut features = [0i16; MAX_IN];
+
+    // Feature 0: Recent average latency (normalized: 0-10ms → 0-1000 milli)
+    let latency_milli = (recent_latency_us.min(10000) * 1000 / 10000) as i32;
+    features[0] = (latency_milli * 256 / 1000) as i16;
+
+    // Feature 1: Channel backpressure (normalized: 0-64 depth → 0-1000 milli)
+    let depth_milli = (channel_depth.min(64) * 1000 / 64) as i32;
+    features[1] = (depth_milli * 256 / 1000) as i16;
+
+    // Feature 2: Operator priority (normalized: 0-255 → 0-1000 milli)
+    let prio_milli = (priority as usize * 1000 / 255) as i32;
+    features[2] = (prio_milli * 256 / 1000) as i16;
+
+    features
+}
+
+/// Predict operator health before execution
+/// Returns (confidence 0-1000, will_meet_deadline)
+pub fn predict_operator_health(op_id: u32, recent_latency_us: u32, channel_depth: usize, priority: u8) -> (u16, bool) {
+    let mut n = NEURAL.lock();
+    if n.infer_count == 0 { n.reset_defaults(); }
+
+    let features = extract_operator_features(op_id, recent_latency_us, channel_depth, priority);
+    n.infer(&features[..3]);
+
+    let healthy_q88 = n.last_out[0];
+    let unhealthy_q88 = n.last_out[1];
+    let healthy_milli = ((healthy_q88 as i32) * 1000 / 256).max(0).min(1000);
+    let unhealthy_milli = ((unhealthy_q88 as i32) * 1000 / 256).max(0).min(1000);
+
+    let confidence = healthy_milli.max(unhealthy_milli) as u16;
+    let will_meet_deadline = healthy_milli >= unhealthy_milli;
+
+    // Log to audit ring
+    let mut entry = NN_AUDIT_ZERO;
+    entry.op = 4; // operator_predict
+    entry.in_len = 3;
+    entry.out_len = 2;
+    entry.operator_id = op_id;
+    entry.confidence = confidence;
+    entry.deadline_miss = 0; // pending
+    entry.predicted_latency = if will_meet_deadline { recent_latency_us } else { recent_latency_us * 2 };
+
+    // Store features and outputs
+    for i in 0..3 {
+        entry.inputs_q88[i] = features[i];
+    }
+    entry.outputs_q88[0] = healthy_q88;
+    entry.outputs_q88[1] = unhealthy_q88;
+
+    drop(n); // Drop neural lock before acquiring audit lock
+    NN_AUDIT.lock().push(entry);
+
+    (confidence, will_meet_deadline)
+}
+
+/// Record actual operator outcome after execution
+pub fn record_operator_outcome(op_id: u32, actual_latency_us: u32, missed_deadline: bool) {
+    let mut audit = NN_AUDIT.lock();
+    let start = if audit.filled { audit.buf.len() } else { audit.idx };
+
+    // Find most recent prediction for this operator
+    for i in (0..start).rev() {
+        let idx = if audit.idx == 0 { start - 1 - i } else { (audit.idx + audit.buf.len() - 1 - i) % audit.buf.len() };
+        if audit.buf[idx].op == 4 &&
+           audit.buf[idx].operator_id == op_id &&
+           audit.buf[idx].deadline_miss == 0 {
+            audit.buf[idx].actual_latency = actual_latency_us;
+            audit.buf[idx].deadline_miss = if missed_deadline { 2 } else { 1 };
+            break;
+        }
+    }
+}
+
+/// Record user feedback on operator health prediction
+pub fn record_operator_feedback(op_id: u32, feedback: u8) {
+    let mut audit = NN_AUDIT.lock();
+    let start = if audit.filled { audit.buf.len() } else { audit.idx };
+
+    // Find most recent operator prediction
+    for i in (0..start).rev() {
+        let idx = if audit.idx == 0 { start - 1 - i } else { (audit.idx + audit.buf.len() - 1 - i) % audit.buf.len() };
+        if audit.buf[idx].op == 4 && audit.buf[idx].operator_id == op_id {
+            audit.buf[idx].feedback = feedback;
+            return;
+        }
+    }
 }
 
 /// Print the audit ring as JSON array on UART (inputs/targets in milli)
