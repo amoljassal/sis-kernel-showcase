@@ -235,6 +235,102 @@ static NN_AUDIT: Mutex<NnAuditRing<8>> = Mutex::new(NnAuditRing::new());
 struct LearnState { on: bool, limit: usize }
 static LEARN: Mutex<LearnState> = Mutex::new(LearnState { on: false, limit: 1 });
 
+// --- Autonomous Scheduling Configuration ---
+pub struct NeuralSchedulingConfig {
+    pub enabled: bool,
+    pub confidence_threshold: u16,  // 0-1000 milli-units
+    pub priority_boost: u8,
+    pub max_boosts_per_window: usize,
+    boost_count: usize,  // Current boost count (for rate limiting)
+}
+
+impl NeuralSchedulingConfig {
+    pub const fn new() -> Self {
+        Self {
+            enabled: true,           // Autonomous scheduling ON by default
+            confidence_threshold: 700,  // Require 70% confidence to boost
+            priority_boost: 20,      // Boost priority by 20 points
+            max_boosts_per_window: 100,  // Max 100 boosts per window
+            boost_count: 0,
+        }
+    }
+
+    pub fn reset_boost_count(&mut self) {
+        self.boost_count = 0;
+    }
+
+    pub fn can_boost(&mut self) -> bool {
+        if self.boost_count >= self.max_boosts_per_window {
+            return false;
+        }
+        self.boost_count += 1;
+        true
+    }
+}
+
+static SCHED_CONFIG: Mutex<NeuralSchedulingConfig> = Mutex::new(NeuralSchedulingConfig::new());
+
+// --- Scheduling Audit Ring ---
+#[derive(Copy, Clone)]
+struct SchedulingAuditEntry {
+    timestamp_ns: u64,
+    operator_id: u8,
+    event_type: u8,  // 1=prediction, 2=boost, 3=retrain
+    confidence: u16,
+    old_priority: u8,
+    new_priority: u8,
+    latency_us: u32,
+    deadline_missed: u8,  // 0=met, 1=missed
+}
+
+impl SchedulingAuditEntry {
+    pub const fn empty() -> Self {
+        Self {
+            timestamp_ns: 0,
+            operator_id: 0,
+            event_type: 0,
+            confidence: 0,
+            old_priority: 0,
+            new_priority: 0,
+            latency_us: 0,
+            deadline_missed: 0,
+        }
+    }
+}
+
+struct SchedulingAuditRing<const N: usize> {
+    buf: [SchedulingAuditEntry; N],
+    idx: usize,
+    filled: bool,
+}
+
+impl<const N: usize> SchedulingAuditRing<N> {
+    const fn new() -> Self {
+        Self {
+            buf: [SchedulingAuditEntry::empty(); N],
+            idx: 0,
+            filled: false,
+        }
+    }
+
+    fn push(&mut self, entry: SchedulingAuditEntry) {
+        self.buf[self.idx] = entry;
+        self.idx += 1;
+        if self.idx >= N {
+            self.idx = 0;
+            self.filled = true;
+        }
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &SchedulingAuditEntry> {
+        let n = if self.filled { N } else { self.idx };
+        let start = if self.filled { self.idx } else { 0 };
+        (0..n).map(move |i| &self.buf[(start + i) % N])
+    }
+}
+
+static SCHED_AUDIT: Mutex<SchedulingAuditRing<32>> = Mutex::new(SchedulingAuditRing::new());
+
 pub fn reset() {
     let mut n = NEURAL.lock();
     n.reset_defaults();
@@ -844,4 +940,128 @@ pub fn load_all_milli(dims: (usize, usize, usize), weights_milli: &[i32]) -> boo
     if !n.set_dims(di, dh, do_) { return false; }
     drop(n);
     update_from_milli(weights_milli)
+}
+
+// --- Autonomous Scheduling API ---
+
+/// Enable or disable autonomous scheduling
+pub fn set_autonomous_enabled(enabled: bool) {
+    let mut cfg = SCHED_CONFIG.lock();
+    cfg.enabled = enabled;
+    metric_kv("neural_autonomous_mode", enabled as usize);
+}
+
+/// Get autonomous scheduling enabled state
+pub fn get_autonomous_enabled() -> bool {
+    SCHED_CONFIG.lock().enabled
+}
+
+/// Set scheduling configuration thresholds
+pub fn set_scheduling_config(confidence_threshold: u16, priority_boost: u8, max_boosts: usize) {
+    let mut cfg = SCHED_CONFIG.lock();
+    cfg.confidence_threshold = confidence_threshold;
+    cfg.priority_boost = priority_boost;
+    cfg.max_boosts_per_window = max_boosts;
+    metric_kv("neural_sched_conf_threshold", confidence_threshold as usize);
+    metric_kv("neural_sched_boost", priority_boost as usize);
+    metric_kv("neural_sched_max_boosts", max_boosts);
+}
+
+/// Get current scheduling configuration
+pub fn get_scheduling_config() -> (bool, u16, u8, usize) {
+    let cfg = SCHED_CONFIG.lock();
+    (cfg.enabled, cfg.confidence_threshold, cfg.priority_boost, cfg.max_boosts_per_window)
+}
+
+/// Check if autonomous boost is allowed (respects rate limit)
+pub fn can_autonomous_boost() -> bool {
+    let mut cfg = SCHED_CONFIG.lock();
+    cfg.enabled && cfg.can_boost()
+}
+
+/// Get boost configuration values for graph execution
+pub fn get_boost_params() -> (u16, u8) {
+    let cfg = SCHED_CONFIG.lock();
+    (cfg.confidence_threshold, cfg.priority_boost)
+}
+
+/// Reset boost count (call at start of each graph run)
+pub fn reset_boost_count() {
+    SCHED_CONFIG.lock().reset_boost_count();
+}
+
+/// Log a scheduling event to audit ring
+pub fn log_scheduling_event(
+    operator_id: u8,
+    event_type: u8,  // 1=prediction, 2=boost, 3=retrain
+    confidence: u16,
+    old_priority: u8,
+    new_priority: u8,
+    latency_us: u32,
+    deadline_missed: bool,
+) {
+    let entry = SchedulingAuditEntry {
+        timestamp_ns: crate::graph::cycles_to_ns(crate::graph::now_cycles()),
+        operator_id,
+        event_type,
+        confidence,
+        old_priority,
+        new_priority,
+        latency_us,
+        deadline_missed: deadline_missed as u8,
+    };
+    SCHED_AUDIT.lock().push(entry);
+}
+
+/// Print scheduling audit log
+pub fn print_scheduling_audit() {
+    let audit = SCHED_AUDIT.lock();
+    unsafe { crate::uart_print(b"[SCHED AUDIT] Recent scheduling events (up to 32):\n"); }
+
+    let mut count = 0;
+    for entry in audit.iter() {
+        if entry.event_type == 0 { continue; }  // Skip empty entries
+
+        unsafe { crate::uart_print(b"  ["); }
+        crate::shell::print_number_simple(count as u64);
+        unsafe { crate::uart_print(b"] ts="); }
+        crate::shell::print_number_simple(entry.timestamp_ns / 1000); // print in microseconds
+        unsafe { crate::uart_print(b"us op="); }
+        crate::shell::print_number_simple(entry.operator_id as u64);
+
+        unsafe { crate::uart_print(b" type="); }
+        match entry.event_type {
+            1 => unsafe { crate::uart_print(b"PREDICT"); },
+            2 => unsafe { crate::uart_print(b"BOOST"); },
+            3 => unsafe { crate::uart_print(b"RETRAIN"); },
+            _ => unsafe { crate::uart_print(b"UNKNOWN"); },
+        }
+
+        unsafe { crate::uart_print(b" conf="); }
+        crate::shell::print_number_simple(entry.confidence as u64);
+
+        if entry.event_type == 2 {  // BOOST event
+            unsafe { crate::uart_print(b" prio="); }
+            crate::shell::print_number_simple(entry.old_priority as u64);
+            unsafe { crate::uart_print(b"->"); }
+            crate::shell::print_number_simple(entry.new_priority as u64);
+        }
+
+        if entry.latency_us > 0 {
+            unsafe { crate::uart_print(b" lat="); }
+            crate::shell::print_number_simple(entry.latency_us as u64);
+            unsafe { crate::uart_print(b"us"); }
+        }
+
+        if entry.deadline_missed != 0 {
+            unsafe { crate::uart_print(b" DEADLINE_MISS"); }
+        }
+
+        unsafe { crate::uart_print(b"\n"); }
+        count += 1;
+    }
+
+    if count == 0 {
+        unsafe { crate::uart_print(b"  (no events yet)\n"); }
+    }
 }

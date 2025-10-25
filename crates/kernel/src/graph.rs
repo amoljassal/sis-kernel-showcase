@@ -108,6 +108,12 @@ impl GraphDemo {
         let mut schema_mismatch_count: usize = 0;
         let mut quality_warns: usize = 0;
 
+        // Reset boost count for this graph run
+        crate::neural::reset_boost_count();
+
+        // Get boost configuration
+        let (confidence_threshold, priority_boost) = crate::neural::get_boost_params();
+
         let t0 = now_cycles();
         for i in 0..self.n_items {
             // Neural-driven scheduling for Operator A
@@ -120,11 +126,22 @@ impl GraphDemo {
             );
             self.neural_predictions += 1;
 
+            // Log prediction event
+            crate::neural::log_scheduling_event(
+                1, 1, conf_a, self.op_a_priority, self.op_a_priority, 0, false
+            );
+
             // Autonomous decision: boost priority if prediction shows unhealthy with high confidence
-            if !will_meet_a && conf_a > 700 {
+            if !will_meet_a && conf_a > confidence_threshold && crate::neural::can_autonomous_boost() {
                 let old_prio = self.op_a_priority;
-                self.op_a_priority = self.op_a_priority.saturating_add(20);
+                self.op_a_priority = self.op_a_priority.saturating_add(priority_boost);
                 self.neural_adjustments += 1;
+
+                // Log boost event
+                crate::neural::log_scheduling_event(
+                    1, 2, conf_a, old_prio, self.op_a_priority, 0, false
+                );
+
                 if i < 5 { // Log first few adjustments for visibility
                     metric_kv("neural_boost_op", 1);
                     metric_kv("neural_boost_old_prio", old_prio as usize);
@@ -214,11 +231,22 @@ impl GraphDemo {
             );
             self.neural_predictions += 1;
 
+            // Log prediction event
+            crate::neural::log_scheduling_event(
+                2, 1, conf_b, self.op_b_priority, self.op_b_priority, 0, false
+            );
+
             // Autonomous decision: boost priority if prediction shows unhealthy with high confidence
-            if !will_meet_b && conf_b > 700 {
+            if !will_meet_b && conf_b > confidence_threshold && crate::neural::can_autonomous_boost() {
                 let old_prio = self.op_b_priority;
-                self.op_b_priority = self.op_b_priority.saturating_add(20);
+                self.op_b_priority = self.op_b_priority.saturating_add(priority_boost);
                 self.neural_adjustments += 1;
+
+                // Log boost event
+                crate::neural::log_scheduling_event(
+                    2, 2, conf_b, old_prio, self.op_b_priority, 0, false
+                );
+
                 if i < 5 { // Log first few adjustments for visibility
                     metric_kv("neural_boost_op", 2);
                     metric_kv("neural_boost_old_prio", old_prio as usize);
