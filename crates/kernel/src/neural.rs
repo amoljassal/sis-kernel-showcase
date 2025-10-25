@@ -176,7 +176,7 @@ static NEURAL: Mutex<NeuralAgent> = Mutex::new(NeuralAgent::new());
 // --- Audit ring for observability ---
 #[derive(Copy, Clone)]
 struct NnAuditEntry {
-    op: u8,            // 1=infer, 2=teach
+    op: u8,            // 1=infer, 2=teach, 3=command_predict
     in_len: u8,
     out_len: u8,
     ts_ns: u64,
@@ -184,6 +184,11 @@ struct NnAuditEntry {
     inputs_q88: [i16; MAX_IN],
     targets_q88: [i16; MAX_OUT], // only set for teach
     outputs_q88: [i16; MAX_OUT], // only set for infer
+    // Command prediction tracking (op=3)
+    command_hash: u32,  // Simple hash of command name
+    outcome: u8,        // 0=pending, 1=success, 2=fail, 3=error
+    feedback: u8,       // 0=none, 1=helpful, 2=not_helpful, 3=expected
+    confidence: u16,    // Predicted confidence (0-1000)
 }
 
 const NN_AUDIT_ZERO: NnAuditEntry = NnAuditEntry {
@@ -195,6 +200,10 @@ const NN_AUDIT_ZERO: NnAuditEntry = NnAuditEntry {
     inputs_q88: [0; MAX_IN],
     targets_q88: [0; MAX_OUT],
     outputs_q88: [0; MAX_OUT],
+    command_hash: 0,
+    outcome: 0,
+    feedback: 0,
+    confidence: 0,
 };
 
 struct NnAuditRing<const N: usize> {
@@ -212,7 +221,7 @@ impl<const N: usize> NnAuditRing<N> {
     }
 }
 
-static NN_AUDIT: Mutex<NnAuditRing<32>> = Mutex::new(NnAuditRing::new());
+static NN_AUDIT: Mutex<NnAuditRing<8>> = Mutex::new(NnAuditRing::new());
 // Learning mode state
 struct LearnState { on: bool, limit: usize }
 static LEARN: Mutex<LearnState> = Mutex::new(LearnState { on: false, limit: 1 });
@@ -384,6 +393,180 @@ pub fn teach_milli(inputs_milli: &[i32], targets_milli: &[i32]) -> bool {
     true
 }
 
+// --- Command Outcome Prediction & Feedback ---
+
+/// Simple hash function for command names (djb2)
+fn hash_command(cmd: &str) -> u32 {
+    let mut hash: u32 = 5381;
+    for b in cmd.bytes() {
+        hash = hash.wrapping_mul(33).wrapping_add(b as u32);
+    }
+    hash
+}
+
+/// Extract features from command string for prediction
+fn extract_command_features(cmd: &str) -> [i16; MAX_IN] {
+    let mut features = [0i16; MAX_IN];
+    // Feature 0: command length (normalized to milli, max 50 chars)
+    features[0] = ((cmd.len().min(50) * 1000 / 50) as i32 * 256 / 1000) as i16;
+
+    // Feature 1: has arguments (0 or 1000 milli)
+    let has_args = if cmd.contains(' ') { 1000 } else { 0 };
+    features[1] = (has_args * 256 / 1000) as i16;
+
+    // Feature 2: starts with known prefix (simplified heuristic)
+    let known_prefixes = ["graphctl", "neuralctl", "llmctl", "help", "metrics"];
+    let is_known = known_prefixes.iter().any(|prefix| cmd.starts_with(prefix));
+    features[2] = if is_known { (1000 * 256 / 1000) as i16 } else { 0 };
+
+    features
+}
+
+/// Predict command outcome before execution; returns (confidence_0_1000, predicted_success)
+pub fn predict_command(cmd: &str) -> (u16, bool) {
+    let mut n = NEURAL.lock();
+
+    // Lazy init
+    if n.infer_count == 0 {
+        n.reset_defaults();
+    }
+
+    let features = extract_command_features(cmd);
+    n.infer(&features[..3]);
+
+    // Interpret outputs: output[0] = success likelihood, output[1] = failure likelihood
+    let success_q88 = n.last_out[0];
+    let fail_q88 = n.last_out[1];
+
+    // Convert to milli (0-1000)
+    let success_milli = ((success_q88 as i32) * 1000 / 256).max(0).min(1000);
+    let fail_milli = ((fail_q88 as i32) * 1000 / 256).max(0).min(1000);
+
+    // Confidence is the max of both (how certain we are)
+    let confidence = success_milli.max(fail_milli) as u16;
+    let predicted_success = success_milli >= fail_milli;
+
+    // Log prediction to audit ring
+    let cmd_hash = hash_command(cmd);
+    let mut entry = NN_AUDIT_ZERO;
+    entry.op = 3; // command_predict
+    entry.in_len = 3;
+    entry.out_len = 2;
+    entry.ts_ns = crate::graph::cycles_to_ns(crate::graph::now_cycles());
+    entry.command_hash = cmd_hash;
+    entry.outcome = 0; // pending
+    entry.confidence = confidence;
+    for i in 0..3 { entry.inputs_q88[i] = features[i]; }
+    for i in 0..2 { entry.outputs_q88[i] = n.last_out[i]; }
+    NN_AUDIT.lock().push(entry);
+
+    (confidence, predicted_success)
+}
+
+/// Record actual command outcome (1=success, 2=fail, 3=error)
+pub fn record_command_outcome(cmd: &str, outcome: u8) {
+    let cmd_hash = hash_command(cmd);
+    let mut audit = NN_AUDIT.lock();
+
+    // Find most recent prediction entry for this command
+    let start = if audit.filled { audit.buf.len() } else { audit.idx };
+    for i in (0..start).rev() {
+        let idx = if audit.filled {
+            (audit.idx + audit.buf.len() - 1 - i) % audit.buf.len()
+        } else {
+            start - 1 - i
+        };
+
+        if audit.buf[idx].op == 3 && audit.buf[idx].command_hash == cmd_hash && audit.buf[idx].outcome == 0 {
+            audit.buf[idx].outcome = outcome;
+            break;
+        }
+    }
+}
+
+/// Record user feedback for last prediction (1=helpful, 2=not_helpful, 3=expected)
+pub fn record_feedback(feedback: u8) {
+    let mut audit = NN_AUDIT.lock();
+
+    // Find most recent command prediction entry
+    let start = if audit.filled { audit.buf.len() } else { audit.idx };
+    for i in (0..start).rev() {
+        let idx = if audit.filled {
+            (audit.idx + audit.buf.len() - 1 - i) % audit.buf.len()
+        } else {
+            start - 1 - i
+        };
+
+        if audit.buf[idx].op == 3 {
+            audit.buf[idx].feedback = feedback;
+            return;
+        }
+    }
+}
+
+/// Retrain using feedback-labeled command predictions from audit ring
+pub fn retrain_from_feedback(max_steps: usize) -> usize {
+    // First, collect training examples from audit ring
+    let mut training_examples: heapless::Vec<([i32; 3], [i32; 2]), 8> = heapless::Vec::new();
+
+    {
+        let audit = NN_AUDIT.lock();
+        let total = if audit.filled { audit.buf.len() } else { audit.idx };
+
+        for i in 0..total.min(max_steps) {
+            let idx = if audit.filled {
+                (audit.idx + audit.buf.len() - 1 - i) % audit.buf.len()
+            } else {
+                total - 1 - i
+            };
+
+            let entry = &audit.buf[idx];
+
+            // Only retrain on command predictions with feedback or confirmed outcomes
+            if entry.op != 3 { continue; }
+            if entry.feedback == 0 && entry.outcome == 0 { continue; }
+
+            // Determine target based on outcome or feedback
+            let target_success = match (entry.outcome, entry.feedback) {
+                (1, _) => true,  // outcome=success
+                (2, _) | (3, _) => false, // outcome=fail or error
+                (_, 1) | (_, 3) => true,  // feedback=helpful or expected
+                (_, 2) => false, // feedback=not_helpful
+                _ => continue,
+            };
+
+            // Create training targets: [success_target, fail_target]
+            let targets_milli = if target_success {
+                [1000i32, 0i32] // high success, low fail
+            } else {
+                [0i32, 1000i32] // low success, high fail
+            };
+
+            // Extract inputs from entry
+            let inputs_milli: [i32; 3] = [
+                (entry.inputs_q88[0] as i32) * 1000 / 256,
+                (entry.inputs_q88[1] as i32) * 1000 / 256,
+                (entry.inputs_q88[2] as i32) * 1000 / 256,
+            ];
+
+            // Store for training
+            if training_examples.push((inputs_milli, targets_milli)).is_err() {
+                break; // Vec full
+            }
+        }
+    } // Drop audit lock here
+
+    // Now perform training without holding the lock
+    let mut trained = 0;
+    for (inputs, targets) in training_examples.iter() {
+        let _ = teach_milli(&inputs[..3], &targets[..2]);
+        trained += 1;
+    }
+
+    metric_kv("nn_retrain_steps", trained);
+    trained
+}
+
 /// Print the audit ring as JSON array on UART (inputs/targets in milli)
 pub fn audit_print_json() {
     let a = NN_AUDIT.lock();
@@ -435,7 +618,7 @@ pub fn audit_print_json() {
 pub fn retrain(count: usize) -> usize {
     let mut applied = 0usize;
     // Snapshot entries first to avoid holding lock during teach
-    let mut items: heapless::Vec<(heapless::Vec<i32, MAX_IN>, heapless::Vec<i32, MAX_OUT>), 16> = heapless::Vec::new();
+    let mut items: heapless::Vec<(heapless::Vec<i32, MAX_IN>, heapless::Vec<i32, MAX_OUT>), 8> = heapless::Vec::new();
     {
         let a = NN_AUDIT.lock();
         let total = if a.filled { a.buf.len() } else { a.idx };
