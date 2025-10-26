@@ -609,6 +609,19 @@ pub fn predict_command(cmd: &str) -> (u16, bool) {
         let cmd_len = cmd.len();
         let is_heavy = cmd_len > 20 || cmd.contains("stress") || cmd.contains("test");
 
+        // Record prediction for tracking accuracy
+        let prediction_type = if is_heavy {
+            crate::prediction_tracker::PredictionType::CommandHeavy
+        } else {
+            crate::prediction_tracker::PredictionType::CommandRapidStream
+        };
+        let predicted_value = if predicted_success { 1 } else { 0 }; // 1 = success, 0 = failure
+        let _pred_id = crate::prediction_tracker::record_prediction(
+            prediction_type,
+            predicted_value,
+            confidence as i16,
+        );
+
         if is_heavy {
             crate::agent_bus::publish_message(crate::agent_bus::AgentMessage::CommandHeavyPredicted {
                 command_hash: cmd_hash,
@@ -1353,6 +1366,23 @@ pub fn predict_memory_health() -> (u16, bool, bool) {
     // Threshold for decisions
     let oom_risk = health_milli < -300;  // Negative output = unhealthy
     let compact_needed = compact_milli > 300;  // Positive output = compact needed
+
+    // Record predictions for tracking accuracy
+    // Memory pressure prediction (convert health to pressure: lower health = higher pressure)
+    let pressure_value = ((-health_milli + 1000) / 2).clamp(0, 1000) as i16; // 0-1000 scale
+    let _pressure_pred_id = crate::prediction_tracker::record_prediction(
+        crate::prediction_tracker::PredictionType::MemoryPressure,
+        pressure_value,
+        confidence as i16,
+    );
+
+    // Compaction needed prediction
+    let compact_value = if compact_needed { 1 } else { 0 };
+    let _compact_pred_id = crate::prediction_tracker::record_prediction(
+        crate::prediction_tracker::PredictionType::MemoryCompactionNeeded,
+        compact_value,
+        confidence as i16,
+    );
 
     // Publish messages to agent bus for cross-subsystem coordination
     if confidence >= 300 {  // Only publish if confidence is sufficient (30%+)

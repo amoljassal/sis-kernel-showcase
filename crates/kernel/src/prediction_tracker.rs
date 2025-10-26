@@ -155,14 +155,16 @@ impl PredictionLedger {
     }
 
     /// Compute accuracy by prediction type
+    /// Returns (correct, total_with_outcomes, total_all)
     pub fn compute_accuracy_by_type(
         &self,
         pred_type: PredictionType,
         last_n: usize,
-    ) -> (usize, usize) {
+    ) -> (usize, usize, usize) {
         let n = if last_n > self.count { self.count } else { last_n };
         let mut correct = 0;
         let mut total_with_outcomes = 0;
+        let mut total_all = 0;
 
         let start_idx = if self.count < MAX_PREDICTIONS {
             0
@@ -174,18 +176,19 @@ impl PredictionLedger {
             let idx = (start_idx + self.count - n + i) % MAX_PREDICTIONS;
             let record = &self.predictions[idx];
 
-            if record.valid
-                && record.prediction_type == pred_type
-                && record.actual_value.is_some()
-            {
-                total_with_outcomes += 1;
-                if let Some(true) = record.is_correct() {
-                    correct += 1;
+            if record.valid && record.prediction_type == pred_type {
+                total_all += 1;
+
+                if record.actual_value.is_some() {
+                    total_with_outcomes += 1;
+                    if let Some(true) = record.is_correct() {
+                        correct += 1;
+                    }
                 }
             }
         }
 
-        (correct, total_with_outcomes)
+        (correct, total_with_outcomes, total_all)
     }
 
     /// Get total number of predictions
@@ -408,10 +411,11 @@ pub fn compute_accuracy(last_n: usize) -> (usize, usize) {
 }
 
 /// Compute accuracy by prediction type
+/// Returns (correct, total_with_outcomes, total_all)
 pub fn compute_accuracy_by_type(
     pred_type: PredictionType,
     last_n: usize,
-) -> (usize, usize) {
+) -> (usize, usize, usize) {
     let ledger = PREDICTION_LEDGER.lock();
     ledger.compute_accuracy_by_type(pred_type, last_n)
 }
@@ -460,4 +464,262 @@ pub fn get_ood_threshold() -> i16 {
 pub fn set_ood_threshold(threshold: i16) {
     let mut detector = OOD_DETECTOR.lock();
     detector.threshold = threshold;
+}
+
+// ============================================================================
+// Adaptive Learning Rate & Distribution Shift Monitoring
+// ============================================================================
+
+/// Learning rate state
+pub struct LearningRateState {
+    pub current_rate: i16,  // Q8.8: 256 = 1.0
+    pub last_accuracy: u8,  // 0-100 percentage
+    pub adjustments_made: u32,
+}
+
+impl LearningRateState {
+    pub const fn new() -> Self {
+        Self {
+            current_rate: 51,  // Q8.8: 51 = 0.2 (default learning rate)
+            last_accuracy: 0,
+            adjustments_made: 0,
+        }
+    }
+}
+
+/// Historical distribution snapshot
+#[derive(Copy, Clone)]
+pub struct DistributionSnapshot {
+    pub stats: DistributionStats,
+    pub timestamp: u64,
+    pub sample_count: u32,
+    pub valid: bool,
+}
+
+impl DistributionSnapshot {
+    pub const fn empty() -> Self {
+        Self {
+            stats: DistributionStats::new(),
+            timestamp: 0,
+            sample_count: 0,
+            valid: false,
+        }
+    }
+}
+
+/// Distribution shift monitor
+pub struct DistributionShiftMonitor {
+    /// Ring buffer of historical distributions
+    pub history: [DistributionSnapshot; 100],
+    pub head: usize,
+    pub count: usize,
+    pub drift_detections: u32,
+}
+
+impl DistributionShiftMonitor {
+    const fn new() -> Self {
+        Self {
+            history: [DistributionSnapshot::empty(); 100],
+            head: 0,
+            count: 0,
+            drift_detections: 0,
+        }
+    }
+
+    /// Add a distribution snapshot to history
+    pub fn record_snapshot(&mut self, stats: DistributionStats) {
+        if !stats.valid {
+            return;
+        }
+
+        let snapshot = DistributionSnapshot {
+            stats,
+            timestamp: crate::time::get_timestamp_us(),
+            sample_count: stats.sample_count,
+            valid: true,
+        };
+
+        self.history[self.head] = snapshot;
+        self.head = (self.head + 1) % 100;
+        if self.count < 100 {
+            self.count += 1;
+        }
+    }
+
+    /// Compute average distribution from recent history
+    pub fn get_historical_average(&self, last_n: usize) -> Option<DistributionStats> {
+        if self.count == 0 {
+            return None;
+        }
+
+        let n = if last_n > self.count { self.count } else { last_n };
+        let mut avg_stats = DistributionStats::new();
+
+        // Compute average means
+        let mut mean_sums = [0i32; MAX_FEATURES];
+        let mut valid_count = 0;
+
+        for i in 0..n {
+            let idx = (self.head + 100 - n + i) % 100;
+            let snapshot = &self.history[idx];
+
+            if snapshot.valid {
+                for j in 0..MAX_FEATURES {
+                    mean_sums[j] += snapshot.stats.means[j] as i32;
+                }
+                valid_count += 1;
+            }
+        }
+
+        if valid_count == 0 {
+            return None;
+        }
+
+        for i in 0..MAX_FEATURES {
+            avg_stats.means[i] = (mean_sums[i] / valid_count as i32) as i16;
+        }
+
+        avg_stats.valid = true;
+        avg_stats.sample_count = valid_count;
+
+        Some(avg_stats)
+    }
+
+    /// Compute simplified KL divergence between two distributions
+    /// Returns KL divergence in Q8.8 format (approximate)
+    pub fn compute_kl_divergence(
+        &self,
+        current: &DistributionStats,
+        historical: &DistributionStats,
+    ) -> i16 {
+        if !current.valid || !historical.valid {
+            return 0;
+        }
+
+        let mut kl_sum: i32 = 0;
+
+        for i in 0..MAX_FEATURES {
+            // KL divergence: sum of (current - historical)^2 / (historical + epsilon)
+            // Simplified approximation using squared mean differences
+
+            let current_mean = current.means[i] as i32;
+            let historical_mean = historical.means[i] as i32;
+
+            let diff = current_mean - historical_mean;
+            let squared_diff = (diff * diff) / 256; // Normalize Q8.8
+
+            // Add small epsilon to avoid division by zero
+            let denominator = if historical.stddevs[i] == 0 {
+                256 // Q8.8: 1.0
+            } else {
+                historical.stddevs[i] as i32
+            };
+
+            kl_sum += (squared_diff * 256) / denominator;
+        }
+
+        // Average across features and scale to Q8.8
+        let kl_avg = kl_sum / MAX_FEATURES as i32;
+        kl_avg.clamp(0, i16::MAX as i32) as i16
+    }
+
+    /// Check for distribution drift
+    /// Returns (is_drifting, kl_divergence)
+    pub fn check_drift(&mut self, current: &DistributionStats) -> (bool, i16) {
+        let historical = match self.get_historical_average(50) {
+            Some(h) => h,
+            None => return (false, 0), // Not enough history yet
+        };
+
+        let kl_div = self.compute_kl_divergence(current, &historical);
+
+        // Threshold: 102 in Q8.8 = ~0.4
+        let threshold = 102i16;
+        let is_drifting = kl_div > threshold;
+
+        if is_drifting {
+            self.drift_detections += 1;
+        }
+
+        (is_drifting, kl_div)
+    }
+}
+
+/// Global learning rate state
+static LEARNING_RATE_STATE: Mutex<LearningRateState> = Mutex::new(LearningRateState::new());
+
+/// Global distribution shift monitor
+static DISTRIBUTION_SHIFT_MONITOR: Mutex<DistributionShiftMonitor> =
+    Mutex::new(DistributionShiftMonitor::new());
+
+// ============================================================================
+// Public API for Adaptive Learning & Distribution Shift
+// ============================================================================
+
+/// Adapt learning rate based on prediction accuracy
+/// Returns (new_learning_rate, adjustment_made)
+pub fn adapt_learning_rate() -> (i16, bool) {
+    let (correct, total) = compute_accuracy(100);
+
+    if total == 0 {
+        // Not enough predictions yet
+        return (51, false); // Q8.8: 0.2
+    }
+
+    let accuracy_pct = ((correct * 100) / total) as u8;
+
+    let mut state = LEARNING_RATE_STATE.lock();
+    let old_rate = state.current_rate;
+
+    // Adapt based on accuracy
+    if accuracy_pct < 40 {
+        // Low accuracy - increase exploration (higher learning rate)
+        state.current_rate = 77; // Q8.8: ~0.3
+    } else if accuracy_pct > 75 {
+        // High accuracy - decrease exploration (lower learning rate)
+        state.current_rate = 26; // Q8.8: ~0.1
+    } else {
+        // Medium accuracy - use default
+        state.current_rate = 51; // Q8.8: ~0.2
+    }
+
+    state.last_accuracy = accuracy_pct;
+
+    let adjustment_made = old_rate != state.current_rate;
+    if adjustment_made {
+        state.adjustments_made += 1;
+    }
+
+    (state.current_rate, adjustment_made)
+}
+
+/// Get current learning rate state
+pub fn get_learning_rate_state() -> LearningRateState {
+    let state = LEARNING_RATE_STATE.lock();
+    LearningRateState {
+        current_rate: state.current_rate,
+        last_accuracy: state.last_accuracy,
+        adjustments_made: state.adjustments_made,
+    }
+}
+
+/// Record distribution snapshot for drift monitoring
+pub fn record_distribution_snapshot(stats: DistributionStats) {
+    let mut monitor = DISTRIBUTION_SHIFT_MONITOR.lock();
+    monitor.record_snapshot(stats);
+}
+
+/// Check for distribution drift
+/// Returns (is_drifting, kl_divergence, drift_count)
+pub fn check_distribution_drift(current_stats: &DistributionStats) -> (bool, i16, u32) {
+    let mut monitor = DISTRIBUTION_SHIFT_MONITOR.lock();
+    let (is_drifting, kl_div) = monitor.check_drift(current_stats);
+    let drift_count = monitor.drift_detections;
+    (is_drifting, kl_div, drift_count)
+}
+
+/// Get distribution shift statistics
+pub fn get_drift_stats() -> (usize, u32) {
+    let monitor = DISTRIBUTION_SHIFT_MONITOR.lock();
+    (monitor.count, monitor.drift_detections)
 }
