@@ -266,6 +266,24 @@ impl DecisionAuditLog {
         }
     }
 
+    /// Get number of decisions in log
+    pub fn len(&self) -> usize {
+        self.count
+    }
+
+    /// Get current head index
+    pub fn head_index(&self) -> usize {
+        self.head
+    }
+
+    /// Get entry at specific index
+    pub fn get_entry(&self, idx: usize) -> Option<&DecisionRecord> {
+        if idx >= 1000 {
+            return None;
+        }
+        Some(&self.entries[idx])
+    }
+
     /// Get last decision
     pub fn get_last(&self) -> Option<&DecisionRecord> {
         if self.count == 0 {
