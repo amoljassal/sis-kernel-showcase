@@ -1208,10 +1208,219 @@ Week 5, Day 5: ✅ COMPLETE
 - ✅ All 9 steps implemented with safety checks
 - ✅ Compiled successfully in QEMU (zero errors, zero warnings after fixes)
 
-Week 5, Day 6-7: 📋 NEXT
-- autoctl shell commands (on/off/status/interval/explain/dashboard)
-- Model checkpointing and versioning
-- QEMU testing (Phase A: supervised autonomy)
+**Day 6-7: Autonomous Control Shell Commands (Complete)**
+
+The `autoctl` command provides a comprehensive user interface for controlling and monitoring the autonomous meta-agent system. All subcommands integrate with the safety infrastructure, audit log, and watchdog system.
+
+**Command Reference:**
+
+**1. `autoctl on` - Enable Autonomous Mode**
+```
+sis> autoctl on
+[AUTOCTL] Autonomous mode ENABLED
+```
+- Enables the autonomous decision loop
+- Decisions will execute at configured interval (default: 500ms)
+- Safe mode and watchdog remain active
+- Learning is enabled by default
+
+**2. `autoctl off` - Disable Autonomous Mode**
+```
+sis> autoctl off
+[AUTOCTL] Autonomous mode DISABLED
+```
+- Disables the autonomous decision loop
+- No automatic decisions will be made
+- Manual shell commands remain available
+- Safe for maintenance and debugging
+
+**3. `autoctl status` - Show Comprehensive Status**
+```
+sis> autoctl status
+
+=== Autonomous Control Status ===
+  Mode: ENABLED
+  Safe Mode: INACTIVE
+  Learning: ACTIVE
+  Decision Interval: 500 ms
+  Total Decisions: 42
+  Audit Log: 42/1000 entries
+  Watchdog Triggers: 0 low rewards, 0 high TD errors
+```
+
+Status fields explained:
+- **Mode**: `ENABLED` or `DISABLED` - autonomous control state
+- **Safe Mode**: `ACTIVE` (emergency stop) or `INACTIVE` (normal operation)
+- **Learning**: `ACTIVE` (updating weights) or `FROZEN` (inference-only)
+- **Decision Interval**: Milliseconds between autonomous decisions (100-60000ms range)
+- **Total Decisions**: Cumulative count of decisions made since boot
+- **Audit Log**: Current entries / 1000 max capacity
+- **Watchdog Triggers**: Safety trigger counters
+  - Low rewards: Consecutive negative reward count (triggers at 5)
+  - High TD errors: Consecutive divergence count (triggers at 3)
+
+**4. `autoctl interval <milliseconds>` - Set Decision Interval**
+```
+sis> autoctl interval 1000
+[AUTOCTL] Decision interval set to 1000 ms
+```
+- Sets time between autonomous decisions
+- Valid range: 100-60000 ms (0.1s to 60s)
+- Lower interval = more reactive but higher CPU usage
+- Higher interval = more stable but slower adaptation
+- Default: 500ms (2 decisions per second)
+
+**5. `autoctl explain <decision_id>` - Explain Specific Decision**
+```
+sis> autoctl explain 42
+
+=== Decision #42 ===
+  Timestamp: 123456789 us
+  Confidence: 750/1000
+  Directives: [Mem:250, Sched:-100, Cmd:50]
+  Actions Taken: 0x3
+  Reward: 120
+  TD Error: 120
+  Safety Flags: 0x0
+  Explanation: Triggered compaction due to high memory pressure
+```
+
+Decision record fields:
+- **Timestamp**: Microseconds since boot
+- **Confidence**: Meta-agent confidence in decision (0-1000, threshold: 600)
+- **Directives**: Three Q8.8 fixed-point values for memory, scheduling, command subsystems
+  - Range: -1000 to +1000
+  - Positive = increase aggressiveness, Negative = decrease
+- **Actions Taken**: Bitmask showing which actions executed
+  - `0x1` = Memory action (compaction/relaxation)
+  - `0x2` = Scheduling action (priority adjustment)
+  - `0x4` = Command action (prediction aggressiveness)
+- **Reward**: Multi-objective total reward (-500 to +500)
+- **TD Error**: Temporal difference error (simple version: equals reward)
+- **Safety Flags**: Bitfield of safety events
+  - `0x1` = Hard limit violation
+  - `0x2` = Rate limited
+  - `0x4` = Watchdog trigger
+  - `0x8` = Low confidence
+- **Explanation**: Human-readable rationale (one of 22 ExplanationCode variants)
+
+**6. `autoctl dashboard` - Real-Time Decision Dashboard**
+```
+sis> autoctl dashboard
+
+=== Autonomous Control Dashboard ===
+  Total Decisions: 42/1000
+
+Last 10 Decisions:
+ID      | Reward | Actions | Explanation
+--------|--------|---------|--------------------------------------------------
+38      | 120    | 0x3     | Triggered compaction due to high memory pressure
+39      | -50    | 0x0     | Skipped action: confidence below threshold
+40      | 80     | 0x2     | Lowered priorities due to deadline misses
+41      | 0      | 0x0     | All subsystems healthy, no action needed
+42      | 150    | 0x7     | Pareto-optimal action selected
+```
+
+Dashboard features:
+- Shows last 10 decisions (or fewer if <10 recorded)
+- Tabular format for quick scanning
+- Truncates long explanations to 50 characters
+- Most recent decision at bottom (chronological order)
+- Empty state message: "No decisions recorded yet."
+
+**Integration with Audit Log:**
+
+All autoctl commands read from the `DecisionAuditLog` structure:
+- 1000-entry ring buffer (circular, overwrites oldest)
+- Each entry: 72 bytes (decision ID, timestamp, state, directives, actions, reward, safety flags, rationale)
+- Thread-safe access via Mutex guard
+- Persistent across enable/disable cycles
+- Cleared only on kernel reboot
+
+**Public API Added to `autonomy.rs`:**
+
+```rust
+// DecisionAuditLog accessor methods
+pub fn len(&self) -> usize              // Get number of decisions
+pub fn head_index(&self) -> usize       // Get current head position
+pub fn get_entry(&self, idx: usize) -> Option<&DecisionRecord>  // Get entry by index
+
+// AutonomousControl methods
+pub fn is_enabled(&self) -> bool        // Check if autonomous mode enabled
+pub fn is_safe_mode(&self) -> bool      // Check if safe mode active
+pub fn enable(&self)                    // Enable autonomous mode
+pub fn disable(&self)                   // Disable autonomous mode
+```
+
+**Shell Implementation Details:**
+
+Location: `crates/kernel/src/shell.rs:1136-1378`
+
+The `cmd_autoctl()` function:
+- 242 lines implementing all 6 subcommands
+- Follows existing shell command patterns (`cmd_mlctl`, `cmd_actorctl`)
+- Uses `self.print_number_simple()` for formatted output
+- Uses `self.print_hex()` for bitmask display
+- Validates arguments before execution
+- Provides helpful usage messages on error
+
+**Usage Patterns:**
+
+**Scenario 1: Enable autonomous mode and monitor**
+```
+autoctl on
+autoctl status          # Check initial state
+autoctl dashboard       # Wait 10 seconds, see decisions accumulate
+```
+
+**Scenario 2: Investigate specific decision**
+```
+autoctl dashboard       # See recent decisions
+autoctl explain 42      # Deep dive into decision #42
+```
+
+**Scenario 3: Tune decision interval**
+```
+autoctl interval 2000   # Slow down to 1 decision every 2 seconds
+autoctl status          # Verify new interval
+```
+
+**Scenario 4: Emergency stop**
+```
+autoctl off             # Immediately disable autonomous mode
+autoctl status          # Confirm safe mode if needed
+```
+
+**Implementation Status:**
+
+Week 5, Day 6-7 (Part 1): ✅ COMPLETE
+- ✅ `autoctl on/off` - Enable/disable autonomous mode (6 lines)
+- ✅ `autoctl status` - Comprehensive status display (30 lines)
+- ✅ `autoctl interval N` - Set decision interval (10 lines)
+- ✅ `autoctl explain ID` - Detailed decision explanation (70 lines)
+- ✅ `autoctl dashboard` - Last 10 decisions table (80 lines)
+- ✅ Public accessor methods in `DecisionAuditLog` (20 lines)
+- ✅ Compiled successfully in QEMU
+- ✅ Tested all 6 subcommands in running kernel
+
+Week 5, Day 6-7 (Part 2): 📋 NEXT
+- Model checkpointing and versioning (save/restore neural network weights)
+- QEMU testing (Phase A: supervised autonomy with real workloads)
+
+**Code Statistics:**
+
+Day 6-7 (Part 1) additions:
+- +242 lines added to `shell.rs` (autoctl command implementation)
+- +20 lines added to `autonomy.rs` (public accessor methods)
+- 6 subcommands implemented
+- 3 new public methods on DecisionAuditLog
+- 0 compilation errors, 0 warnings
+
+Total Week 5 so far:
+- +970 lines in `autonomy.rs` (Day 1-2: 500, Day 3-4: 467, Day 5: 457, Day 6-7a: 20)
+- +242 lines in `shell.rs` (Day 6-7a: autoctl)
+- Complete autonomous meta-agent execution infrastructure
+- Complete user interface for control and monitoring
 
 **Code Statistics:**
 

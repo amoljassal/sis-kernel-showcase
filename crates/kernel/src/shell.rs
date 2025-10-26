@@ -140,6 +140,7 @@ impl Shell {
                 "mladvdemo" => { self.cmd_ml_advanced_demo(); true },
                 "actorctl" => { self.cmd_actorctl(&parts[1..]); true },
                 "actorcriticdemo" => { self.cmd_actor_critic_demo(); true },
+                "autoctl" => { self.cmd_autoctl(&parts[1..]); true },
                 "memctl" => { self.cmd_memctl(&parts[1..]); true },
                 "ask-ai" => { self.cmd_ask_ai(&parts[1..]); true },
                 "nnjson" => { self.cmd_nn_json(); true },
@@ -1129,6 +1130,250 @@ impl Shell {
                 }
             }
             _ => unsafe { crate::uart_print(b"Usage: mlctl <status|replay N|weights P W L|features>\n"); }
+        }
+    }
+
+    fn cmd_autoctl(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard>\n"); }
+            return;
+        }
+
+        match args[0] {
+            "on" => {
+                crate::autonomy::AUTONOMOUS_CONTROL.enable();
+                unsafe { crate::uart_print(b"[AUTOCTL] Autonomous mode ENABLED\n"); }
+            }
+            "off" => {
+                crate::autonomy::AUTONOMOUS_CONTROL.disable();
+                unsafe { crate::uart_print(b"[AUTOCTL] Autonomous mode DISABLED\n"); }
+            }
+            "status" => {
+                let enabled = crate::autonomy::AUTONOMOUS_CONTROL.is_enabled();
+                let safe_mode = crate::autonomy::AUTONOMOUS_CONTROL.is_safe_mode();
+                let total_decisions = crate::autonomy::AUTONOMOUS_CONTROL.total_decisions.load(core::sync::atomic::Ordering::Relaxed);
+                let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL.decision_interval_ms.load(core::sync::atomic::Ordering::Relaxed);
+                let learning_frozen = crate::autonomy::AUTONOMOUS_CONTROL.learning_frozen.load(core::sync::atomic::Ordering::Relaxed);
+
+                unsafe {
+                    crate::uart_print(b"\n=== Autonomous Control Status ===\n");
+                    crate::uart_print(b"  Mode: ");
+                    crate::uart_print(if enabled { b"ENABLED\n" } else { b"DISABLED\n" });
+                    crate::uart_print(b"  Safe Mode: ");
+                    crate::uart_print(if safe_mode { b"ACTIVE\n" } else { b"INACTIVE\n" });
+                    crate::uart_print(b"  Learning: ");
+                    crate::uart_print(if learning_frozen { b"FROZEN\n" } else { b"ACTIVE\n" });
+                    crate::uart_print(b"  Decision Interval: ");
+                    self.print_number_simple(interval_ms);
+                    crate::uart_print(b" ms\n");
+                    crate::uart_print(b"  Total Decisions: ");
+                    self.print_number_simple(total_decisions);
+                    crate::uart_print(b"\n");
+                }
+
+                let audit_log = crate::autonomy::get_audit_log();
+                unsafe {
+                    crate::uart_print(b"  Audit Log: ");
+                    self.print_number_simple(audit_log.len() as u64);
+                    crate::uart_print(b"/1000 entries\n");
+                }
+                drop(audit_log);
+
+                let watchdog = crate::autonomy::get_watchdog();
+                unsafe {
+                    crate::uart_print(b"  Watchdog Triggers: ");
+                    self.print_number_simple(watchdog.consecutive_low_rewards as u64);
+                    crate::uart_print(b" low rewards, ");
+                    self.print_number_simple(watchdog.consecutive_high_td_errors as u64);
+                    crate::uart_print(b" high TD errors\n");
+                }
+                drop(watchdog);
+
+                unsafe { crate::uart_print(b"\n"); }
+            }
+            "interval" => {
+                if args.len() < 2 {
+                    unsafe { crate::uart_print(b"Usage: autoctl interval <milliseconds>\n"); }
+                    return;
+                }
+                let interval_ms = args[1].parse::<u64>().unwrap_or(500).clamp(100, 60000);
+                crate::autonomy::AUTONOMOUS_CONTROL.decision_interval_ms.store(interval_ms, core::sync::atomic::Ordering::Relaxed);
+                unsafe {
+                    crate::uart_print(b"[AUTOCTL] Decision interval set to ");
+                    self.print_number_simple(interval_ms);
+                    crate::uart_print(b" ms\n");
+                }
+            }
+            "explain" => {
+                if args.len() < 2 {
+                    unsafe { crate::uart_print(b"Usage: autoctl explain <decision_id>\n"); }
+                    return;
+                }
+                let decision_id = args[1].parse::<u64>().unwrap_or(0);
+                if decision_id == 0 {
+                    unsafe { crate::uart_print(b"[ERROR] Invalid decision ID\n"); }
+                    return;
+                }
+
+                let audit_log = crate::autonomy::get_audit_log();
+                let mut found = false;
+                for i in 0..audit_log.len() {
+                    let entry = audit_log.get_entry(i).unwrap();
+                    if entry.decision_id == decision_id {
+                        found = true;
+                        unsafe {
+                            crate::uart_print(b"\n=== Decision #");
+                            self.print_number_simple(entry.decision_id);
+                            crate::uart_print(b" ===\n");
+                            crate::uart_print(b"  Timestamp: ");
+                            self.print_number_simple(entry.timestamp);
+                            crate::uart_print(b" us\n");
+                            crate::uart_print(b"  Confidence: ");
+                            self.print_number_simple(entry.confidence as u64);
+                            crate::uart_print(b"/1000\n");
+
+                            crate::uart_print(b"  Directives: [Mem:");
+                            if entry.directives[0] < 0 {
+                                crate::uart_print(b"-");
+                                self.print_number_simple((-entry.directives[0]) as u64);
+                            } else {
+                                self.print_number_simple(entry.directives[0] as u64);
+                            }
+                            crate::uart_print(b", Sched:");
+                            if entry.directives[1] < 0 {
+                                crate::uart_print(b"-");
+                                self.print_number_simple((-entry.directives[1]) as u64);
+                            } else {
+                                self.print_number_simple(entry.directives[1] as u64);
+                            }
+                            crate::uart_print(b", Cmd:");
+                            if entry.directives[2] < 0 {
+                                crate::uart_print(b"-");
+                                self.print_number_simple((-entry.directives[2]) as u64);
+                            } else {
+                                self.print_number_simple(entry.directives[2] as u64);
+                            }
+                            crate::uart_print(b"]\n");
+
+                            crate::uart_print(b"  Actions Taken: 0x");
+                            self.print_hex(entry.actions_taken.0 as u64);
+                            crate::uart_print(b"\n");
+
+                            crate::uart_print(b"  Reward: ");
+                            if entry.reward < 0 {
+                                crate::uart_print(b"-");
+                                self.print_number_simple((-entry.reward) as u64);
+                            } else {
+                                self.print_number_simple(entry.reward as u64);
+                            }
+                            crate::uart_print(b"\n");
+
+                            crate::uart_print(b"  TD Error: ");
+                            if entry.td_error < 0 {
+                                crate::uart_print(b"-");
+                                self.print_number_simple((-entry.td_error) as u64);
+                            } else {
+                                self.print_number_simple(entry.td_error as u64);
+                            }
+                            crate::uart_print(b"\n");
+
+                            crate::uart_print(b"  Safety Flags: 0x");
+                            self.print_hex(entry.safety_flags as u64);
+                            crate::uart_print(b"\n");
+
+                            crate::uart_print(b"  Explanation: ");
+                            crate::uart_print(entry.rationale.explanation_code.as_str().as_bytes());
+                            crate::uart_print(b"\n\n");
+                        }
+                        break;
+                    }
+                }
+                drop(audit_log);
+
+                if !found {
+                    unsafe {
+                        crate::uart_print(b"[ERROR] Decision ID ");
+                        self.print_number_simple(decision_id);
+                        crate::uart_print(b" not found in audit log\n");
+                    }
+                }
+            }
+            "dashboard" => {
+                let audit_log = crate::autonomy::get_audit_log();
+                unsafe {
+                    crate::uart_print(b"\n=== Autonomous Control Dashboard ===\n");
+                    crate::uart_print(b"  Total Decisions: ");
+                    self.print_number_simple(audit_log.len() as u64);
+                    crate::uart_print(b"/1000\n\n");
+                }
+
+                if audit_log.len() == 0 {
+                    unsafe { crate::uart_print(b"  No decisions recorded yet.\n\n"); }
+                    drop(audit_log);
+                    return;
+                }
+
+                // Show last 10 decisions (or fewer if less than 10)
+                let num_to_show = core::cmp::min(10, audit_log.len());
+                let start_idx = if audit_log.head_index() >= num_to_show {
+                    audit_log.head_index() - num_to_show
+                } else {
+                    1000 + audit_log.head_index() - num_to_show
+                };
+
+                unsafe {
+                    crate::uart_print(b"Last ");
+                    self.print_number_simple(num_to_show as u64);
+                    crate::uart_print(b" Decisions:\n");
+                    crate::uart_print(b"ID      | Reward | Actions | Explanation\n");
+                    crate::uart_print(b"--------|--------|---------|--------------------------------------------------\n");
+                }
+
+                for i in 0..num_to_show {
+                    let idx = (start_idx + i) % 1000;
+                    let entry = audit_log.get_entry(idx).unwrap();
+
+                    unsafe {
+                        // Decision ID (padded to 7 chars)
+                        self.print_number_simple(entry.decision_id);
+                        let id_len = if entry.decision_id < 10 { 1 } else if entry.decision_id < 100 { 2 } else { 3 };
+                        for _ in 0..(7 - id_len) { crate::uart_print(b" "); }
+                        crate::uart_print(b"| ");
+
+                        // Reward (padded to 6 chars)
+                        if entry.reward < 0 {
+                            crate::uart_print(b"-");
+                            self.print_number_simple((-entry.reward) as u64);
+                            let len = if entry.reward > -10 { 2 } else if entry.reward > -100 { 3 } else { 4 };
+                            for _ in 0..(6 - len) { crate::uart_print(b" "); }
+                        } else {
+                            self.print_number_simple(entry.reward as u64);
+                            let len = if entry.reward < 10 { 1 } else if entry.reward < 100 { 2 } else { 3 };
+                            for _ in 0..(6 - len) { crate::uart_print(b" "); }
+                        }
+                        crate::uart_print(b"| ");
+
+                        // Actions (0xNN format)
+                        crate::uart_print(b"0x");
+                        self.print_hex(entry.actions_taken.0 as u64);
+                        crate::uart_print(b"    | ");
+
+                        // Explanation (truncated to 50 chars)
+                        let explanation = entry.rationale.explanation_code.as_str();
+                        let explanation_bytes = explanation.as_bytes();
+                        let max_len = core::cmp::min(50, explanation_bytes.len());
+                        crate::uart_print(&explanation_bytes[..max_len]);
+                        if explanation_bytes.len() > 50 {
+                            crate::uart_print(b"...");
+                        }
+                        crate::uart_print(b"\n");
+                    }
+                }
+
+                unsafe { crate::uart_print(b"\n"); }
+                drop(audit_log);
+            }
+            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard>\n"); }
         }
     }
 
