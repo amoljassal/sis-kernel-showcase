@@ -412,7 +412,7 @@ impl EligibilityTraces {
 
 /// Actor network for policy-based learning
 pub struct ActorNetwork {
-    network: NeuralAgent,           // 12 → 16 → 6 (3 means + 3 stddevs)
+    pub network: NeuralAgent,       // 12 → 16 → 6 (3 means + 3 stddevs)
     policy_params: PolicyParams,    // Last output
     old_policy_params: PolicyParams, // For KL divergence
     last_out: [i16; 6],             // Store all 6 outputs
@@ -682,7 +682,7 @@ impl MetaStats {
 
 /// The Meta-Agent: coordinates all subsystem neural agents
 pub struct MetaAgent {
-    network: NeuralAgent,
+    pub network: NeuralAgent,
     state: MetaState,
     prev_state: MetaState,           // Previous state for reward computation
     config: MetaConfig,
@@ -695,7 +695,7 @@ pub struct MetaAgent {
     value_estimate: i16,             // Current state value (Q8.8 milli-units)
 
     // Week 4: Actor-critic components
-    actor: ActorNetwork,             // Policy network (Gaussian)
+    pub actor: ActorNetwork,         // Policy network (Gaussian)
     actor_critic_config: ActorCriticConfig,
     actor_critic_stats: ActorCriticStats,
     eligibility_traces: EligibilityTraces,
@@ -1171,6 +1171,11 @@ pub fn init_meta_agent() {
     let mut agent = META_AGENT.lock();
     agent.init();
     crate::trace::metric_kv("meta_agent_init", 1);
+}
+
+/// Get meta-agent for direct access (for checkpointing)
+pub fn get_meta_agent() -> spin::MutexGuard<'static, MetaAgent> {
+    META_AGENT.lock()
 }
 
 /// Update meta-agent state from subsystem telemetry
