@@ -259,8 +259,11 @@ impl DistributionStats {
     /// Update statistics with new sample
     pub fn update(&mut self, features: &[i16; MAX_FEATURES]) {
         if !self.valid {
-            // First sample - initialize
+            // First sample - initialize all stats
             self.means = *features;
+            self.mins = *features;
+            self.maxs = *features;
+            self.stddevs = [0; MAX_FEATURES]; // No variance yet with 1 sample
             self.sample_count = 1;
             self.valid = true;
             return;
