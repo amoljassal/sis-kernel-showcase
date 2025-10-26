@@ -269,7 +269,7 @@ impl Shell {
             crate::uart_print(b"  mladvdemo - Demo advanced ML features (experience replay, TD learning, topology)\n");
             crate::uart_print(b"  actorctl - Actor-critic: status | policy | sample | lambda N | natural on/off | kl N | on | off\n");
             crate::uart_print(b"  actorcriticdemo - Demo actor-critic with policy gradients and eligibility traces\n");
-            crate::uart_print(b"  autoctl  - Autonomous control: on | off | status | interval N | explain ID | dashboard | checkpoints | saveckpt | restoreckpt N | restorebest\n");
+            crate::uart_print(b"  autoctl  - Autonomous control: on | off | status | interval N | explain ID | dashboard | checkpoints | saveckpt | restoreckpt N | restorebest | tick\n");
             crate::uart_print(b"  memctl   - Memory neural agent: status | predict | stress [N]\n");
             crate::uart_print(b"  ask-ai   - Ask a simple question: ask-ai \"<text>\" (maps to features, runs agent)\n");
             crate::uart_print(b"  nnjson   - Print neural audit ring as JSON\n");
@@ -1136,7 +1136,7 @@ impl Shell {
 
     fn cmd_autoctl(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest>\n"); }
+            unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick>\n"); }
             return;
         }
 
@@ -1490,7 +1490,12 @@ impl Shell {
                     unsafe { crate::uart_print(b"[ERROR] No checkpoints available\n"); }
                 }
             }
-            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest>\n"); }
+            "tick" => {
+                unsafe { crate::uart_print(b"[AUTOCTL] Triggering autonomous decision tick...\n"); }
+                crate::autonomy::trigger_autonomous_tick();
+                unsafe { crate::uart_print(b"[AUTOCTL] Tick completed\n"); }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick>\n"); }
         }
     }
 
