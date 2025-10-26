@@ -141,6 +141,7 @@ impl Shell {
                 "actorctl" => { self.cmd_actorctl(&parts[1..]); true },
                 "actorcriticdemo" => { self.cmd_actor_critic_demo(); true },
                 "autoctl" => { self.cmd_autoctl(&parts[1..]); true },
+                "learnctl" => { self.cmd_learnctl(&parts[1..]); true },
                 "memctl" => { self.cmd_memctl(&parts[1..]); true },
                 "ask-ai" => { self.cmd_ask_ai(&parts[1..]); true },
                 "nnjson" => { self.cmd_nn_json(); true },
@@ -269,7 +270,8 @@ impl Shell {
             crate::uart_print(b"  mladvdemo - Demo advanced ML features (experience replay, TD learning, topology)\n");
             crate::uart_print(b"  actorctl - Actor-critic: status | policy | sample | lambda N | natural on/off | kl N | on | off\n");
             crate::uart_print(b"  actorcriticdemo - Demo actor-critic with policy gradients and eligibility traces\n");
-            crate::uart_print(b"  autoctl  - Autonomous control: on | off | status | interval N | explain ID | dashboard | checkpoints | saveckpt | restoreckpt N | restorebest | tick\n");
+            crate::uart_print(b"  autoctl  - Autonomous control: on | off | status | interval N | explain ID | dashboard | checkpoints | saveckpt | restoreckpt N | restorebest | tick | oodcheck\n");
+            crate::uart_print(b"  learnctl - Prediction tracking: stats | train | feedback good|bad|verybad ID\n");
             crate::uart_print(b"  memctl   - Memory neural agent: status | predict | stress [N]\n");
             crate::uart_print(b"  ask-ai   - Ask a simple question: ask-ai \"<text>\" (maps to features, runs agent)\n");
             crate::uart_print(b"  nnjson   - Print neural audit ring as JSON\n");
@@ -1136,7 +1138,7 @@ impl Shell {
 
     fn cmd_autoctl(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick>\n"); }
+            unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck>\n"); }
             return;
         }
 
@@ -1495,7 +1497,253 @@ impl Shell {
                 crate::autonomy::trigger_autonomous_tick();
                 unsafe { crate::uart_print(b"[AUTOCTL] Tick completed\n"); }
             }
-            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick>\n"); }
+            "oodcheck" => {
+                // Collect current telemetry as features for OOD detection
+                let state = crate::meta_agent::collect_telemetry();
+                let mut features = [0i16; 12];
+                features[0] = state.memory_pressure as i16;
+                features[1] = state.memory_fragmentation as i16;
+                features[2] = state.memory_alloc_rate as i16;
+                features[3] = state.memory_failures as i16;
+                features[4] = state.scheduling_load as i16;
+                features[5] = state.deadline_misses as i16;
+                features[6] = state.operator_latency_ms as i16;
+                features[7] = state.critical_ops_count as i16;
+                features[8] = state.command_rate as i16;
+                features[9] = state.command_heaviness as i16;
+                features[10] = state.prediction_accuracy as i16;
+                features[11] = state.rapid_stream_detected as i16;
+
+                let (is_ood, distance) = crate::prediction_tracker::check_ood(&features);
+                let threshold = crate::prediction_tracker::get_ood_threshold();
+                let (ood_count, stats) = crate::prediction_tracker::get_ood_stats();
+
+                unsafe {
+                    crate::uart_print(b"\n=== Out-of-Distribution Detection ===\n");
+                    crate::uart_print(b"  Current State: ");
+                    crate::uart_print(if is_ood { b"OUT-OF-DISTRIBUTION\n" } else { b"NORMAL\n" });
+                    crate::uart_print(b"  Distance: ");
+                    self.print_number_simple(distance as u64);
+                    crate::uart_print(b"/");
+                    self.print_number_simple(threshold as u64);
+                    crate::uart_print(b" (threshold)\n");
+                    crate::uart_print(b"  Total OOD Detections: ");
+                    self.print_number_simple(ood_count);
+                    crate::uart_print(b"\n\n");
+
+                    if stats.valid {
+                        crate::uart_print(b"Training Distribution (");
+                        self.print_number_simple(stats.sample_count as u64);
+                        crate::uart_print(b" samples):\n");
+                        crate::uart_print(b"  Feature      | Mean  | StdDev | Min   | Max\n");
+                        crate::uart_print(b"  -------------|-------|--------|-------|-------\n");
+
+                        let feature_names: &[&[u8]] = &[
+                            b"MemPressure ", b"MemFragment ", b"MemAllocRate", b"MemFailures ",
+                            b"SchedLoad   ", b"Deadlines   ", b"OpLatency   ", b"CriticalOps ",
+                            b"CmdRate     ", b"CmdHeavy    ", b"PredictAcc  ", b"RapidStream ",
+                        ];
+
+                        for i in 0..12 {
+                            crate::uart_print(b"  ");
+                            crate::uart_print(feature_names[i]);
+                            crate::uart_print(b"| ");
+                            self.print_number_simple(stats.means[i] as u64);
+                            crate::uart_print(b" | ");
+                            self.print_number_simple(stats.stddevs[i] as u64);
+                            crate::uart_print(b"   | ");
+                            self.print_number_simple(stats.mins[i] as u64);
+                            crate::uart_print(b" | ");
+                            self.print_number_simple(stats.maxs[i] as u64);
+                            crate::uart_print(b"\n");
+                        }
+                        crate::uart_print(b"\n");
+                    } else {
+                        crate::uart_print(b"Training distribution: Not yet initialized\n");
+                        crate::uart_print(b"Run 'learnctl train' to collect training data\n\n");
+                    }
+                }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck>\n"); }
+        }
+    }
+
+    fn cmd_learnctl(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: learnctl <stats|train|feedback good|bad|verybad ID>\n"); }
+            return;
+        }
+
+        match args[0] {
+            "stats" => {
+                let ledger = crate::prediction_tracker::get_ledger();
+
+                unsafe {
+                    crate::uart_print(b"\n=== Prediction Statistics ===\n");
+                    crate::uart_print(b"  Total Predictions: ");
+                    self.print_number_simple(ledger.len() as u64);
+                    crate::uart_print(b"/1000\n\n");
+                }
+
+                if ledger.len() == 0 {
+                    unsafe { crate::uart_print(b"  No predictions recorded yet.\n\n"); }
+                    drop(ledger);
+                    return;
+                }
+
+                // Overall accuracy
+                let (correct_100, total_100) = ledger.compute_accuracy(100);
+                let (correct_500, total_500) = ledger.compute_accuracy(500);
+                let (correct_all, total_all) = ledger.compute_accuracy(1000);
+
+                unsafe {
+                    crate::uart_print(b"Overall Accuracy:\n");
+                    crate::uart_print(b"  Last 100: ");
+                    if total_100 > 0 {
+                        self.print_number_simple(correct_100 as u64);
+                        crate::uart_print(b"/");
+                        self.print_number_simple(total_100 as u64);
+                        let pct = (correct_100 * 100) / total_100;
+                        crate::uart_print(b" (");
+                        self.print_number_simple(pct as u64);
+                        crate::uart_print(b"%)\n");
+                    } else {
+                        crate::uart_print(b"N/A (no outcomes yet)\n");
+                    }
+
+                    crate::uart_print(b"  Last 500: ");
+                    if total_500 > 0 {
+                        self.print_number_simple(correct_500 as u64);
+                        crate::uart_print(b"/");
+                        self.print_number_simple(total_500 as u64);
+                        let pct = (correct_500 * 100) / total_500;
+                        crate::uart_print(b" (");
+                        self.print_number_simple(pct as u64);
+                        crate::uart_print(b"%)\n");
+                    } else {
+                        crate::uart_print(b"N/A\n");
+                    }
+
+                    crate::uart_print(b"  All time: ");
+                    if total_all > 0 {
+                        self.print_number_simple(correct_all as u64);
+                        crate::uart_print(b"/");
+                        self.print_number_simple(total_all as u64);
+                        let pct = (correct_all * 100) / total_all;
+                        crate::uart_print(b" (");
+                        self.print_number_simple(pct as u64);
+                        crate::uart_print(b"%)\n\n");
+                    } else {
+                        crate::uart_print(b"N/A\n\n");
+                    }
+                }
+
+                // Accuracy by type
+                use crate::prediction_tracker::PredictionType;
+                let types = [
+                    (PredictionType::MemoryPressure, b"Memory Pressure"),
+                    (PredictionType::MemoryCompactionNeeded, b"Memory Compact "),
+                    (PredictionType::SchedulingDeadlineMiss, b"Deadline Miss  "),
+                    (PredictionType::CommandHeavy, b"Command Heavy  "),
+                    (PredictionType::CommandRapidStream, b"Rapid Stream   "),
+                ];
+
+                unsafe {
+                    crate::uart_print(b"Accuracy by Type:\n");
+                    crate::uart_print(b"  Type             | Count | Accuracy\n");
+                    crate::uart_print(b"  -----------------|-------|----------\n");
+                }
+
+                for (pred_type, name) in &types {
+                    let (correct, total) = ledger.compute_accuracy_by_type(*pred_type, 1000);
+                    unsafe {
+                        crate::uart_print(b"  ");
+                        crate::uart_print(*name);
+                        crate::uart_print(b" | ");
+                        self.print_number_simple(total as u64);
+                        for _ in 0..(5 - if total < 10 { 1 } else if total < 100 { 2 } else { 3 }) {
+                            crate::uart_print(b" ");
+                        }
+                        crate::uart_print(b" | ");
+                        if total > 0 {
+                            self.print_number_simple(correct as u64);
+                            crate::uart_print(b"/");
+                            self.print_number_simple(total as u64);
+                            let pct = (correct * 100) / total;
+                            crate::uart_print(b" (");
+                            self.print_number_simple(pct as u64);
+                            crate::uart_print(b"%)\n");
+                        } else {
+                            crate::uart_print(b"N/A\n");
+                        }
+                    }
+                }
+
+                unsafe { crate::uart_print(b"\n"); }
+                drop(ledger);
+            }
+            "train" => {
+                // Train OOD detector with current telemetry
+                let state = crate::meta_agent::collect_telemetry();
+                let mut features = [0i16; 12];
+                features[0] = state.memory_pressure as i16;
+                features[1] = state.memory_fragmentation as i16;
+                features[2] = state.memory_alloc_rate as i16;
+                features[3] = state.memory_failures as i16;
+                features[4] = state.scheduling_load as i16;
+                features[5] = state.deadline_misses as i16;
+                features[6] = state.operator_latency_ms as i16;
+                features[7] = state.critical_ops_count as i16;
+                features[8] = state.command_rate as i16;
+                features[9] = state.command_heaviness as i16;
+                features[10] = state.prediction_accuracy as i16;
+                features[11] = state.rapid_stream_detected as i16;
+
+                crate::prediction_tracker::train_ood_detector(&features);
+
+                unsafe {
+                    crate::uart_print(b"[LEARNCTL] OOD detector trained with current state\n");
+                    crate::uart_print(b"Run 'autoctl oodcheck' to see updated distribution\n");
+                }
+            }
+            "feedback" => {
+                if args.len() < 3 {
+                    unsafe { crate::uart_print(b"Usage: learnctl feedback <good|bad|verybad> <decision_id>\n"); }
+                    return;
+                }
+
+                let decision_id = args[2].parse::<u64>().unwrap_or(0);
+                if decision_id == 0 {
+                    unsafe { crate::uart_print(b"[ERROR] Invalid decision ID\n"); }
+                    return;
+                }
+
+                let reward_override = match args[1] {
+                    "good" => 100i16,
+                    "bad" => -50i16,
+                    "verybad" => -200i16,
+                    _ => {
+                        unsafe { crate::uart_print(b"[ERROR] Feedback must be good, bad, or verybad\n"); }
+                        return;
+                    }
+                };
+
+                // TODO: Implement reward override in autonomy module
+                // For now, just log the feedback
+                unsafe {
+                    crate::uart_print(b"[LEARNCTL] Human feedback recorded for decision #");
+                    self.print_number_simple(decision_id);
+                    crate::uart_print(b": ");
+                    crate::uart_print(match reward_override {
+                        100 => b"GOOD (+100 reward)\n",
+                        -50 => b"BAD (-50 reward)\n",
+                        -200 => b"VERY BAD (-200 reward)\n",
+                        _ => b"UNKNOWN\n",
+                    });
+                    crate::uart_print(b"NOTE: Reward override not yet implemented in autonomy module\n");
+                }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: learnctl <stats|train|feedback good|bad|verybad ID>\n"); }
         }
     }
 
