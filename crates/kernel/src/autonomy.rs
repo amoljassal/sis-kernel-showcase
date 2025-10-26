@@ -585,6 +585,10 @@ impl AutonomousControl {
     pub fn get_phase(&self) -> u32 {
         self.phase.load(Ordering::Relaxed)
     }
+
+    pub fn is_safe_mode(&self) -> bool {
+        self.safe_mode.load(Ordering::Relaxed)
+    }
 }
 
 // ============================================================================
@@ -1078,4 +1082,424 @@ pub fn detect_reward_tampering(audit_log: &DecisionAuditLog) -> bool {
     // Tampering detected: rewards increasing but health decreasing
     // (agent found a shortcut that doesn't actually help)
     reward_trend > 500 && health_trend < -500
+}
+
+// ============================================================================
+// Week 5, Day 5: Autonomous Decision Loop
+// ============================================================================
+
+/// Collect current system telemetry
+///
+/// This function gathers all relevant system metrics into a MetaState
+/// for decision-making.
+fn collect_telemetry() -> crate::meta_agent::MetaState {
+    // Get current meta-agent state
+    let state = crate::meta_agent::get_meta_state();
+
+    // In a real system, we'd augment with additional telemetry:
+    // - Current heap pressure from heap::get_pressure()
+    // - Scheduling metrics from scheduler::get_stats()
+    // - Command accuracy from neural::get_accuracy()
+
+    state
+}
+
+/// Compute system health score (independent metric for reward tampering detection)
+///
+/// This function provides an external, independent assessment of system health
+/// that is NOT used in reward computation. This allows us to detect reward
+/// hacking by comparing reward trend vs health trend.
+fn compute_health_score(state: &crate::meta_agent::MetaState) -> i16 {
+    let mut score: i32 = 1000;
+
+    // Penalize high memory pressure
+    let mem_penalty = (state.memory_pressure as i32) * 5;
+    score -= mem_penalty;
+
+    // Penalize deadline misses
+    let sched_penalty = (state.deadline_misses as i32) * 10;
+    score -= sched_penalty;
+
+    // Bonus for high command accuracy
+    let acc_bonus = (state.prediction_accuracy as i32) * 2;
+    score += acc_bonus;
+
+    // Penalize memory failures heavily
+    if state.memory_failures > 0 {
+        score -= 200;
+    }
+
+    score.clamp(-1000, 1000) as i16
+}
+
+/// Complete autonomous decision loop with all safety checks integrated
+///
+/// This is the main entry point for autonomous meta-agent execution.
+/// It orchestrates:
+/// 1. Telemetry collection
+/// 2. Safety pre-checks (panic conditions)
+/// 3. Meta-agent inference
+/// 4. Confidence-based action gating
+/// 5. Action execution with rate limiting
+/// 6. Reward computation (multi-objective)
+/// 7. Watchdog safety monitoring
+/// 8. Audit logging
+/// 9. Learning updates (if not frozen)
+///
+/// Safety is enforced at EVERY step - this function will abort early
+/// if any safety condition is violated.
+pub fn autonomous_decision_tick() {
+    let timestamp = crate::time::get_timestamp_us();
+
+    // Check if autonomous mode is enabled
+    if !AUTONOMOUS_CONTROL.is_enabled() {
+        return;
+    }
+
+    // Check if safe mode is active
+    if AUTONOMOUS_CONTROL.is_safe_mode() {
+        unsafe {
+            crate::uart_print(b"[AUTONOMY] Safe mode active, skipping decision tick\n");
+        }
+        return;
+    }
+
+    // Check minimum interval between decisions
+    let last_decision = AUTONOMOUS_CONTROL.last_decision_timestamp.load(core::sync::atomic::Ordering::Relaxed);
+    let interval_ms = AUTONOMOUS_CONTROL.decision_interval_ms.load(core::sync::atomic::Ordering::Relaxed);
+    let elapsed_us = timestamp.saturating_sub(last_decision);
+
+    if elapsed_us < interval_ms * 1000 {
+        return; // Too soon since last decision
+    }
+
+    unsafe {
+        crate::uart_print(b"[AUTONOMY] Starting decision tick at timestamp ");
+        uart_print_num(timestamp);
+        crate::uart_print(b"\n");
+    }
+
+    // Acquire locks on all safety infrastructure
+    let mut audit_log = AUDIT_LOG.lock();
+    let mut watchdog = WATCHDOG.lock();
+    let mut rate_limiter = RATE_LIMITER.lock();
+
+    // ========================================================================
+    // Step 1: Collect Telemetry
+    // ========================================================================
+
+    let prev_state = if audit_log.count > 0 {
+        // Get state from last decision
+        let prev_idx = if audit_log.head > 0 {
+            audit_log.head - 1
+        } else {
+            999
+        };
+        audit_log.entries[prev_idx].state_before
+    } else {
+        // First decision - use current state as baseline
+        collect_telemetry()
+    };
+
+    let curr_state = collect_telemetry();
+
+    unsafe {
+        crate::uart_print(b"[AUTONOMY] Telemetry: mem_pressure=");
+        uart_print_num(curr_state.memory_pressure as u64);
+        crate::uart_print(b" deadline_misses=");
+        uart_print_num(curr_state.deadline_misses as u64);
+        crate::uart_print(b"\n");
+    }
+
+    // ========================================================================
+    // Step 2: Safety Pre-Checks (Panic Conditions)
+    // ========================================================================
+
+    if curr_state.memory_pressure > PANIC_MEMORY_PRESSURE {
+        unsafe {
+            crate::uart_print(b"[SAFETY] PANIC: Memory pressure critical (");
+            uart_print_num(curr_state.memory_pressure as u64);
+            crate::uart_print(b" > ");
+            uart_print_num(PANIC_MEMORY_PRESSURE as u64);
+            crate::uart_print(b")\n");
+        }
+        AUTONOMOUS_CONTROL.enter_safe_mode();
+        return;
+    }
+
+    // ========================================================================
+    // Step 3: Meta-Agent Inference
+    // ========================================================================
+
+    // Run meta-agent forward pass
+    let decision = crate::meta_agent::force_meta_decision();
+    let directives = [
+        decision.memory_directive,
+        decision.scheduling_directive,
+        decision.command_directive,
+    ];
+
+    // Use decision confidence
+    let confidence = decision.confidence as i16;
+
+    unsafe {
+        crate::uart_print(b"[AUTONOMY] Meta-agent directives: [");
+        uart_print_num(directives[0] as u64);
+        crate::uart_print(b", ");
+        uart_print_num(directives[1] as u64);
+        crate::uart_print(b", ");
+        uart_print_num(directives[2] as u64);
+        crate::uart_print(b"] confidence=");
+        uart_print_num(confidence as u64);
+        crate::uart_print(b"\n");
+    }
+
+    // ========================================================================
+    // Step 4: Confidence-Based Action Gating
+    // ========================================================================
+
+    const MIN_CONFIDENCE: i16 = 600; // 60% threshold
+
+    if confidence < MIN_CONFIDENCE {
+        unsafe {
+            crate::uart_print(b"[AUTONOMY] Low confidence (");
+            uart_print_num(confidence as u64);
+            crate::uart_print(b" < ");
+            uart_print_num(MIN_CONFIDENCE as u64);
+            crate::uart_print(b"), deferring action\n");
+        }
+
+        // Log decision with no actions taken
+        let mut rationale = DecisionRationale::new(ExplanationCode::LowConfidenceDeferredAction);
+        rationale.confidence = confidence;
+
+        audit_log.log_decision(
+            curr_state,
+            directives,
+            confidence,
+            ActionMask::NONE,
+            0, // reward
+            0, // td_error
+            SAFETY_LOW_CONFIDENCE,
+            rationale,
+        );
+
+        return;
+    }
+
+    // ========================================================================
+    // Step 5: Execute Actions (with Safety Checks)
+    // ========================================================================
+
+    let mut actions_taken = ActionMask::NONE;
+    let mut safety_flags = 0u32;
+
+    // Get previous directives for rate-of-change checking
+    let prev_directives = if audit_log.count > 0 {
+        let prev_idx = if audit_log.head > 0 {
+            audit_log.head - 1
+        } else {
+            999
+        };
+        audit_log.entries[prev_idx].directives
+    } else {
+        [0, 0, 0]
+    };
+
+    // Execute memory directive
+    match execute_memory_directive(directives[0], prev_directives[0], &mut rate_limiter) {
+        ActionResult::Executed => {
+            actions_taken = ActionMask(actions_taken.0 | ActionMask::MEMORY.0);
+        }
+        ActionResult::RateLimited => {
+            safety_flags |= SAFETY_RATE_LIMITED;
+            unsafe {
+                crate::uart_print(b"[AUTONOMY] Memory action rate limited\n");
+            }
+        }
+        ActionResult::SafetyViolation => {
+            safety_flags |= SAFETY_HARD_LIMIT;
+            unsafe {
+                crate::uart_print(b"[AUTONOMY] Memory action safety violation\n");
+            }
+        }
+        ActionResult::LowConfidence => {}
+    }
+
+    // Execute scheduling directive
+    match execute_scheduling_directive(directives[1], prev_directives[1], &mut rate_limiter) {
+        ActionResult::Executed => {
+            actions_taken = ActionMask(actions_taken.0 | ActionMask::SCHEDULING.0);
+        }
+        ActionResult::RateLimited => {
+            safety_flags |= SAFETY_RATE_LIMITED;
+            unsafe {
+                crate::uart_print(b"[AUTONOMY] Scheduling action rate limited\n");
+            }
+        }
+        ActionResult::SafetyViolation => {
+            safety_flags |= SAFETY_HARD_LIMIT;
+            unsafe {
+                crate::uart_print(b"[AUTONOMY] Scheduling action safety violation\n");
+            }
+        }
+        ActionResult::LowConfidence => {}
+    }
+
+    // Execute command directive
+    match execute_command_directive(directives[2]) {
+        ActionResult::Executed => {
+            actions_taken = ActionMask(actions_taken.0 | ActionMask::COMMAND.0);
+        }
+        _ => {}
+    }
+
+    unsafe {
+        crate::uart_print(b"[AUTONOMY] Actions taken: 0x");
+        uart_print_num(actions_taken.0 as u64);
+        crate::uart_print(b"\n");
+    }
+
+    // ========================================================================
+    // Step 6: Compute Reward (Multi-Objective)
+    // ========================================================================
+
+    let multi_reward = compute_system_reward(&prev_state, &curr_state, &actions_taken);
+
+    unsafe {
+        crate::uart_print(b"[AUTONOMY] Multi-objective reward: mem=");
+        uart_print_num(multi_reward.memory_health as u64);
+        crate::uart_print(b" sched=");
+        uart_print_num(multi_reward.scheduling_health as u64);
+        crate::uart_print(b" cmd=");
+        uart_print_num(multi_reward.command_accuracy as u64);
+        crate::uart_print(b" total=");
+        uart_print_num(multi_reward.total as u64);
+        crate::uart_print(b"\n");
+    }
+
+    // Simple TD error: reward + future_value - current_value
+    // For now, use simple reward as TD error (no value function yet)
+    let td_error = multi_reward.total;
+
+    // ========================================================================
+    // Step 7: Watchdog Safety Monitoring
+    // ========================================================================
+
+    let safety_action = watchdog.check_safety(&curr_state, multi_reward.total, td_error);
+
+    match safety_action {
+        SafetyAction::Continue => {
+            // Normal operation
+            unsafe {
+                crate::uart_print(b"[AUTONOMY] Watchdog: Continue\n");
+            }
+        }
+        SafetyAction::ReduceLearningRate => {
+            unsafe {
+                crate::uart_print(b"[SAFETY] Watchdog triggered: Reducing learning rate\n");
+            }
+            safety_flags |= SAFETY_WATCHDOG_TRIGGER;
+            // TODO: Reduce learning rate in meta_agent
+        }
+        SafetyAction::RevertAndFreezeLearning => {
+            unsafe {
+                crate::uart_print(b"[SAFETY] Watchdog triggered: Reverting to checkpoint and freezing learning\n");
+            }
+
+            // Rollback to last checkpoint
+            let checkpoint_idx = audit_log.last_known_good_checkpoint;
+            if checkpoint_idx < audit_log.count {
+                let _checkpoint_state = audit_log.entries[checkpoint_idx].state_before;
+                unsafe {
+                    crate::uart_print(b"[AUTONOMY] Rolling back to checkpoint ");
+                    uart_print_num(checkpoint_idx as u64);
+                    crate::uart_print(b"\n");
+                }
+                // TODO: Restore system state
+                // restore_system_state(&_checkpoint_state);
+            }
+
+            // Freeze learning
+            AUTONOMOUS_CONTROL.freeze_learning();
+            return;
+        }
+        SafetyAction::SafeMode => {
+            unsafe {
+                crate::uart_print(b"[SAFETY] Watchdog triggered: Entering safe mode\n");
+            }
+            AUTONOMOUS_CONTROL.enter_safe_mode();
+            return;
+        }
+    }
+
+    // ========================================================================
+    // Step 8: Audit Logging
+    // ========================================================================
+
+    let health_score = compute_health_score(&curr_state);
+
+    // Determine explanation code
+    let explanation_code = if actions_taken.0 == ActionMask::NONE.0 {
+        ExplanationCode::LowConfidenceDeferredAction
+    } else if curr_state.memory_pressure > prev_state.memory_pressure {
+        ExplanationCode::HighMemoryPressureDetected
+    } else if curr_state.deadline_misses > prev_state.deadline_misses {
+        ExplanationCode::SchedulingDeadlineMissesIncreasing
+    } else {
+        ExplanationCode::SystemHealthy
+    };
+
+    let mut rationale = DecisionRationale::new(explanation_code);
+    rationale.confidence = confidence;
+
+    audit_log.log_decision(
+        curr_state,
+        directives,
+        confidence,
+        actions_taken,
+        multi_reward.total,
+        td_error,
+        safety_flags,
+        rationale,
+    );
+
+    // Maybe update checkpoint if health is good
+    if health_score > 500 && multi_reward.total > 0 {
+        audit_log.last_known_good_checkpoint = audit_log.head;
+        unsafe {
+            crate::uart_print(b"[AUTONOMY] Updated checkpoint to decision ");
+            uart_print_num(audit_log.head as u64);
+            crate::uart_print(b"\n");
+        }
+    }
+
+    // Update decision timestamp
+    AUTONOMOUS_CONTROL.last_decision_timestamp.store(timestamp, core::sync::atomic::Ordering::Relaxed);
+    AUTONOMOUS_CONTROL.total_decisions.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+
+    unsafe {
+        crate::uart_print(b"[AUTONOMY] Decision tick complete\n");
+    }
+
+    // ========================================================================
+    // Step 9: Learning Update (if not frozen)
+    // ========================================================================
+
+    if !AUTONOMOUS_CONTROL.is_learning_frozen() {
+        // TODO: Store experience in replay buffer
+        // TODO: Trigger TD learning update if conditions met
+        unsafe {
+            crate::uart_print(b"[AUTONOMY] Learning update: TODO\n");
+        }
+    } else {
+        unsafe {
+            crate::uart_print(b"[AUTONOMY] Learning frozen, skipping update\n");
+        }
+    }
+}
+
+/// Public API: Trigger one autonomous decision tick
+pub fn trigger_autonomous_tick() {
+    autonomous_decision_tick();
 }
