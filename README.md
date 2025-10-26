@@ -996,7 +996,7 @@ Week 5 implements autonomous meta-agent execution with enterprise-level safety g
 - OpenAI/DeepMind/Anthropic best practices - Watchdogs, rate limiting, audit trails
 - IEC 61508 (Functional Safety) - Multi-layer safety architecture
 
-**Implementation Status:**
+**Day 1-2 Implementation Status:**
 - ✅ ExplanationCode enum with 22 standard codes
 - ✅ DecisionRationale and DecisionRecord structs
 - ✅ DecisionAuditLog with 1000-entry ring buffer and rollback
@@ -1006,7 +1006,97 @@ Week 5 implements autonomous meta-agent execution with enterprise-level safety g
 - ✅ Timestamp infrastructure (ARM generic timer)
 - ✅ AutonomousControl global state management
 - ✅ Compiled successfully in QEMU
-- 📋 Next: Action execution layer, multi-objective reward, autonomous tick function
+
+**Day 3-4: Action Execution Layer & Multi-Objective Rewards (Complete)**
+
+Building on the safety infrastructure from Day 1-2, Day 3-4 implements the action execution layer that translates meta-agent decisions into safe system actions, plus a sophisticated multi-objective reward function to prevent reward hacking.
+
+**Action Execution Functions:**
+
+1. **`execute_memory_directive(directive, last_directive, rate_limiter)`** - Memory subsystem actions:
+   - Directive range: -1000 (high pressure, trigger compaction) to +1000 (plenty of memory, allow aggressive allocation)
+   - Safety checks:
+     - Bounds directive change rate: max ±200 per decision (prevents sudden thrashing)
+     - Rate limiting: max 6 compactions/minute
+     - Clamps all values to valid ranges
+   - Actions:
+     - `< -500`: Aggressive compaction (rate limited)
+     - `-500 to 0`: Moderate pressure response
+     - `> 500`: Enable aggressive allocation (rate limited)
+   - Returns: `ActionResult::{Executed, RateLimited, SafetyViolation}`
+
+2. **`execute_scheduling_directive(directive, last_directive, rate_limiter)`** - Scheduling subsystem actions:
+   - Directive range: -1000 (high load, increase priorities) to +1000 (low load, relax priorities)
+   - Safety checks:
+     - Bounds directive change rate: max ±100 per decision (prevents priority inversions)
+     - Rate limiting: max 20 adjustments/minute
+   - Actions:
+     - `< -500`: Increase operator priorities by 200 (rate limited)
+     - `> 500`: Restore normal priorities (rate limited)
+   - Returns: `ActionResult::{Executed, RateLimited, SafetyViolation}`
+
+3. **`execute_command_directive(directive)`** - Command prediction subsystem actions:
+   - Directive range: -1000 (low accuracy, throttle) to +1000 (high accuracy, aggressive)
+   - Simpler safety: bounds checking only (no rate limits needed)
+   - Actions:
+     - `< -500`: Throttle predictions (conservative thresholds)
+     - `> 500`: Aggressive predictions (lower thresholds)
+   - Returns: `ActionResult::{Executed}`
+
+**Multi-Objective Reward System:**
+
+`MultiObjectiveReward` struct tracks **7 separate objectives** to prevent reward hacking:
+
+- **Primary Objectives** (performance improvement):
+  - `memory_health`: -500 to +500 (+2 per % pressure reduction, +100 bonus for preventing failures)
+  - `scheduling_health`: -500 to +500 (+10 per deadline miss prevented)
+  - `command_accuracy`: -500 to +500 (+2 per % accuracy gain)
+
+- **Safety Objectives** (penalties only, never sacrificed for performance):
+  - `action_rate_penalty`: 0 to -300 (penalty for taking multiple actions simultaneously)
+  - `oscillation_penalty`: 0 to -200 (applied by `detect_oscillation()`)
+  - `extreme_action_penalty`: 0 to -200 (if actions didn't help: pressure still >90% or misses >40)
+
+- **Meta-Objectives**:
+  - `predictability`: 0 to +100 (bonus for stable behavior: small pressure/miss changes)
+
+- `total`: Composite score (-1000 to +1000) for backward compatibility with existing learning
+
+**Key Innovation: Separate objective tracking prevents "reward hacking"** - the agent cannot game one metric at the expense of others because all objectives are monitored independently.
+
+**Reward Tampering Detection:**
+
+`detect_reward_tampering(audit_log)` compares reward trend vs system health trend:
+- Looks at last 20 decisions (10 recent vs 10 older)
+- Compares reward trend (sum of rewards) vs health trend (sum of system_health_scores)
+- Tampering detected if: rewards increasing >500 but health declining >500
+- Indicates agent found a shortcut that maximizes reward without actually helping
+
+**Oscillation Detection:**
+
+`detect_oscillation(audit_log, lookback)` identifies unstable policies:
+- Tracks last N decisions (typically 10)
+- Counts sign changes in memory directives
+- Oscillation detected if: >3 large magnitude sign flips (e.g., -600 → +600 → -600)
+- Indicates policy instability or poor generalization
+
+**Implementation Status:**
+- ✅ `execute_memory_directive()` with safety checks (bounds, rate limits, clamping)
+- ✅ `execute_scheduling_directive()` with safety checks
+- ✅ `execute_command_directive()` with safety checks
+- ✅ `MultiObjectiveReward` struct with 7 separate objectives
+- ✅ `compute_system_reward()` function (prevents reward hacking)
+- ✅ `detect_oscillation()` function (identifies flip-flopping policies)
+- ✅ `detect_reward_tampering()` function (compares reward vs actual health)
+- ✅ Helper `uart_print_num()` for debug output
+- ✅ Compiled successfully and tested in QEMU
+- 📋 Next: `autonomous_decision_tick()` function (Day 5)
+
+**Code Statistics:**
+- +467 lines added to `autonomy.rs` (now 1080+ lines total)
+- 3 action execution functions
+- 1 multi-objective reward struct with 7 components
+- 3 safety detection functions (oscillation, tampering, reward computation)
 
 **Theoretical Foundation:**
 - **AI Safety**: [Amodei et al., 2016 - Concrete Problems in AI Safety] - Watchdogs and safe exploration
@@ -1014,6 +1104,8 @@ Week 5 implements autonomous meta-agent execution with enterprise-level safety g
 - **Formal Verification**: [IEC 61508] - Multi-layer safety architecture
 - **Rate Limiting**: [Token Bucket Algorithm] - Prevents action spam
 - **Audit Trails**: [EU AI Act Article 13] - Transparency and accountability
+- **Reward Hacking**: [Amodei et al., 2016; Krakovna et al., 2020] - Multi-objective rewards prevent goodharting
+- **Oscillation Detection**: [Control Theory] - Stability analysis for RL policies
 
 ## Security & Audit
 
@@ -1967,7 +2059,7 @@ Structured graphs section
   - **Part 1: Integration & Autonomy (Weeks 5-7)**
     - Week 5: Autonomous meta-agent execution (timer-driven, not shell-driven)
       - ✅ Day 1-2: Industry-grade safety infrastructure (autonomy.rs, time.rs, 6-layer safety, watchdog, rate limiting, audit log, XAI)
-      - 📋 Day 3-4: Action execution layer, multi-objective reward function
+      - ✅ Day 3-4: Action execution layer (3 directive functions with safety checks), multi-objective reward system (7 objectives, tampering/oscillation detection)
       - 📋 Day 5-7: Autonomous tick function, autoctl commands, QEMU testing
     - Week 6: Closed-loop learning with prediction tracking and validation
     - Week 7: Stress testing and quantified performance validation

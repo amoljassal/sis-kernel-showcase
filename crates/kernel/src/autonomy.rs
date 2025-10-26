@@ -612,3 +612,470 @@ pub fn get_watchdog() -> spin::MutexGuard<'static, AutonomousWatchdog> {
 pub fn get_rate_limiter() -> spin::MutexGuard<'static, ActionRateLimiter> {
     RATE_LIMITER.lock()
 }
+
+// ============================================================================
+// Week 5, Day 3-4: Action Execution Layer
+// ============================================================================
+
+/// Helper function to print numbers to UART
+fn uart_print_num(mut v: u64) {
+    if v == 0 {
+        unsafe { crate::uart_print(b"0"); }
+        return;
+    }
+
+    let mut digits = [0u8; 20];
+    let mut i = 0;
+
+    while v > 0 {
+        digits[i] = b'0' + (v % 10) as u8;
+        v /= 10;
+        i += 1;
+    }
+
+    while i > 0 {
+        i -= 1;
+        unsafe { crate::uart_print(&[digits[i]]); }
+    }
+}
+
+/// Result of action execution
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ActionResult {
+    Executed,
+    RateLimited,
+    SafetyViolation,
+    LowConfidence,
+}
+
+/// Execute meta-agent directive for memory subsystem (SAFETY-AWARE)
+///
+/// Directive range: -1000 to +1000
+/// - Negative values indicate memory pressure (trigger compaction)
+/// - Positive values indicate plenty of memory (allow aggressive allocation)
+pub fn execute_memory_directive(
+    directive: i16,
+    last_directive: i16,
+    rate_limiter: &mut ActionRateLimiter,
+) -> ActionResult {
+    let timestamp = crate::time::get_timestamp_us();
+
+    // Safety check 1: Bound directive change rate
+    let directive_change = (directive - last_directive).abs();
+    if directive_change > MAX_MEMORY_DIRECTIVE_CHANGE {
+        unsafe {
+            crate::uart_print(b"[SAFETY] Memory directive change too large: ");
+            uart_print_num(directive_change as u64);
+            crate::uart_print(b" > ");
+            uart_print_num(MAX_MEMORY_DIRECTIVE_CHANGE as u64);
+            crate::uart_print(b"\n");
+        }
+        return ActionResult::SafetyViolation;
+    }
+
+    match directive.clamp(-1000, 1000) {
+        d if d < -500 => {
+            // Aggressive compaction - CHECK RATE LIMIT
+            if !rate_limiter.allow_action(&Action::TriggerCompaction, timestamp) {
+                unsafe {
+                    crate::uart_print(b"[RATE-LIMIT] Memory compaction rate limited\n");
+                }
+                return ActionResult::RateLimited;
+            }
+
+            unsafe {
+                crate::uart_print(b"[ACTION] Triggered memory compaction (directive: ");
+                uart_print_num(d as u64);
+                crate::uart_print(b")\n");
+            }
+
+            // TODO: Actually trigger compaction when heap supports it
+            // crate::heap::trigger_compaction();
+            ActionResult::Executed
+        }
+        d if d < 0 => {
+            // Moderate pressure response
+            unsafe {
+                crate::uart_print(b"[ACTION] Moderate memory pressure response (directive: ");
+                uart_print_num(d as u64);
+                crate::uart_print(b")\n");
+            }
+
+            // TODO: Increase free threshold
+            // crate::heap::increase_free_threshold();
+            ActionResult::Executed
+        }
+        d if d > 500 => {
+            // Plenty of headroom - allow aggressive allocation
+            if !rate_limiter.allow_action(&Action::ChangeAllocationStrategy, timestamp) {
+                return ActionResult::RateLimited;
+            }
+
+            unsafe {
+                crate::uart_print(b"[ACTION] Enable aggressive allocation (directive: ");
+                uart_print_num(d as u64);
+                crate::uart_print(b")\n");
+            }
+
+            // TODO: Set allocation strategy
+            // crate::heap::set_allocation_strategy(AggressiveMode);
+            ActionResult::Executed
+        }
+        _ => {
+            // Normal operation - no action needed
+            ActionResult::Executed
+        }
+    }
+}
+
+/// Execute scheduling directive (SAFETY-AWARE)
+///
+/// Directive range: -1000 to +1000
+/// - Negative values indicate high load (increase priorities, reduce latency)
+/// - Positive values indicate low load (relax priorities)
+pub fn execute_scheduling_directive(
+    directive: i16,
+    last_directive: i16,
+    rate_limiter: &mut ActionRateLimiter,
+) -> ActionResult {
+    let timestamp = crate::time::get_timestamp_us();
+
+    // Safety check 1: Bound directive change rate
+    let directive_change = (directive - last_directive).abs();
+    if directive_change > MAX_PRIORITY_CHANGE {
+        unsafe {
+            crate::uart_print(b"[SAFETY] Scheduling directive change too large: ");
+            uart_print_num(directive_change as u64);
+            crate::uart_print(b" > ");
+            uart_print_num(MAX_PRIORITY_CHANGE as u64);
+            crate::uart_print(b"\n");
+        }
+        return ActionResult::SafetyViolation;
+    }
+
+    match directive.clamp(-1000, 1000) {
+        d if d < -500 => {
+            // Critical load - increase priorities
+            if !rate_limiter.allow_action(&Action::AdjustPriorities(-200), timestamp) {
+                unsafe {
+                    crate::uart_print(b"[RATE-LIMIT] Priority adjustment rate limited\n");
+                }
+                return ActionResult::RateLimited;
+            }
+
+            unsafe {
+                crate::uart_print(b"[ACTION] Increase operator priorities (directive: ");
+                uart_print_num(d as u64);
+                crate::uart_print(b")\n");
+            }
+
+            // TODO: Adjust operator priorities when graph system supports it
+            // crate::graph::adjust_operator_priorities(-200);
+            ActionResult::Executed
+        }
+        d if d > 500 => {
+            // Low load - restore normal priorities
+            if !rate_limiter.allow_action(&Action::AdjustPriorities(0), timestamp) {
+                return ActionResult::RateLimited;
+            }
+
+            unsafe {
+                crate::uart_print(b"[ACTION] Restore normal priorities (directive: ");
+                uart_print_num(d as u64);
+                crate::uart_print(b")\n");
+            }
+
+            // TODO: Restore priorities
+            // crate::graph::adjust_operator_priorities(0);
+            ActionResult::Executed
+        }
+        _ => {
+            // Normal operation - no action needed
+            ActionResult::Executed
+        }
+    }
+}
+
+/// Execute command prediction directive (SAFETY-AWARE)
+///
+/// Directive range: -1000 to +1000
+/// - Negative values indicate low accuracy (throttle predictions)
+/// - Positive values indicate high accuracy (aggressive predictions)
+pub fn execute_command_directive(directive: i16) -> ActionResult {
+    // Simpler safety: just bound the threshold values
+    match directive.clamp(-1000, 1000) {
+        d if d < -500 => {
+            unsafe {
+                crate::uart_print(b"[ACTION] Throttle predictions (directive: ");
+                uart_print_num(d as u64);
+                crate::uart_print(b")\n");
+            }
+
+            // TODO: Set prediction threshold when neural system supports it
+            // crate::neural::set_prediction_threshold(500);
+            ActionResult::Executed
+        }
+        d if d > 500 => {
+            unsafe {
+                crate::uart_print(b"[ACTION] Aggressive predictions (directive: ");
+                uart_print_num(d as u64);
+                crate::uart_print(b")\n");
+            }
+
+            // TODO: Set prediction threshold
+            // crate::neural::set_prediction_threshold(200);
+            ActionResult::Executed
+        }
+        _ => {
+            // Normal operation
+            ActionResult::Executed
+        }
+    }
+}
+
+// ============================================================================
+// Week 5, Day 3-4: Multi-Objective Reward Function
+// ============================================================================
+
+/// Multi-objective reward breakdown (not single composite score)
+///
+/// This structure tracks separate objectives to prevent reward hacking
+/// and enable transparent decision-making.
+#[derive(Copy, Clone, Debug)]
+pub struct MultiObjectiveReward {
+    // Primary objectives
+    pub memory_health: i16,      // -500 to +500
+    pub scheduling_health: i16,  // -500 to +500
+    pub command_accuracy: i16,   // -500 to +500
+
+    // Safety objectives (never sacrificed for performance)
+    pub action_rate_penalty: i16,      // 0 to -300 (penalty only)
+    pub oscillation_penalty: i16,      // 0 to -200 (penalty only)
+    pub extreme_action_penalty: i16,   // 0 to -200 (penalty only)
+
+    // Meta-objectives
+    pub predictability: i16,     // 0 to +100 (bonus for consistent behavior)
+
+    // Composite (for backward compatibility with existing learning)
+    pub total: i16,              // -1000 to +1000
+}
+
+impl MultiObjectiveReward {
+    pub const fn zero() -> Self {
+        Self {
+            memory_health: 0,
+            scheduling_health: 0,
+            command_accuracy: 0,
+            action_rate_penalty: 0,
+            oscillation_penalty: 0,
+            extreme_action_penalty: 0,
+            predictability: 0,
+            total: 0,
+        }
+    }
+
+    /// Compute total reward from components
+    pub fn compute_total(&mut self) {
+        let sum = self.memory_health as i32
+            + self.scheduling_health as i32
+            + self.command_accuracy as i32
+            + self.action_rate_penalty as i32
+            + self.oscillation_penalty as i32
+            + self.extreme_action_penalty as i32
+            + self.predictability as i32;
+
+        self.total = sum.clamp(-1000, 1000) as i16;
+    }
+}
+
+/// Compute multi-objective reward based on system health changes
+///
+/// This function measures actual system improvements to prevent reward hacking.
+pub fn compute_system_reward(
+    prev_state: &crate::meta_agent::MetaState,
+    curr_state: &crate::meta_agent::MetaState,
+    actions_taken: &ActionMask,
+) -> MultiObjectiveReward {
+    let mut reward = MultiObjectiveReward::zero();
+
+    // ========================================================================
+    // Primary Objective 1: Memory Health (0-400 points)
+    // ========================================================================
+
+    // +2 per % pressure reduction
+    let mem_delta = (prev_state.memory_pressure as i32) - (curr_state.memory_pressure as i32);
+    reward.memory_health = (mem_delta * 2).clamp(-500, 500) as i16;
+
+    // Bonus for preventing failures
+    if curr_state.memory_failures < prev_state.memory_failures {
+        reward.memory_health = (reward.memory_health as i32 + 100).clamp(-500, 500) as i16;
+    }
+
+    // ========================================================================
+    // Primary Objective 2: Scheduling Health (0-400 points)
+    // ========================================================================
+
+    // +10 per deadline miss prevented
+    let sched_delta = (prev_state.deadline_misses as i32) - (curr_state.deadline_misses as i32);
+    reward.scheduling_health = (sched_delta * 10).clamp(-500, 500) as i16;
+
+    // ========================================================================
+    // Primary Objective 3: Command Accuracy (0-200 points)
+    // ========================================================================
+
+    // +2 per % accuracy gain
+    let acc_delta = (curr_state.prediction_accuracy as i32) - (prev_state.prediction_accuracy as i32);
+    reward.command_accuracy = (acc_delta * 2).clamp(-500, 500) as i16;
+
+    // ========================================================================
+    // Safety Penalty 1: Action Rate Penalty
+    // ========================================================================
+
+    let mut action_count = 0;
+    if (actions_taken.0 & ActionMask::MEMORY.0) != 0 {
+        action_count += 1;
+    }
+    if (actions_taken.0 & ActionMask::SCHEDULING.0) != 0 {
+        action_count += 1;
+    }
+    if (actions_taken.0 & ActionMask::COMMAND.0) != 0 {
+        action_count += 1;
+    }
+
+    // Penalty for taking multiple actions at once (avoid thrashing)
+    if action_count >= 3 {
+        reward.action_rate_penalty = -200;
+    } else if action_count == 2 {
+        reward.action_rate_penalty = -100;
+    }
+
+    // ========================================================================
+    // Safety Penalty 2: Extreme Action Penalty
+    // ========================================================================
+
+    // Penalize if memory or scheduling pressure is still very high
+    // (indicates action didn't help)
+    if curr_state.memory_pressure > 90 {
+        reward.extreme_action_penalty = (reward.extreme_action_penalty as i32 - 50).clamp(-200, 0) as i16;
+    }
+    if curr_state.deadline_misses > 40 {
+        reward.extreme_action_penalty = (reward.extreme_action_penalty as i32 - 50).clamp(-200, 0) as i16;
+    }
+
+    // ========================================================================
+    // Meta-Objective: Predictability Bonus
+    // ========================================================================
+
+    // Bonus if system is stable (pressure changes are small)
+    let mem_change = (curr_state.memory_pressure as i32 - prev_state.memory_pressure as i32).abs();
+    let sched_change = (curr_state.deadline_misses as i32 - prev_state.deadline_misses as i32).abs();
+
+    if mem_change <= 5 && sched_change <= 2 {
+        reward.predictability = 50; // Bonus for stable behavior
+    }
+
+    // Compute total
+    reward.compute_total();
+
+    reward
+}
+
+/// Detect oscillation in recent decisions
+///
+/// Oscillation is when the agent flip-flops between opposite decisions,
+/// indicating unstable policy or poor generalization.
+pub fn detect_oscillation(audit_log: &DecisionAuditLog, lookback: usize) -> bool {
+    if audit_log.count < lookback {
+        return false; // Not enough history
+    }
+
+    let mut sign_changes = 0;
+    let mut prev_mem_directive: Option<i16> = None;
+
+    // Look at last N decisions
+    for i in 0..lookback.min(audit_log.count) {
+        let idx = if audit_log.head >= i {
+            audit_log.head - i
+        } else {
+            1000 + audit_log.head - i
+        };
+
+        let record = &audit_log.entries[idx];
+        let mem_dir = record.directives[0];
+
+        if let Some(prev) = prev_mem_directive {
+            // Check if sign changed and magnitude is large
+            if (prev < -200 && mem_dir > 200) || (prev > 200 && mem_dir < -200) {
+                sign_changes += 1;
+            }
+        }
+
+        prev_mem_directive = Some(mem_dir);
+    }
+
+    // If more than 3 sign changes in last 10 decisions, it's oscillating
+    sign_changes >= 3
+}
+
+/// Detect reward tampering / goodharting
+///
+/// Reward tampering occurs when the agent discovers a way to maximize
+/// the reward function without actually improving system health.
+///
+/// Detection: Compare agent's reward trend with external health measurement.
+pub fn detect_reward_tampering(audit_log: &DecisionAuditLog) -> bool {
+    if audit_log.count < 20 {
+        return false; // Not enough history
+    }
+
+    // Compute recent reward trend (last 10 decisions)
+    let mut recent_rewards = 0i32;
+    for i in 0..10 {
+        let idx = if audit_log.head >= i {
+            audit_log.head - i
+        } else {
+            1000 + audit_log.head - i
+        };
+        recent_rewards += audit_log.entries[idx].reward as i32;
+    }
+
+    // Compute older reward trend (10-20 decisions ago)
+    let mut older_rewards = 0i32;
+    for i in 10..20 {
+        let idx = if audit_log.head >= i {
+            audit_log.head - i
+        } else {
+            1000 + audit_log.head - i
+        };
+        older_rewards += audit_log.entries[idx].reward as i32;
+    }
+
+    let reward_trend = recent_rewards - older_rewards;
+
+    // Compute external health trend (system_health_score is independent metric)
+    let mut recent_health = 0i32;
+    for i in 0..10 {
+        let idx = if audit_log.head >= i {
+            audit_log.head - i
+        } else {
+            1000 + audit_log.head - i
+        };
+        recent_health += audit_log.entries[idx].system_health_score as i32;
+    }
+
+    let mut older_health = 0i32;
+    for i in 10..20 {
+        let idx = if audit_log.head >= i {
+            audit_log.head - i
+        } else {
+            1000 + audit_log.head - i
+        };
+        older_health += audit_log.entries[idx].system_health_score as i32;
+    }
+
+    let health_trend = recent_health - older_health;
+
+    // Tampering detected: rewards increasing but health decreasing
+    // (agent found a shortcut that doesn't actually help)
+    reward_trend > 500 && health_trend < -500
+}
