@@ -620,6 +620,160 @@ static WATCHDOG: Mutex<AutonomousWatchdog> = Mutex::new(AutonomousWatchdog::new(
 static RATE_LIMITER: Mutex<ActionRateLimiter> = Mutex::new(ActionRateLimiter::new());
 pub static AUTONOMOUS_CONTROL: AutonomousControl = AutonomousControl::new();
 
+// ============================================================================
+// Layer 7: Model Checkpointing & Versioning
+// ============================================================================
+
+/// Snapshot of neural network weights for rollback
+#[derive(Copy, Clone)]
+pub struct NetworkSnapshot {
+    /// Critic network first layer weights (12→16)
+    pub critic_w1: [[i16; 16]; 16],
+    pub critic_b1: [i16; 16],
+    /// Critic network second layer weights (16→3)
+    pub critic_w2: [[i16; 16]; 4],
+    pub critic_b2: [i16; 4],
+
+    /// Actor network first layer weights (12→16)
+    pub actor_w1: [[i16; 16]; 16],
+    pub actor_b1: [i16; 16],
+    /// Actor network second layer weights (16→6)
+    pub actor_w2: [[i16; 16]; 4],
+    pub actor_b2: [i16; 4],
+}
+
+impl NetworkSnapshot {
+    pub const fn empty() -> Self {
+        Self {
+            critic_w1: [[0; 16]; 16],
+            critic_b1: [0; 16],
+            critic_w2: [[0; 16]; 4],
+            critic_b2: [0; 4],
+            actor_w1: [[0; 16]; 16],
+            actor_b1: [0; 16],
+            actor_w2: [[0; 16]; 4],
+            actor_b2: [0; 4],
+        }
+    }
+}
+
+/// Model checkpoint with metadata
+#[derive(Copy, Clone)]
+pub struct ModelCheckpoint {
+    pub snapshot: NetworkSnapshot,
+    pub checkpoint_id: u64,
+    pub timestamp: u64,
+    pub decision_id: u64,          // Which decision triggered this checkpoint
+    pub health_score: i16,         // System health at checkpoint time
+    pub cumulative_reward: i32,    // Total reward up to this point
+    pub valid: bool,               // Is this checkpoint slot valid?
+}
+
+impl ModelCheckpoint {
+    pub const fn empty() -> Self {
+        Self {
+            snapshot: NetworkSnapshot::empty(),
+            checkpoint_id: 0,
+            timestamp: 0,
+            decision_id: 0,
+            health_score: 0,
+            cumulative_reward: 0,
+            valid: false,
+        }
+    }
+}
+
+/// Checkpoint manager with versioning (ring buffer of 5 checkpoints)
+pub struct CheckpointManager {
+    checkpoints: [ModelCheckpoint; 5],
+    head: usize,
+    count: usize,
+    next_checkpoint_id: u64,
+}
+
+impl CheckpointManager {
+    pub const fn new() -> Self {
+        Self {
+            checkpoints: [ModelCheckpoint::empty(); 5],
+            head: 0,
+            count: 0,
+            next_checkpoint_id: 1,
+        }
+    }
+
+    /// Save a new checkpoint
+    pub fn save(&mut self, snapshot: NetworkSnapshot, decision_id: u64, health_score: i16, cumulative_reward: i32) -> u64 {
+        let checkpoint_id = self.next_checkpoint_id;
+        self.next_checkpoint_id += 1;
+
+        self.checkpoints[self.head] = ModelCheckpoint {
+            snapshot,
+            checkpoint_id,
+            timestamp: crate::time::get_timestamp_us(),
+            decision_id,
+            health_score,
+            cumulative_reward,
+            valid: true,
+        };
+
+        self.head = (self.head + 1) % 5;
+        if self.count < 5 {
+            self.count += 1;
+        }
+
+        checkpoint_id
+    }
+
+    /// Get checkpoint by index (0 = oldest, count-1 = newest)
+    pub fn get(&self, index: usize) -> Option<&ModelCheckpoint> {
+        if index >= self.count {
+            return None;
+        }
+        let idx = if self.count < 5 {
+            index
+        } else {
+            (self.head + index) % 5
+        };
+        Some(&self.checkpoints[idx])
+    }
+
+    /// Get most recent checkpoint
+    pub fn get_latest(&self) -> Option<&ModelCheckpoint> {
+        if self.count == 0 {
+            return None;
+        }
+        let idx = if self.head == 0 { 4 } else { self.head - 1 };
+        Some(&self.checkpoints[idx])
+    }
+
+    /// Get best checkpoint (highest health score)
+    pub fn get_best(&self) -> Option<&ModelCheckpoint> {
+        if self.count == 0 {
+            return None;
+        }
+
+        let mut best_idx = 0;
+        let mut best_health = self.checkpoints[0].health_score;
+
+        for i in 1..self.count {
+            let idx = if self.count < 5 { i } else { (self.head + i) % 5 };
+            if self.checkpoints[idx].health_score > best_health {
+                best_health = self.checkpoints[idx].health_score;
+                best_idx = idx;
+            }
+        }
+
+        Some(&self.checkpoints[best_idx])
+    }
+
+    /// Get number of checkpoints
+    pub fn len(&self) -> usize {
+        self.count
+    }
+}
+
+static CHECKPOINT_MANAGER: Mutex<CheckpointManager> = Mutex::new(CheckpointManager::new());
+
 /// Public API: Get audit log
 pub fn get_audit_log() -> spin::MutexGuard<'static, DecisionAuditLog> {
     AUDIT_LOG.lock()
@@ -633,6 +787,271 @@ pub fn get_watchdog() -> spin::MutexGuard<'static, AutonomousWatchdog> {
 /// Public API: Get rate limiter
 pub fn get_rate_limiter() -> spin::MutexGuard<'static, ActionRateLimiter> {
     RATE_LIMITER.lock()
+}
+
+/// Public API: Get checkpoint manager
+pub fn get_checkpoint_manager() -> spin::MutexGuard<'static, CheckpointManager> {
+    CHECKPOINT_MANAGER.lock()
+}
+
+/// Capture current model weights into a snapshot
+pub fn capture_model_snapshot() -> NetworkSnapshot {
+    let meta_agent = crate::meta_agent::get_meta_agent();
+    let network = &meta_agent.network;
+    let actor = &meta_agent.actor.network;
+
+    let mut snapshot = NetworkSnapshot::empty();
+
+    // Copy critic network weights (12→16→3)
+    for i in 0..16 {
+        snapshot.critic_b1[i] = network.b1[i];
+        for j in 0..16 {
+            snapshot.critic_w1[i][j] = network.w1[i][j];
+        }
+    }
+    for i in 0..4 {
+        snapshot.critic_b2[i] = network.b2[i];
+        for j in 0..16 {
+            snapshot.critic_w2[i][j] = network.w2[i][j];
+        }
+    }
+
+    // Copy actor network weights (12→16→6)
+    for i in 0..16 {
+        snapshot.actor_b1[i] = actor.b1[i];
+        for j in 0..16 {
+            snapshot.actor_w1[i][j] = actor.w1[i][j];
+        }
+    }
+    for i in 0..4 {
+        snapshot.actor_b2[i] = actor.b2[i];
+        for j in 0..16 {
+            snapshot.actor_w2[i][j] = actor.w2[i][j];
+        }
+    }
+
+    drop(meta_agent);
+    snapshot
+}
+
+/// Restore model weights from a snapshot
+pub fn restore_model_snapshot(snapshot: &NetworkSnapshot) {
+    let mut meta_agent = crate::meta_agent::get_meta_agent();
+
+    // Restore critic network weights
+    for i in 0..16 {
+        meta_agent.network.b1[i] = snapshot.critic_b1[i];
+        for j in 0..16 {
+            meta_agent.network.w1[i][j] = snapshot.critic_w1[i][j];
+        }
+    }
+    for i in 0..4 {
+        meta_agent.network.b2[i] = snapshot.critic_b2[i];
+        for j in 0..16 {
+            meta_agent.network.w2[i][j] = snapshot.critic_w2[i][j];
+        }
+    }
+
+    // Restore actor network weights
+    for i in 0..16 {
+        meta_agent.actor.network.b1[i] = snapshot.actor_b1[i];
+        for j in 0..16 {
+            meta_agent.actor.network.w1[i][j] = snapshot.actor_w1[i][j];
+        }
+    }
+    for i in 0..4 {
+        meta_agent.actor.network.b2[i] = snapshot.actor_b2[i];
+        for j in 0..16 {
+            meta_agent.actor.network.w2[i][j] = snapshot.actor_w2[i][j];
+        }
+    }
+
+    drop(meta_agent);
+}
+
+/// Save current model state as a checkpoint
+pub fn save_model_checkpoint(decision_id: u64, health_score: i16, cumulative_reward: i32) -> u64 {
+    let snapshot = capture_model_snapshot();
+    let mut manager = CHECKPOINT_MANAGER.lock();
+    let checkpoint_id = manager.save(snapshot, decision_id, health_score, cumulative_reward);
+
+    unsafe {
+        crate::uart_print(b"[CHECKPOINT] Saved model checkpoint #");
+        let mut tmp = checkpoint_id;
+        if tmp == 0 { crate::uart_print(b"0"); } else {
+            let mut digits = [0u8; 20];
+            let mut i = 0;
+            while tmp > 0 {
+                digits[i] = b'0' + (tmp % 10) as u8;
+                tmp /= 10;
+                i += 1;
+            }
+            while i > 0 {
+                i -= 1;
+                crate::uart_print(&[digits[i]]);
+            }
+        }
+        crate::uart_print(b" (decision: ");
+        let mut tmp = decision_id;
+        if tmp == 0 { crate::uart_print(b"0"); } else {
+            let mut digits = [0u8; 20];
+            let mut i = 0;
+            while tmp > 0 {
+                digits[i] = b'0' + (tmp % 10) as u8;
+                tmp /= 10;
+                i += 1;
+            }
+            while i > 0 {
+                i -= 1;
+                crate::uart_print(&[digits[i]]);
+            }
+        }
+        crate::uart_print(b", health: ");
+        if health_score < 0 {
+            crate::uart_print(b"-");
+            let mut tmp = (-health_score) as u64;
+            if tmp == 0 { crate::uart_print(b"0"); } else {
+                let mut digits = [0u8; 20];
+                let mut i = 0;
+                while tmp > 0 {
+                    digits[i] = b'0' + (tmp % 10) as u8;
+                    tmp /= 10;
+                    i += 1;
+                }
+                while i > 0 {
+                    i -= 1;
+                    crate::uart_print(&[digits[i]]);
+                }
+            }
+        } else {
+            let mut tmp = health_score as u64;
+            if tmp == 0 { crate::uart_print(b"0"); } else {
+                let mut digits = [0u8; 20];
+                let mut i = 0;
+                while tmp > 0 {
+                    digits[i] = b'0' + (tmp % 10) as u8;
+                    tmp /= 10;
+                    i += 1;
+                }
+                while i > 0 {
+                    i -= 1;
+                    crate::uart_print(&[digits[i]]);
+                }
+            }
+        }
+        crate::uart_print(b")\n");
+    }
+
+    drop(manager);
+    checkpoint_id
+}
+
+/// Restore model from a specific checkpoint index
+pub fn restore_model_checkpoint(index: usize) -> bool {
+    let manager = CHECKPOINT_MANAGER.lock();
+
+    if let Some(checkpoint) = manager.get(index) {
+        let snapshot = checkpoint.snapshot;
+        let checkpoint_id = checkpoint.checkpoint_id;
+        drop(manager);
+
+        restore_model_snapshot(&snapshot);
+
+        unsafe {
+            crate::uart_print(b"[CHECKPOINT] Restored model from checkpoint #");
+            let mut tmp = checkpoint_id;
+            if tmp == 0 { crate::uart_print(b"0"); } else {
+                let mut digits = [0u8; 20];
+                let mut i = 0;
+                while tmp > 0 {
+                    digits[i] = b'0' + (tmp % 10) as u8;
+                    tmp /= 10;
+                    i += 1;
+                }
+                while i > 0 {
+                    i -= 1;
+                    crate::uart_print(&[digits[i]]);
+                }
+            }
+            crate::uart_print(b"\n");
+        }
+
+        true
+    } else {
+        drop(manager);
+        false
+    }
+}
+
+/// Restore model from best checkpoint (highest health score)
+pub fn restore_best_checkpoint() -> bool {
+    let manager = CHECKPOINT_MANAGER.lock();
+
+    if let Some(checkpoint) = manager.get_best() {
+        let snapshot = checkpoint.snapshot;
+        let checkpoint_id = checkpoint.checkpoint_id;
+        let health_score = checkpoint.health_score;
+        drop(manager);
+
+        restore_model_snapshot(&snapshot);
+
+        unsafe {
+            crate::uart_print(b"[CHECKPOINT] Restored BEST model (checkpoint #");
+            let mut tmp = checkpoint_id;
+            if tmp == 0 { crate::uart_print(b"0"); } else {
+                let mut digits = [0u8; 20];
+                let mut i = 0;
+                while tmp > 0 {
+                    digits[i] = b'0' + (tmp % 10) as u8;
+                    tmp /= 10;
+                    i += 1;
+                }
+                while i > 0 {
+                    i -= 1;
+                    crate::uart_print(&[digits[i]]);
+                }
+            }
+            crate::uart_print(b", health: ");
+            if health_score < 0 {
+                crate::uart_print(b"-");
+                let mut tmp = (-health_score) as u64;
+                if tmp == 0 { crate::uart_print(b"0"); } else {
+                    let mut digits = [0u8; 20];
+                    let mut i = 0;
+                    while tmp > 0 {
+                        digits[i] = b'0' + (tmp % 10) as u8;
+                        tmp /= 10;
+                        i += 1;
+                    }
+                    while i > 0 {
+                        i -= 1;
+                        crate::uart_print(&[digits[i]]);
+                    }
+                }
+            } else {
+                let mut tmp = health_score as u64;
+                if tmp == 0 { crate::uart_print(b"0"); } else {
+                    let mut digits = [0u8; 20];
+                    let mut i = 0;
+                    while tmp > 0 {
+                        digits[i] = b'0' + (tmp % 10) as u8;
+                        tmp /= 10;
+                        i += 1;
+                    }
+                    while i > 0 {
+                        i -= 1;
+                        crate::uart_print(&[digits[i]]);
+                    }
+                }
+            }
+            crate::uart_print(b")\n");
+        }
+
+        true
+    } else {
+        drop(manager);
+        false
+    }
 }
 
 // ============================================================================

@@ -1135,7 +1135,7 @@ impl Shell {
 
     fn cmd_autoctl(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard>\n"); }
+            unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest>\n"); }
             return;
         }
 
@@ -1373,7 +1373,123 @@ impl Shell {
                 unsafe { crate::uart_print(b"\n"); }
                 drop(audit_log);
             }
-            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard>\n"); }
+            "checkpoints" => {
+                let manager = crate::autonomy::get_checkpoint_manager();
+                unsafe {
+                    crate::uart_print(b"\n=== Model Checkpoints ===\n");
+                    crate::uart_print(b"  Total: ");
+                    self.print_number_simple(manager.len() as u64);
+                    crate::uart_print(b"/5\n\n");
+                }
+
+                if manager.len() == 0 {
+                    unsafe { crate::uart_print(b"  No checkpoints saved yet.\n\n"); }
+                    drop(manager);
+                    return;
+                }
+
+                unsafe {
+                    crate::uart_print(b"ID  | Decision | Health | Cumulative Reward | Timestamp\n");
+                    crate::uart_print(b"----|----------|--------|-------------------|------------------\n");
+                }
+
+                for i in 0..manager.len() {
+                    if let Some(checkpoint) = manager.get(i) {
+                        unsafe {
+                            // Checkpoint ID
+                            self.print_number_simple(checkpoint.checkpoint_id);
+                            let id_len = if checkpoint.checkpoint_id < 10 { 1 } else { 2 };
+                            for _ in 0..(4 - id_len) { crate::uart_print(b" "); }
+                            crate::uart_print(b"| ");
+
+                            // Decision ID
+                            self.print_number_simple(checkpoint.decision_id);
+                            let dec_len = if checkpoint.decision_id < 10 { 1 } else if checkpoint.decision_id < 100 { 2 } else { 3 };
+                            for _ in 0..(9 - dec_len) { crate::uart_print(b" "); }
+                            crate::uart_print(b"| ");
+
+                            // Health score
+                            if checkpoint.health_score < 0 {
+                                crate::uart_print(b"-");
+                                self.print_number_simple((-checkpoint.health_score) as u64);
+                                let len = if checkpoint.health_score > -10 { 2 } else if checkpoint.health_score > -100 { 3 } else { 4 };
+                                for _ in 0..(7 - len) { crate::uart_print(b" "); }
+                            } else {
+                                self.print_number_simple(checkpoint.health_score as u64);
+                                let len = if checkpoint.health_score < 10 { 1 } else if checkpoint.health_score < 100 { 2 } else { 3 };
+                                for _ in 0..(7 - len) { crate::uart_print(b" "); }
+                            }
+                            crate::uart_print(b"| ");
+
+                            // Cumulative reward
+                            if checkpoint.cumulative_reward < 0 {
+                                crate::uart_print(b"-");
+                                self.print_number_simple((-checkpoint.cumulative_reward) as u64);
+                            } else {
+                                self.print_number_simple(checkpoint.cumulative_reward as u64);
+                            }
+                            crate::uart_print(b" | ");
+
+                            // Timestamp
+                            self.print_number_simple(checkpoint.timestamp);
+                            crate::uart_print(b"\n");
+                        }
+                    }
+                }
+
+                unsafe { crate::uart_print(b"\n"); }
+                drop(manager);
+            }
+            "saveckpt" => {
+                unsafe { crate::uart_print(b"[AUTOCTL] Saving model checkpoint...\n"); }
+                let decision_id = crate::autonomy::AUTONOMOUS_CONTROL.total_decisions.load(core::sync::atomic::Ordering::Relaxed);
+                let audit_log = crate::autonomy::get_audit_log();
+                let (health_score, cumulative_reward) = if let Some(last) = audit_log.get_last() {
+                    (last.system_health_score, last.reward as i32)
+                } else {
+                    (0, 0)
+                };
+                drop(audit_log);
+
+                let checkpoint_id = crate::autonomy::save_model_checkpoint(decision_id, health_score, cumulative_reward);
+                unsafe {
+                    crate::uart_print(b"[AUTOCTL] Saved checkpoint #");
+                    self.print_number_simple(checkpoint_id);
+                    crate::uart_print(b"\n");
+                }
+            }
+            "restoreckpt" => {
+                if args.len() < 2 {
+                    unsafe { crate::uart_print(b"Usage: autoctl restoreckpt <index>\n"); }
+                    return;
+                }
+                let index = args[1].parse::<usize>().unwrap_or(999);
+                if index >= 5 {
+                    unsafe { crate::uart_print(b"[ERROR] Index must be 0-4\n"); }
+                    return;
+                }
+
+                unsafe {
+                    crate::uart_print(b"[AUTOCTL] Restoring from checkpoint index ");
+                    self.print_number_simple(index as u64);
+                    crate::uart_print(b"...\n");
+                }
+
+                if crate::autonomy::restore_model_checkpoint(index) {
+                    unsafe { crate::uart_print(b"[AUTOCTL] Model restored successfully\n"); }
+                } else {
+                    unsafe { crate::uart_print(b"[ERROR] Checkpoint not found\n"); }
+                }
+            }
+            "restorebest" => {
+                unsafe { crate::uart_print(b"[AUTOCTL] Restoring best checkpoint...\n"); }
+                if crate::autonomy::restore_best_checkpoint() {
+                    unsafe { crate::uart_print(b"[AUTOCTL] Best model restored successfully\n"); }
+                } else {
+                    unsafe { crate::uart_print(b"[ERROR] No checkpoints available\n"); }
+                }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest>\n"); }
         }
     }
 
