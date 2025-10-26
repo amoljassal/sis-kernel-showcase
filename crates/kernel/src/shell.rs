@@ -1138,7 +1138,7 @@ impl Shell {
 
     fn cmd_autoctl(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck>\n"); }
+            unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck>\n"); }
             return;
         }
 
@@ -1564,13 +1564,66 @@ impl Shell {
                     }
                 }
             }
-            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck>\n"); }
+            "driftcheck" => {
+                // Collect current telemetry as features
+                let state = crate::meta_agent::collect_telemetry();
+                let mut features = [0i16; 12];
+                features[0] = state.memory_pressure as i16;
+                features[1] = state.memory_fragmentation as i16;
+                features[2] = state.memory_alloc_rate as i16;
+                features[3] = state.memory_failures as i16;
+                features[4] = state.scheduling_load as i16;
+                features[5] = state.deadline_misses as i16;
+                features[6] = state.operator_latency_ms as i16;
+                features[7] = state.critical_ops_count as i16;
+                features[8] = state.command_rate as i16;
+                features[9] = state.command_heaviness as i16;
+                features[10] = state.prediction_accuracy as i16;
+                features[11] = state.rapid_stream_detected as i16;
+
+                // Build current stats for drift check
+                let mut current_stats = crate::prediction_tracker::DistributionStats::new();
+                current_stats.means = features;
+                current_stats.valid = true;
+                current_stats.sample_count = 1;
+
+                let (is_drifting, kl_div, drift_count) = crate::prediction_tracker::check_distribution_drift(&current_stats);
+                let (history_count, _) = crate::prediction_tracker::get_drift_stats();
+
+                unsafe {
+                    crate::uart_print(b"\n=== Distribution Shift Detection ===\n");
+                    crate::uart_print(b"  Current State: ");
+                    crate::uart_print(if is_drifting { b"DRIFT DETECTED\n" } else { b"STABLE\n" });
+                    crate::uart_print(b"  KL Divergence: ");
+                    self.print_number_simple(kl_div as u64);
+                    crate::uart_print(b"/102 (threshold ~0.4)\n");
+                    crate::uart_print(b"  Historical Snapshots: ");
+                    self.print_number_simple(history_count as u64);
+                    crate::uart_print(b"/100\n");
+                    crate::uart_print(b"  Total Drift Detections: ");
+                    self.print_number_simple(drift_count as u64);
+                    crate::uart_print(b"\n\n");
+
+                    if is_drifting {
+                        crate::uart_print(b"[WARNING] Distribution shift detected!\n");
+                        crate::uart_print(b"  Consider retraining agents with recent data\n");
+                        crate::uart_print(b"  Run 'learnctl train' to update OOD detector\n\n");
+                    } else if history_count < 10 {
+                        crate::uart_print(b"[INFO] Collecting baseline distribution data...\n");
+                        crate::uart_print(b"  Run 'learnctl train' multiple times to build history\n\n");
+                    }
+                }
+
+                // Record this snapshot for history
+                crate::prediction_tracker::record_distribution_snapshot(current_stats);
+            }
+            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck>\n"); }
         }
     }
 
     fn cmd_learnctl(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: learnctl <stats|train|feedback good|bad|verybad ID>\n"); }
+            unsafe { crate::uart_print(b"Usage: learnctl <stats|dump|train|feedback good|bad|verybad ID>\n"); }
             return;
         }
 
@@ -1655,27 +1708,120 @@ impl Shell {
                 }
 
                 for (pred_type, name) in &types {
-                    let (correct, total) = ledger.compute_accuracy_by_type(*pred_type, 1000);
+                    let (correct, total_with_outcomes, total_all) = ledger.compute_accuracy_by_type(*pred_type, 1000);
                     unsafe {
                         crate::uart_print(b"  ");
                         crate::uart_print(*name);
                         crate::uart_print(b" | ");
-                        self.print_number_simple(total as u64);
-                        for _ in 0..(5 - if total < 10 { 1 } else if total < 100 { 2 } else { 3 }) {
+                        self.print_number_simple(total_all as u64);
+                        for _ in 0..(5 - if total_all < 10 { 1 } else if total_all < 100 { 2 } else { 3 }) {
                             crate::uart_print(b" ");
                         }
                         crate::uart_print(b" | ");
-                        if total > 0 {
+                        if total_with_outcomes > 0 {
                             self.print_number_simple(correct as u64);
                             crate::uart_print(b"/");
-                            self.print_number_simple(total as u64);
-                            let pct = (correct * 100) / total;
+                            self.print_number_simple(total_with_outcomes as u64);
+                            let pct = (correct * 100) / total_with_outcomes;
                             crate::uart_print(b" (");
                             self.print_number_simple(pct as u64);
                             crate::uart_print(b"%)\n");
                         } else {
                             crate::uart_print(b"N/A\n");
                         }
+                    }
+                }
+
+                // Learning rate adaptation info
+                let lr_state = crate::prediction_tracker::get_learning_rate_state();
+                unsafe {
+                    crate::uart_print(b"Learning Rate Adaptation:\n");
+                    crate::uart_print(b"  Current Rate: ");
+                    // Convert Q8.8 to percentage for display
+                    let lr_pct = (lr_state.current_rate as u64 * 100) / 256;
+                    self.print_number_simple(lr_pct);
+                    crate::uart_print(b"/100\n");
+                    crate::uart_print(b"  Last Accuracy: ");
+                    self.print_number_simple(lr_state.last_accuracy as u64);
+                    crate::uart_print(b"%\n");
+                    crate::uart_print(b"  Adjustments: ");
+                    self.print_number_simple(lr_state.adjustments_made as u64);
+                    crate::uart_print(b"\n");
+                }
+
+                unsafe { crate::uart_print(b"\n"); }
+                drop(ledger);
+            }
+            "dump" => {
+                let ledger = crate::prediction_tracker::get_ledger();
+                let n = if args.len() > 1 {
+                    args[1].parse::<usize>().unwrap_or(10)
+                } else {
+                    10
+                };
+
+                unsafe {
+                    crate::uart_print(b"\n=== Raw Prediction Records (last ");
+                    self.print_number_simple(n as u64);
+                    crate::uart_print(b") ===\n\n");
+                }
+
+                if ledger.len() == 0 {
+                    unsafe { crate::uart_print(b"  No predictions recorded yet.\n\n"); }
+                    drop(ledger);
+                    return;
+                }
+
+                let predictions = ledger.get_last_n(n);
+
+                for record in predictions {
+                    if !record.valid {
+                        continue;
+                    }
+
+                    unsafe {
+                        crate::uart_print(b"ID ");
+                        self.print_number_simple(record.id);
+                        crate::uart_print(b" | Type: ");
+
+                        // Print prediction type
+                        match record.prediction_type {
+                            crate::prediction_tracker::PredictionType::MemoryPressure => {
+                                crate::uart_print(b"MemoryPressure(0)");
+                            }
+                            crate::prediction_tracker::PredictionType::MemoryCompactionNeeded => {
+                                crate::uart_print(b"MemoryCompact(1)");
+                            }
+                            crate::prediction_tracker::PredictionType::SchedulingDeadlineMiss => {
+                                crate::uart_print(b"DeadlineMiss(2)");
+                            }
+                            crate::prediction_tracker::PredictionType::CommandHeavy => {
+                                crate::uart_print(b"CommandHeavy(3)");
+                            }
+                            crate::prediction_tracker::PredictionType::CommandRapidStream => {
+                                crate::uart_print(b"RapidStream(4)");
+                            }
+                        }
+
+                        crate::uart_print(b" | Value: ");
+                        if record.predicted_value < 0 {
+                            crate::uart_print(b"-");
+                            self.print_number_simple((-record.predicted_value) as u64);
+                        } else {
+                            self.print_number_simple(record.predicted_value as u64);
+                        }
+
+                        crate::uart_print(b" | Conf: ");
+                        self.print_number_simple(record.confidence as u64);
+
+                        crate::uart_print(b" | Actual: ");
+                        if let Some(actual) = record.actual_value {
+                            self.print_number_simple(actual as u64);
+                        } else {
+                            crate::uart_print(b"None");
+                        }
+
+                        crate::uart_print(b"\n");
                     }
                 }
 
@@ -1701,9 +1847,25 @@ impl Shell {
 
                 crate::prediction_tracker::train_ood_detector(&features);
 
+                // Also record distribution snapshot for drift monitoring
+                let (_, ood_stats) = crate::prediction_tracker::get_ood_stats();
+                if ood_stats.valid {
+                    crate::prediction_tracker::record_distribution_snapshot(ood_stats);
+                }
+
+                // Adapt learning rate based on current accuracy
+                let (new_lr, adjusted) = crate::prediction_tracker::adapt_learning_rate();
+
                 unsafe {
                     crate::uart_print(b"[LEARNCTL] OOD detector trained with current state\n");
+                    if adjusted {
+                        crate::uart_print(b"[LEARNCTL] Learning rate adapted: ");
+                        let lr_pct = (new_lr as u64 * 100) / 256;
+                        self.print_number_simple(lr_pct);
+                        crate::uart_print(b"/100\n");
+                    }
                     crate::uart_print(b"Run 'autoctl oodcheck' to see updated distribution\n");
+                    crate::uart_print(b"Run 'autoctl driftcheck' to check for distribution shift\n");
                 }
             }
             "feedback" => {
@@ -1743,7 +1905,7 @@ impl Shell {
                     crate::uart_print(b"NOTE: Reward override not yet implemented in autonomy module\n");
                 }
             }
-            _ => unsafe { crate::uart_print(b"Usage: learnctl <stats|train|feedback good|bad|verybad ID>\n"); }
+            _ => unsafe { crate::uart_print(b"Usage: learnctl <stats|dump|train|feedback good|bad|verybad ID>\n"); }
         }
     }
 
