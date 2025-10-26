@@ -1280,6 +1280,26 @@ impl Shell {
                             }
                             crate::uart_print(b"\n");
 
+                            // Show human feedback if applied
+                            if entry.feedback_applied {
+                                crate::uart_print(b"  Human Feedback: ");
+                                if entry.human_feedback < 0 {
+                                    crate::uart_print(b"-");
+                                    self.print_number_simple((-entry.human_feedback) as u64);
+                                } else {
+                                    crate::uart_print(b"+");
+                                    self.print_number_simple(entry.human_feedback as u64);
+                                }
+                                crate::uart_print(b" (");
+                                crate::uart_print(match entry.human_feedback {
+                                    100 => b"GOOD",
+                                    -50 => b"BAD",
+                                    -200 => b"VERY BAD",
+                                    _ => b"CUSTOM",
+                                });
+                                crate::uart_print(b")\n");
+                            }
+
                             crate::uart_print(b"  Safety Flags: 0x");
                             self.print_hex(entry.safety_flags as u64);
                             crate::uart_print(b"\n");
@@ -1732,6 +1752,46 @@ impl Shell {
                     }
                 }
 
+                // Human Feedback Statistics (RLHF)
+                let audit_log = crate::autonomy::get_audit_log();
+                let mut feedback_good = 0u32;
+                let mut feedback_bad = 0u32;
+                let mut feedback_verybad = 0u32;
+                let mut total_feedback = 0u32;
+
+                for i in 0..audit_log.len() {
+                    if let Some(entry) = audit_log.get_entry(i) {
+                        if entry.feedback_applied {
+                            total_feedback += 1;
+                            match entry.human_feedback {
+                                100 => feedback_good += 1,
+                                -50 => feedback_bad += 1,
+                                -200 => feedback_verybad += 1,
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                drop(audit_log);
+
+                if total_feedback > 0 {
+                    unsafe {
+                        crate::uart_print(b"\nHuman Feedback (RLHF):\n");
+                        crate::uart_print(b"  Total Decisions w/ Feedback: ");
+                        self.print_number_simple(total_feedback as u64);
+                        crate::uart_print(b"\n");
+                        crate::uart_print(b"  GOOD (+100):    ");
+                        self.print_number_simple(feedback_good as u64);
+                        crate::uart_print(b"\n");
+                        crate::uart_print(b"  BAD (-50):      ");
+                        self.print_number_simple(feedback_bad as u64);
+                        crate::uart_print(b"\n");
+                        crate::uart_print(b"  VERY BAD (-200): ");
+                        self.print_number_simple(feedback_verybad as u64);
+                        crate::uart_print(b"\n");
+                    }
+                }
+
                 // Learning rate adaptation info
                 let lr_state = crate::prediction_tracker::get_learning_rate_state();
                 unsafe {
@@ -1890,19 +1950,35 @@ impl Shell {
                     }
                 };
 
-                // TODO: Implement reward override in autonomy module
-                // For now, just log the feedback
-                unsafe {
-                    crate::uart_print(b"[LEARNCTL] Human feedback recorded for decision #");
-                    self.print_number_simple(decision_id);
-                    crate::uart_print(b": ");
-                    crate::uart_print(match reward_override {
-                        100 => b"GOOD (+100 reward)\n",
-                        -50 => b"BAD (-50 reward)\n",
-                        -200 => b"VERY BAD (-200 reward)\n",
-                        _ => b"UNKNOWN\n",
-                    });
-                    crate::uart_print(b"NOTE: Reward override not yet implemented in autonomy module\n");
+                // Apply human feedback to override reward
+                let success = crate::autonomy::apply_human_feedback(decision_id, reward_override);
+
+                if success {
+                    unsafe {
+                        crate::uart_print(b"[LEARNCTL] Human feedback applied to decision #");
+                        self.print_number_simple(decision_id);
+                        crate::uart_print(b": ");
+                        crate::uart_print(match reward_override {
+                            100 => b"GOOD (+100 reward)\n",
+                            -50 => b"BAD (-50 reward)\n",
+                            -200 => b"VERY BAD (-200 reward)\n",
+                            _ => b"UNKNOWN\n",
+                        });
+                        crate::uart_print(b"Reward overridden in decision record.\n");
+
+                        // For "verybad" feedback, add warning
+                        if reward_override == -200 {
+                            crate::uart_print(b"[WARNING] VERY BAD feedback recorded. ");
+                            crate::uart_print(b"Decision marked for analysis.\n");
+                        }
+                    }
+                } else {
+                    unsafe {
+                        crate::uart_print(b"[ERROR] Decision ID #");
+                        self.print_number_simple(decision_id);
+                        crate::uart_print(b" not found in audit log\n");
+                        crate::uart_print(b"Use 'autoctl dashboard' to see recent decisions\n");
+                    }
                 }
             }
             _ => unsafe { crate::uart_print(b"Usage: learnctl <stats|dump|train|feedback good|bad|verybad ID>\n"); }
