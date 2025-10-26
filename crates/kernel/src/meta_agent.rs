@@ -111,6 +111,11 @@ impl MetaState {
         }
     }
 
+    /// Alias for new() for consistency
+    pub const fn zero() -> Self {
+        Self::new()
+    }
+
     /// Convert state to Q8.8 fixed-point inputs for neural network
     pub fn to_q88_inputs(&self) -> [i16; META_IN] {
         [

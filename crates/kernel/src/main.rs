@@ -40,6 +40,8 @@ pub mod control;
 pub mod neural;
 pub mod agent_bus;
 pub mod meta_agent;
+pub mod autonomy;
+pub mod time;
 // PMU helpers (feature-gated usage)
 pub mod pmu;
 // Deterministic scheduler scaffolding (feature-gated)
