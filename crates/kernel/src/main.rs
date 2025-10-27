@@ -1098,8 +1098,8 @@ pub fn main() -> ! {
             unsafe { crate::uart_print(b"sis> "); }
             // Avoid creating a direct mutable reference to a `static mut`.
             let len = unsafe {
-                let ptr = CMD_BUF.as_mut_ptr();
-                let slice = core::slice::from_raw_parts_mut(ptr, CMD_BUF.len());
+                let ptr = core::ptr::addr_of_mut!(CMD_BUF).cast::<u8>();
+                let slice = core::slice::from_raw_parts_mut(ptr, 256);
                 crate::uart::read_line(slice)
             };
             if len == 0 { continue; }

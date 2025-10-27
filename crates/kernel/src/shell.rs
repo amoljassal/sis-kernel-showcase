@@ -68,7 +68,7 @@ impl Shell {
     fn read_command_input(&mut self) -> usize {
         unsafe {
             // Avoid creating a &mut reference to a static mut; construct a slice from raw parts
-            let ptr = CMD_BUFFER.as_mut_ptr();
+            let ptr = core::ptr::addr_of_mut!(CMD_BUFFER).cast::<u8>();
             let slice = core::slice::from_raw_parts_mut(ptr, MAX_CMD_LEN);
             let len = crate::uart::read_line(slice);
 
@@ -223,7 +223,7 @@ impl Shell {
             crate::uart_print(b"  bench    - Run syscall performance benchmarks\n");
             crate::uart_print(b"  stress   - Run syscall stress tests\n");
             crate::uart_print(b"  overhead - Measure syscall overhead\n");
-            crate::uart_print(b"  stresstest - Run stress tests: memory [--duration MS] [--target-pressure PCT] | commands [--duration MS] [--rate RPS] | multi [--duration MS]\n");
+            crate::uart_print(b"  stresstest - Run stress tests: memory|commands|multi|learning|redteam|chaos [--duration MS] [--episodes N] | compare <type> | report\n");
             crate::uart_print(b"  graphdemo- Run graph demo (feature: graph-demo)\n");
             crate::uart_print(b"  imagedemo- Run Image->Top5 labels demo (simulated)\n");
             crate::uart_print(b"  detdemo  - Run deterministic scheduler demo (feature: deterministic)\n");
@@ -2176,7 +2176,7 @@ impl Shell {
 
     fn cmd_stresstest(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: stresstest <memory> [--duration MS] [--target-pressure PCT]\n"); }
+            unsafe { crate::uart_print(b"Usage: stresstest <memory|commands|multi|learning|redteam|chaos|compare|report> [options]\n"); }
             return;
         }
         match args[0] {
@@ -2253,6 +2253,61 @@ impl Shell {
                 let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::MultiSubsystem);
                 cfg.duration_ms = duration_ms;
                 let _metrics = crate::stress_test::run_multi_stress(cfg);
+            }
+            "learning" => {
+                let mut episodes: u32 = 10;
+                let mut i = 1;
+                while i + 1 < args.len() {
+                    match args[i] {
+                        "--episodes" => { episodes = args[i+1].parse::<u32>().unwrap_or(episodes); i+=2; }
+                        _ => { i+=1; }
+                    }
+                }
+                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Learning);
+                cfg.episodes = episodes;
+                let metrics = crate::stress_test::run_learning_stress(cfg);
+                unsafe {
+                    crate::uart_print(b"\n[STRESSTEST] Learning completed: total_rewards=");
+                    self.print_number_simple(metrics.total_rewards as u64);
+                    crate::uart_print(b" decisions=");
+                    self.print_number_simple(metrics.decisions_made as u64);
+                    crate::uart_print(b" avg_reward=");
+                    self.print_number_simple(metrics.avg_reward_per_decision as u64);
+                    crate::uart_print(b"\n");
+                }
+            }
+            "redteam" => {
+                let mut duration_ms: u64 = 10_000;
+                let mut i = 1;
+                while i + 1 < args.len() {
+                    match args[i] {
+                        "--duration" => { duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms); i+=2; }
+                        _ => { i+=1; }
+                    }
+                }
+                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::RedTeam);
+                cfg.duration_ms = duration_ms;
+                let metrics = crate::stress_test::run_redteam_stress(cfg);
+                unsafe {
+                    crate::uart_print(b"\n[STRESSTEST] Red team completed: attacks_survived=");
+                    self.print_number_simple(metrics.actions_taken as u64);
+                    crate::uart_print(b" duration_ms=");
+                    self.print_number_simple(metrics.test_duration_ms);
+                    crate::uart_print(b"\n");
+                }
+            }
+            "chaos" => {
+                let mut duration_ms: u64 = 10_000;
+                let mut i = 1;
+                while i + 1 < args.len() {
+                    match args[i] {
+                        "--duration" => { duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms); i+=2; }
+                        _ => { i+=1; }
+                    }
+                }
+                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Chaos);
+                cfg.duration_ms = duration_ms;
+                let _metrics = crate::stress_test::run_chaos_stress(cfg);
             }
             "compare" => {
                 // Usage: stresstest compare <memory|commands|multi> [flags]
@@ -2340,7 +2395,14 @@ impl Shell {
                     any = true;
                     unsafe {
                         crate::uart_print(b"  ");
-                        let t = match rec.test_type { crate::stress_test::StressTestType::Memory => b"memory" as &[u8], crate::stress_test::StressTestType::Commands => b"commands", crate::stress_test::StressTestType::MultiSubsystem => b"multi", _ => b"other" };
+                        let t = match rec.test_type {
+                            crate::stress_test::StressTestType::Memory => b"memory" as &[u8],
+                            crate::stress_test::StressTestType::Commands => b"commands",
+                            crate::stress_test::StressTestType::MultiSubsystem => b"multi",
+                            crate::stress_test::StressTestType::Learning => b"learning",
+                            crate::stress_test::StressTestType::RedTeam => b"redteam",
+                            crate::stress_test::StressTestType::Chaos => b"chaos",
+                        };
                         crate::uart_print(t);
                         crate::uart_print(b" ");
                         crate::uart_print(if rec.autonomous_enabled { b"AUTO" } else { b"MAN" });
@@ -2348,6 +2410,9 @@ impl Shell {
                         match rec.test_type {
                             crate::stress_test::StressTestType::Memory => {
                                 crate::uart_print(b" peak="); self.print_number_simple(rec.metrics.peak_memory_pressure as u64); crate::uart_print(b"% ooms="); self.print_number_simple(rec.metrics.oom_events as u64);
+                            }
+                            crate::stress_test::StressTestType::Learning => {
+                                crate::uart_print(b" rewards="); self.print_number_simple(rec.metrics.total_rewards as u64); crate::uart_print(b" decisions="); self.print_number_simple(rec.metrics.decisions_made as u64);
                             }
                             _ => { crate::uart_print(b" actions="); self.print_number_simple(rec.metrics.actions_taken as u64); }
                         }
@@ -2358,7 +2423,7 @@ impl Shell {
                 if !any { unsafe { crate::uart_print(b"  (no runs yet)\n"); } }
                 unsafe { crate::uart_print(b"\n"); }
             }
-            _ => unsafe { crate::uart_print(b"Usage: stresstest <memory> [--duration MS] [--target-pressure PCT]\n"); }
+            _ => unsafe { crate::uart_print(b"Usage: stresstest <memory|commands|multi|learning|redteam|chaos|compare|report> [options]\n"); }
         }
     }
 
