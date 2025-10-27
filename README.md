@@ -1,10 +1,27 @@
 # SIS Kernel (Current Status)
 
-An experimental AArch64 (ARM64) kernel that boots under UEFI in QEMU, brings up basic platform services, and implements Phase 1 dataflow observability, Phase 2 deterministic scheduling with signed model capabilities, and Phase 3 AI-native real-time scheduling with NPU emulation. Features include CBS+EDF deterministic scheduler, cryptographically-verified model packages, capability-based security, comprehensive per-operator metrics, channel backpressure tracking, structured JSON metrics export, real-time AI inference validation, temporal isolation for AI workloads, and NPU device emulation with MMIO interface. A comprehensive industry-grade testing framework launches QEMU clusters, validates performance metrics with JSON Schema compliance, performs formal verification with Kani and Prusti, executes Byzantine fault tolerance testing, and generates professional reports with statistical analysis.
+An experimental AArch64 (ARM64) kernel that boots under UEFI in QEMU, brings up basic platform services, and implements Phase 1 dataflow observability, Phase 2 deterministic scheduling with signed model capabilities, and Phase 3 AI-native real-time scheduling with NPU emulation.
 
-This README reflects the implemented, verifiable behavior in this repo today — no hype, no unbuilt features.
+This README is intentionally scoped to what is implemented today. Ambitious features for Phase 4+ are called out as planned to avoid confusion.
 
-## Overview
+This README reflects the implemented, verifiable behavior in this repo today. Sections marked Planned describe upcoming work with scaffolding present in code.
+
+## Feature Flags and Modes
+
+- `llm`: Enables the kernel-resident LLM service and `llmctl/llminfer/llmstream` shell.
+- `deterministic`: Enables deterministic CBS+EDF scheduler hooks used by LLM budgeting.
+- `crypto-real`: Enables real SHA-256 + Ed25519 verification for model packages. Requires env `SIS_ED25519_PUBKEY=0x<64hex>` at build time.
+- `virtio-console`: Enables host control-plane frames on VirtIO console for neural control.
+- `perf-verbose`, `graph-demo`, `graph-autostats`: Optional demos/verbosity.
+
+Runtime toggles:
+- `metricsctl on|off|status`: Controls UART metric emission at runtime (default: on). Snapshot functions currently return 0 entries until capture is re-enabled in a future phase.
+
+Crypto notes:
+- When `crypto-real` is ON and `SIS_ED25519_PUBKEY` is set, model verification uses real SHA-256 and Ed25519 (`model.rs`).
+- When `crypto-real` is OFF or the key is not set, demo signature paths may accept stubbed signatures for control-plane exercises (documented below).
+
+## Overview (Implemented)
 
 - Boots via UEFI on QEMU `virt` (GICv3, highmem) and prints deterministic boot markers.
 - Enables MMU and caches at EL1; initializes UART, heap, GICv3, virtual timer, and PMU hardware counters.
@@ -12,12 +29,29 @@ This README reflects the implemented, verifiable behavior in this repo today —
 - Emits comprehensive performance metrics: per-operator latency percentiles (p50/p95/p99), channel backpressure tracking, PMU instruction-level attribution, scheduler timing, deterministic deadline tracking, model security audit logs, real-time AI inference metrics, and NPU processing statistics.
 - Features V0 binary control plane for graph management and zero-copy tensor handle passing.
 - Phase 2 deterministic scheduling: CBS+EDF hybrid scheduler with admission control, jitter tracking, and constraint enforcement preventing dynamic allocation, unbounded loops, and indefinite blocking.
-- Signed model package infrastructure with SHA-256 + Ed25519 verification, capability-based permissions (LOAD/EXECUTE/INSPECT/EXPORT/ATTEST), and comprehensive audit logging.
+- Signed model package infrastructure with SHA-256 + Ed25519 verification (under `crypto-real` with `SIS_ED25519_PUBKEY`), capability-based permissions (LOAD/EXECUTE/INSPECT/EXPORT/ATTEST), and audit logging.
 - Phase 3 AI-native capabilities: Real-time AI inference validation with NEON optimizations, temporal isolation for AI workloads with guaranteed resource allocation, NPU device emulation with 16x16 matrix operations, and integrated ML model execution with performance monitoring.
-- Neural learning subsystem: Embedded Q8.8 fixed-point MLP predicts command outcomes before execution, records actual results in neural audit ring, accepts user feedback (helpful/not_helpful/expected), and retrains network online using gradient descent to improve future predictions. Demonstrates true "neural-first" kernel where ML makes real decisions.
-- Industry-grade testing framework validates metrics against JSON Schema v1, exports structured observability data for ML workload analysis, performs formal verification with 95% coverage target, executes Byzantine fault tolerance testing with 33/100 node tolerance, and generates comprehensive HTML/JSON reports with statistical analysis.
+- Neural learning subsystem: Embedded Q8.8 fixed-point MLP predicts command outcomes before execution, records results in neural audit ring, accepts user feedback (helpful/not_helpful/expected), and supports online updates. Bounded compute, no_std.
+- Testing crate includes scaffolding for performance/correctness/distributed/fault tests and monitoring assets. Some workflows are placeholders and require host setup; see `crates/testing` for details.
 
-Non-goals and not implemented: production hardening beyond testing framework, full BFT consensus protocol, RDMA fabric, sub-µs context switching on QEMU (achieved in simulation), full driver stack. References to these in past docs were aspirational; this README describes actual code.
+Non-goals and not implemented: production hardening beyond testing scaffolding, full BFT consensus protocol, RDMA fabric, sub-µs context switching on QEMU, full driver stack. Past aspirational references are now separated into Planned.
+
+## Implemented vs Planned
+
+Implemented today:
+- Shell-first LLM service with audit/budgeting (`llmctl`, `llminfer`, `llmstream`, `llmjson/llmstats`).
+- Deterministic scheduler hooks for LLM budgeting when `deterministic` is enabled.
+- Model security manager with SHA-256 and Ed25519 under `crypto-real`; audit metrics.
+- Fixed-point neural agent with `neuralctl` (status/reset/infer/update/teach/retrain/audit) and `ask-ai` mapping.
+- Neural/LLM audit rings with JSON output; host frames over VirtIO console for neural control.
+- Runtime metrics toggle: `metricsctl on|off|status` (emission on UART; snapshot APIs currently stubbed).
+- GICv3 init and virtual timer; stable bring-up to shell.
+
+Planned (Phase 4+; scaffolding present but not fully integrated):
+- Autonomous meta-agent running on a periodic timer with guarded actions and full safety rollbacks.
+- Actor-critic, experience replay, and natural gradient updates for meta-agent learning.
+- Red-team/chaos testing, formal property checking, and anomaly detection tied to `autoctl`.
+- Metrics ring capture and snapshot exports for ctx/mem/real; current snapshot functions return 0 entries.
 
 ## Quick Start
 
@@ -31,10 +65,9 @@ Non-goals and not implemented: production hardening beyond testing framework, fu
 - Deterministic budgeting (optional):
   - Boot with: `SIS_FEATURES="llm,deterministic" BRINGUP=1 ./scripts/uefi_run.sh`
   - In shell: `llmctl budget --period-ns 1000000000 --max-tokens-per-period 8` then `llmctl status`
-- Signature stub (audited allow/deny):
-  - `llmsig 42` → prints `LLM SIG: 0x...`
-  - Load OK: `llmctl load --model 42 --sig 0x<hex>` → `llmjson` shows `op=1,status=1`
-  - Load reject: `llmctl load --model 42 --sig 0xDEADBEEF` → `op=1,status=2`
+- Signature verification:
+  - Demo path (stub, for control-plane only): `llmsig 42`, then `llmctl load --model 42 --sig 0x<stub>` shows allow/deny in `llmjson`.
+  - Production path: build with `--features crypto-real` and set `SIS_ED25519_PUBKEY`. Model verification uses SHA-256 + Ed25519 (`model.rs`); demo stub is bypassed.
 - Neural learning demo (AI-native kernel):
   - Execute commands: `help`, `neuralctl status`, `invalidcommand`
   - Observe pre-command predictions: `[AI] Predicting: likely success (confidence: 543/1000)`
@@ -197,9 +230,9 @@ This enables:
 
 This is a proof-of-concept for kernel-level online learning. The audit ring stores the last 32 scheduling events for production observability. All computation is fixed-point arithmetic in no_std environment with bounded execution time. The network learns from both command execution and operator performance, retraining with `neuralctl retrain 10` applies feedback from both subsystems.
 
-## Memory Subsystem Neural Agent
+## Memory Subsystem Neural Agent (Demo)
 
-**Multi-subsystem neural architecture with autonomous OOM prevention and fragmentation detection.**
+Multi-subsystem neural architecture with status/predict/stress commands. Autonomous actions are planned under Phase 4 guardrails.
 
 Expanding on the neural-first kernel architecture, the memory subsystem features a dedicated neural network (separate from command and scheduling agents) that predicts memory health and compaction needs in real-time.
 
