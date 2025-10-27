@@ -35,6 +35,7 @@ default = []
 arm64-ai = []
 neon-optimized = ["arm64-ai"]  # NEON SIMD optimization for Apple Silicon
 bringup = []
+full-shell = []     # Prefer full shell during bring-up, fallback to mini
 formal-verification = []  # RISC-V hooks guarded by target_arch
 aia = []  # Advanced Interrupt Architecture for RISC-V (no-op unless riscv64)
 perf-verbose = []  # Enable verbose [PERF] logs on serial

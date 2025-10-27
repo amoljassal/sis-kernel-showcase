@@ -29,10 +29,13 @@ impl Shell {
 
     /// Main shell loop
     pub fn run(&mut self) {
+        // Briefly mask IRQs around initial banner prints to avoid interleaving during bring-up
+        unsafe { core::arch::asm!("msr daifset, #2", options(nostack, preserves_flags)); }
         unsafe {
             crate::uart_print(b"\n=== SIS Kernel Shell ===\n");
             crate::uart_print(b"Type 'help' for available commands\n\n");
         }
+        unsafe { core::arch::asm!("msr daifclr, #2", options(nostack, preserves_flags)); }
 
         while self.running {
             self.print_prompt();
@@ -64,12 +67,14 @@ impl Shell {
     /// Read command input from UART with line editing
     fn read_command_input(&mut self) -> usize {
         unsafe {
-            let buffer_ptr = &raw mut CMD_BUFFER;
-            let len = crate::uart::read_line(&mut *buffer_ptr);
+            // Avoid creating a &mut reference to a static mut; construct a slice from raw parts
+            let ptr = CMD_BUFFER.as_mut_ptr();
+            let slice = core::slice::from_raw_parts_mut(ptr, MAX_CMD_LEN);
+            let len = crate::uart::read_line(slice);
 
             // Null terminate the command
             if len < MAX_CMD_LEN {
-                (*buffer_ptr)[len] = 0;
+                *ptr.add(len) = 0;
             }
 
             len
