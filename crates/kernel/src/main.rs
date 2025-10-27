@@ -336,10 +336,50 @@ mod bringup {
         unsafe { core::arch::asm!("msr daifclr, #2", options(nostack, preserves_flags)); }
         super::uart_print(b"AUTONOMY: set_ready complete\n");
 
-        // 11) Launch interactive shell (minimal built-in loop to avoid module call issues)
+        // 11) Launch interactive shell
         super::uart_print(b"LAUNCHING SHELL\n");
-        super::uart_print(b"[MAIN] STARTING MINI SHELL\n");
+        super::uart_print(b"[MAIN] STARTING FULL SHELL\n");
+
+        // Attempt a quick probe into the shell module
+        super::uart_print(b"[SHELL] PROBE PRE\n");
+        crate::shell::shell_probe_trampoline();
+        super::uart_print(b"[SHELL] PROBE POST\n");
+
+        // Run full shell on a dedicated stack to avoid any latent stack issues
+        launch_full_shell_on_alt_stack();
+
+        super::uart_print(b"[MAIN] FULL SHELL EXITED -> FALLBACK TO MINI\n");
         crate::run_minishell_loop();
+    }
+
+    // 64 KiB stack dedicated to the full shell runtime (16-byte aligned)
+    #[repr(C, align(16))]
+    struct ShellStack([u8; 64 * 1024]);
+    static mut SHELL_STACK: ShellStack = ShellStack([0; 64 * 1024]);
+
+    /// Switch to an alternate stack, run the full shell, then restore the original stack
+    /// Keep IRQs enabled during the shell to preserve timers; mask only during SP switch.
+    unsafe fn launch_full_shell_on_alt_stack() {
+        let base = &raw const SHELL_STACK.0;
+        let sp_top = base.cast::<u8>().add((*base).len()) as u64;
+
+        // Mask IRQs for the short window of SP switch
+        core::arch::asm!("msr daifset, #2", options(nostack, preserves_flags));
+        core::arch::asm!(
+            r#"
+            mov x9, sp          // save old SP
+            mov sp, {new_sp}    // switch to shell stack
+            msr daifclr, #2     // unmask IRQs
+            bl {entry}          // run full shell (may return on 'exit')
+            msr daifset, #2     // mask before restoring SP
+            mov sp, x9          // restore old SP
+            msr daifclr, #2     // unmask
+            "#,
+            new_sp = in(reg) sp_top,
+            entry = sym crate::shell::run_shell_c,
+            lateout("x9") _,
+            clobber_abi("C")
+        );
     }
 
     unsafe fn install_vectors() {
@@ -1056,7 +1096,12 @@ pub fn main() -> ! {
         static mut CMD_BUF: [u8; 256] = [0; 256];
         loop {
             unsafe { crate::uart_print(b"sis> "); }
-            let len = unsafe { crate::uart::read_line(unsafe { &mut CMD_BUF }) };
+            // Avoid creating a direct mutable reference to a `static mut`.
+            let len = unsafe {
+                let ptr = CMD_BUF.as_mut_ptr();
+                let slice = core::slice::from_raw_parts_mut(ptr, CMD_BUF.len());
+                crate::uart::read_line(slice)
+            };
             if len == 0 { continue; }
             let cmd = unsafe { core::str::from_utf8_unchecked(&CMD_BUF[..len]) };
             let mut parts = cmd.split_whitespace();
