@@ -568,6 +568,11 @@ impl ActionRateLimiter {
             }
         }
     }
+
+    /// Snapshot current counters (for observability)
+    pub fn snapshot(&self) -> (u32, u32, u32) {
+        (self.compaction_count, self.priority_adjustments, self.strategy_changes)
+    }
 }
 
 // ============================================================================
@@ -654,6 +659,21 @@ static AUDIT_LOG: Mutex<DecisionAuditLog> = Mutex::new(DecisionAuditLog::new());
 static WATCHDOG: Mutex<AutonomousWatchdog> = Mutex::new(AutonomousWatchdog::new());
 static RATE_LIMITER: Mutex<ActionRateLimiter> = Mutex::new(ActionRateLimiter::new());
 pub static AUTONOMOUS_CONTROL: AutonomousControl = AutonomousControl::new();
+
+// Gate to enable autonomy ticks only after initialization completes (post bring-up)
+pub static AUTONOMY_READY: AtomicBool = AtomicBool::new(false);
+
+/// Mark autonomy as ready (called after agents initialize)
+pub fn set_ready(ready: bool) {
+    AUTONOMY_READY.store(ready, Ordering::Release);
+}
+
+// C-ABI setter removed after stabilizing direct atomic store usage
+
+/// Check if autonomy ticks are allowed
+pub fn is_ready() -> bool {
+    AUTONOMY_READY.load(Ordering::Acquire)
+}
 
 // ============================================================================
 // Layer 7: Model Checkpointing & Versioning
@@ -829,6 +849,12 @@ pub fn apply_human_feedback(decision_id: u64, feedback: i16) -> bool {
 /// Public API: Get rate limiter
 pub fn get_rate_limiter() -> spin::MutexGuard<'static, ActionRateLimiter> {
     RATE_LIMITER.lock()
+}
+
+/// Public API: Get a copy of rate limiter counters
+pub fn get_rate_limiter_stats() -> (u32, u32, u32) {
+    let rl = RATE_LIMITER.lock();
+    rl.snapshot()
 }
 
 /// Public API: Get checkpoint manager
@@ -1119,6 +1145,16 @@ fn uart_print_num(mut v: u64) {
     while i > 0 {
         i -= 1;
         unsafe { crate::uart_print(&[digits[i]]); }
+    }
+}
+
+/// Helper: print signed 64-bit integer to UART
+fn uart_print_i64(n: i64) {
+    if n < 0 {
+        unsafe { crate::uart_print(b"-"); }
+        uart_print_num((-n) as u64);
+    } else {
+        uart_print_num(n as u64);
     }
 }
 
@@ -1737,14 +1773,12 @@ pub fn autonomous_decision_tick() {
     // Step 4: Confidence-Based Action Gating
     // ========================================================================
 
-    const MIN_CONFIDENCE: i16 = 0; // 0% threshold (lowered for testing - gradually increase with implementations)
-
-    if confidence < MIN_CONFIDENCE {
+    if confidence < MIN_CONFIDENCE_FOR_ACTION {
         unsafe {
             crate::uart_print(b"[AUTONOMY] Low confidence (");
-            uart_print_num(confidence as u64);
+            uart_print_i64(confidence as i64);
             crate::uart_print(b" < ");
-            uart_print_num(MIN_CONFIDENCE as u64);
+            uart_print_i64(MIN_CONFIDENCE_FOR_ACTION as i64);
             crate::uart_print(b"), deferring action\n");
         }
 
@@ -1762,7 +1796,9 @@ pub fn autonomous_decision_tick() {
             SAFETY_LOW_CONFIDENCE,
             rationale,
         );
-
+        // Update decision counters and timestamp even when deferring actions
+        AUTONOMOUS_CONTROL.last_decision_timestamp.store(timestamp, core::sync::atomic::Ordering::Relaxed);
+        AUTONOMOUS_CONTROL.total_decisions.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         return;
     }
 
@@ -1847,13 +1883,13 @@ pub fn autonomous_decision_tick() {
 
     unsafe {
         crate::uart_print(b"[AUTONOMY] Multi-objective reward: mem=");
-        uart_print_num(multi_reward.memory_health as u64);
+        uart_print_i64(multi_reward.memory_health as i64);
         crate::uart_print(b" sched=");
-        uart_print_num(multi_reward.scheduling_health as u64);
+        uart_print_i64(multi_reward.scheduling_health as i64);
         crate::uart_print(b" cmd=");
-        uart_print_num(multi_reward.command_accuracy as u64);
+        uart_print_i64(multi_reward.command_accuracy as i64);
         crate::uart_print(b" total=");
-        uart_print_num(multi_reward.total as u64);
+        uart_print_i64(multi_reward.total as i64);
         crate::uart_print(b"\n");
     }
 

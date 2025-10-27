@@ -1272,12 +1272,23 @@ impl MemoryTelemetry {
 static MEMORY_TELEMETRY: Mutex<MemoryTelemetry> = Mutex::new(MemoryTelemetry::new());
 
 /// Initialize memory neural agent with proper dimensions
+#[inline(never)]
 pub fn init_memory_agent() {
+    unsafe { crate::uart_print(b"[MEM AGENT] ENTER\n"); }
+    // Disable IRQs during brief lock to avoid early-boot reentrancy/deadlock
+    unsafe { crate::uart_print(b"[MEM AGENT] IRQ OFF\n"); core::arch::asm!("msr daifset, #2", options(nostack, preserves_flags)); }
+    unsafe { crate::uart_print(b"[MEM AGENT] LOCKING\n"); }
     let mut agent = MEMORY_AGENT.lock();
-    // 4 inputs, 8 hidden, 2 outputs
-    agent.set_dims(4, 8, 2);
-    agent.infer_count = 1;  // Prevent lazy init from resetting dims on first inference
+    unsafe { crate::uart_print(b"[MEM AGENT] LOCKED\n"); }
+    let _ = agent.set_dims(4, 8, 2);
+    unsafe { crate::uart_print(b"[MEM AGENT] DIMS SET\n"); }
+    agent.infer_count = 1; // prevent lazy reset
+    drop(agent);
+    unsafe { crate::uart_print(b"[MEM AGENT] UNLOCKED\n"); }
+    // Re-enable IRQs
+    unsafe { crate::uart_print(b"[MEM AGENT] IRQ ON\n"); core::arch::asm!("msr daifclr, #2", options(nostack, preserves_flags)); }
     metric_kv("memory_agent_init", 1);
+    unsafe { crate::uart_print(b"[MEM AGENT] DONE\n"); }
 }
 
 /// Update memory telemetry from heap stats

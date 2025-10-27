@@ -1163,15 +1163,24 @@ impl MetaAgent {
     }
 }
 
+// (probe removed)
+
 /// Global meta-agent instance
 static META_AGENT: Mutex<MetaAgent> = Mutex::new(MetaAgent::new());
 
 /// Initialize the meta-agent
+#[inline(never)]
 pub fn init_meta_agent() {
+    // Brief IRQ mask during lock to avoid early-boot reentrancy
+    unsafe { core::arch::asm!("msr daifset, #2", options(nostack, preserves_flags)); }
     let mut agent = META_AGENT.lock();
     agent.init();
+    drop(agent);
+    unsafe { core::arch::asm!("msr daifclr, #2", options(nostack, preserves_flags)); }
     crate::trace::metric_kv("meta_agent_init", 1);
 }
+
+// (trampoline removed)
 
 /// Get meta-agent for direct access (for checkpointing)
 pub fn get_meta_agent() -> spin::MutexGuard<'static, MetaAgent> {

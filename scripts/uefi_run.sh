@@ -122,7 +122,16 @@ QEMU_DEVICES=(
   -nographic
   -bios "$FIRMWARE"
   -drive if=none,id=esp,format=raw,file=fat:rw:"$ESP_DIR"
-  -device virtio-blk-pci,drive=esp,id=boot-disk,disable-legacy=on
+)
+
+# Prefer virtio-blk-pci, but allow switching to mmio variant if needed
+if [[ "${VIRTBLK:-}" == "mmio" ]]; then
+  QEMU_DEVICES+=( -device virtio-blk-device,drive=esp,id=boot-disk )
+else
+  QEMU_DEVICES+=( -device virtio-blk-pci,drive=esp,id=boot-disk,disable-legacy=on )
+fi
+
+QEMU_DEVICES+=(
   -device virtio-rng-pci,id=rng0,disable-legacy=on
   -device virtio-net-pci,netdev=net0,id=net0,disable-legacy=on
   -netdev user,id=net0

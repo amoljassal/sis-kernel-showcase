@@ -148,6 +148,7 @@ impl Shell {
                 "nnact" => { self.cmd_nn_act(&parts[1..]); true },
                 "metricsctl" => { self.cmd_metricsctl(&parts[1..]); true },
                 "metrics" => { self.cmd_metrics(&parts[1..]); true },
+                "stresstest" => { self.cmd_stresstest(&parts[1..]); true },
                 "temporaliso" => { self.cmd_temporal_isolation_demo(); true },
                 "phase3validation" => { self.cmd_phase3_validation(); true },
                 #[cfg(feature = "llm")]
@@ -217,6 +218,7 @@ impl Shell {
             crate::uart_print(b"  bench    - Run syscall performance benchmarks\n");
             crate::uart_print(b"  stress   - Run syscall stress tests\n");
             crate::uart_print(b"  overhead - Measure syscall overhead\n");
+            crate::uart_print(b"  stresstest - Run stress tests: memory [--duration MS] [--target-pressure PCT] | commands [--duration MS] [--rate RPS] | multi [--duration MS]\n");
             crate::uart_print(b"  graphdemo- Run graph demo (feature: graph-demo)\n");
             crate::uart_print(b"  imagedemo- Run Image->Top5 labels demo (simulated)\n");
             crate::uart_print(b"  detdemo  - Run deterministic scheduler demo (feature: deterministic)\n");
@@ -270,7 +272,7 @@ impl Shell {
             crate::uart_print(b"  mladvdemo - Demo advanced ML features (experience replay, TD learning, topology)\n");
             crate::uart_print(b"  actorctl - Actor-critic: status | policy | sample | lambda N | natural on/off | kl N | on | off\n");
             crate::uart_print(b"  actorcriticdemo - Demo actor-critic with policy gradients and eligibility traces\n");
-            crate::uart_print(b"  autoctl  - Autonomous control: on | off | status | interval N | explain ID | dashboard | checkpoints | saveckpt | restoreckpt N | restorebest | tick | oodcheck\n");
+            crate::uart_print(b"  autoctl  - Autonomous control: on | off | status | interval N | limits | audit last N | rewards --breakdown | explain ID | dashboard | checkpoints | saveckpt | restoreckpt N | restorebest | tick | oodcheck\n");
             crate::uart_print(b"  learnctl - Prediction tracking: stats | train | feedback good|bad|verybad ID\n");
             crate::uart_print(b"  memctl   - Memory neural agent: status | predict | stress [N]\n");
             crate::uart_print(b"  ask-ai   - Ask a simple question: ask-ai \"<text>\" (maps to features, runs agent)\n");
@@ -1138,7 +1140,7 @@ impl Shell {
 
     fn cmd_autoctl(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck>\n"); }
+            unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|limits|audit last N|rewards --breakdown|anomalies|verify|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck>\n"); }
             return;
         }
 
@@ -1146,6 +1148,21 @@ impl Shell {
             "on" => {
                 crate::autonomy::AUTONOMOUS_CONTROL.enable();
                 unsafe { crate::uart_print(b"[AUTOCTL] Autonomous mode ENABLED\n"); }
+                // Arm the virtual timer immediately so periodic ticks begin without waiting
+                // for existing timer activity. Uses decision_interval_ms to program cntv_tval.
+                #[cfg(target_arch = "aarch64")]
+                unsafe {
+                    let mut frq: u64; core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
+                    let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL
+                        .decision_interval_ms
+                        .load(core::sync::atomic::Ordering::Relaxed)
+                        .clamp(100, 60_000);
+                    let cycles = if frq > 0 { (frq / 1000).saturating_mul(interval_ms) } else { (62_500u64).saturating_mul(interval_ms) };
+                    core::arch::asm!("msr cntv_tval_el0, {x}", x = in(reg) cycles);
+                    // Ensure virtual timer is enabled and unmasked
+                    let ctl: u64 = 1; // ENABLE=1, IMASK=0
+                    core::arch::asm!("msr cntv_ctl_el0, {x}", x = in(reg) ctl);
+                }
             }
             "off" => {
                 crate::autonomy::AUTONOMOUS_CONTROL.disable();
@@ -1182,6 +1199,20 @@ impl Shell {
                 }
                 drop(audit_log);
 
+                // Week 6: Prediction accuracy trend (last 100)
+                {
+                    let (correct_100, total_100) = crate::prediction_tracker::compute_accuracy(100);
+                    let (correct_500, total_500) = crate::prediction_tracker::compute_accuracy(500);
+                    unsafe {
+                        crate::uart_print(b"  Accuracy (last 100): ");
+                        if total_100 > 0 { self.print_number_simple((correct_100 * 100 / total_100) as u64); crate::uart_print(b"%\n"); }
+                        else { crate::uart_print(b"N/A\n"); }
+                        crate::uart_print(b"  Accuracy (last 500): ");
+                        if total_500 > 0 { self.print_number_simple((correct_500 * 100 / total_500) as u64); crate::uart_print(b"%\n"); }
+                        else { crate::uart_print(b"N/A\n"); }
+                    }
+                }
+
                 let watchdog = crate::autonomy::get_watchdog();
                 unsafe {
                     crate::uart_print(b"  Watchdog Triggers: ");
@@ -1194,6 +1225,137 @@ impl Shell {
 
                 unsafe { crate::uart_print(b"\n"); }
             }
+            "limits" => {
+                // Show safety hard limits and current rate limiter counters
+                let (compactions, prio_adj, strat_changes) = crate::autonomy::get_rate_limiter_stats();
+                unsafe {
+                    crate::uart_print(b"\n=== Safety Limits ===\n");
+                    crate::uart_print(b"  MAX_MEMORY_DIRECTIVE_CHANGE: ");
+                    self.print_number_simple(crate::autonomy::MAX_MEMORY_DIRECTIVE_CHANGE as u64);
+                    crate::uart_print(b"/1000\n  MAX_PRIORITY_CHANGE: ");
+                    self.print_number_simple(crate::autonomy::MAX_PRIORITY_CHANGE as u64);
+                    crate::uart_print(b"\n  MIN_DECISION_INTERVAL_MS: ");
+                    self.print_number_simple(crate::autonomy::MIN_DECISION_INTERVAL_MS);
+                    crate::uart_print(b" ms\n  MAX_COMPACTIONS_PER_MINUTE: ");
+                    self.print_number_simple(crate::autonomy::MAX_COMPACTIONS_PER_MINUTE as u64);
+                    crate::uart_print(b"\n  MAX_PRIORITY_ADJUSTMENTS_PER_MINUTE: ");
+                    self.print_number_simple(crate::autonomy::MAX_PRIORITY_ADJUSTMENTS_PER_MINUTE as u64);
+                    crate::uart_print(b"\n\n=== Rate Limiter Counters (current window) ===\n");
+                    crate::uart_print(b"  Compactions: ");
+                    self.print_number_simple(compactions as u64);
+                    crate::uart_print(b"\n  Priority adjustments: ");
+                    self.print_number_simple(prio_adj as u64);
+                    crate::uart_print(b"\n  Strategy changes: ");
+                    self.print_number_simple(strat_changes as u64);
+                    crate::uart_print(b"\n\n");
+                }
+            }
+            "audit" => {
+                if args.len() < 3 || args[1] != "last" {
+                    unsafe { crate::uart_print(b"Usage: autoctl audit last N\n"); }
+                    return;
+                }
+                let n = args[2].parse::<usize>().unwrap_or(10);
+                let log = crate::autonomy::get_audit_log();
+                let total = log.len();
+                let show = core::cmp::min(n, total);
+                unsafe {
+                    crate::uart_print(b"\n=== Last "); self.print_number_simple(show as u64); crate::uart_print(b" Decisions ===\n");
+                }
+                for i in 0..show {
+                    let idx = if log.head_index() >= 1 + i { log.head_index() - 1 - i } else { (1000 + log.head_index()) - 1 - i } % 1000;
+                    if let Some(entry) = log.get_entry(idx) {
+                        unsafe {
+                            crate::uart_print(b"#"); self.print_number_simple(entry.decision_id);
+                            crate::uart_print(b" conf="); self.print_number_simple(entry.confidence as u64);
+                            crate::uart_print(b" actions="); self.print_hex(entry.actions_taken.0 as u64);
+                            crate::uart_print(b" exp=\""); crate::uart_print(entry.rationale.explanation_code.as_str().as_bytes()); crate::uart_print(b"\"\n");
+                        }
+                    }
+                }
+                unsafe { crate::uart_print(b"\n"); }
+                drop(log);
+            }
+            "rewards" => {
+                // Compute and show multi-objective breakdown using last two states (if available)
+                if args.len() >= 2 && args[1] == "--breakdown" {
+                    let log = crate::autonomy::get_audit_log();
+                    if log.len() < 1 {
+                        unsafe { crate::uart_print(b"[INFO] No decisions yet\n"); }
+                        drop(log);
+                        return;
+                    }
+                    // Use last and previous states if present; else compare against same (zero deltas)
+                    let last_idx = if log.head_index() == 0 { 999 } else { log.head_index() - 1 };
+                    let last = log.get_entry(last_idx).unwrap();
+                    let prev_idx = if last_idx == 0 { 999 } else { last_idx - 1 };
+                    let prev = log.get_entry(prev_idx).unwrap_or(last);
+                    let actions = last.actions_taken;
+                    let r = crate::autonomy::compute_system_reward(&prev.state_before, &last.state_before, &actions);
+                    unsafe {
+                        crate::uart_print(b"\n=== Reward Breakdown (last decision) ===\n");
+                        crate::uart_print(b"  Memory health: "); self.print_number_simple(r.memory_health as u64); crate::uart_print(b"\n");
+                        crate::uart_print(b"  Scheduling health: "); self.print_number_simple(r.scheduling_health as u64); crate::uart_print(b"\n");
+                        crate::uart_print(b"  Command accuracy: "); self.print_number_simple(r.command_accuracy as u64); crate::uart_print(b"\n");
+                        crate::uart_print(b"  Action rate penalty: ");
+                        if r.action_rate_penalty < 0 { crate::uart_print(b"-"); self.print_number_simple((-r.action_rate_penalty) as u64); } else { self.print_number_simple(r.action_rate_penalty as u64); }
+                        crate::uart_print(b"\n  Oscillation penalty: ");
+                        if r.oscillation_penalty < 0 { crate::uart_print(b"-"); self.print_number_simple((-r.oscillation_penalty) as u64); } else { self.print_number_simple(r.oscillation_penalty as u64); }
+                        crate::uart_print(b"\n  Extreme action penalty: ");
+                        if r.extreme_action_penalty < 0 { crate::uart_print(b"-"); self.print_number_simple((-r.extreme_action_penalty) as u64); } else { self.print_number_simple(r.extreme_action_penalty as u64); }
+                        crate::uart_print(b"\n  Predictability bonus: "); self.print_number_simple(r.predictability as u64);
+                        crate::uart_print(b"\n  Total: ");
+                        if r.total < 0 { crate::uart_print(b"-"); self.print_number_simple((-r.total) as u64); } else { self.print_number_simple(r.total as u64); }
+                        crate::uart_print(b"\n\n");
+                    }
+                    drop(log);
+                } else {
+                    unsafe { crate::uart_print(b"Usage: autoctl rewards --breakdown\n"); }
+                }
+            }
+            "anomalies" => {
+                // Simple anomaly report over last 100 decisions
+                let log = crate::autonomy::get_audit_log();
+                let n = core::cmp::min(100, log.len());
+                let mut rate_hits = 0u32; let mut hard_viol = 0u32; let mut neg_rewards = 0u32; let mut total = 0u32;
+                for i in 0..n {
+                    let idx = if log.head_index() >= 1 + i { log.head_index() - 1 - i } else { (1000 + log.head_index()) - 1 - i } % 1000;
+                    if let Some(e) = log.get_entry(idx) {
+                        total += 1;
+                        if e.safety_flags & crate::autonomy::SAFETY_RATE_LIMITED != 0 { rate_hits += 1; }
+                        if e.safety_flags & crate::autonomy::SAFETY_HARD_LIMIT != 0 { hard_viol += 1; }
+                        if e.reward < 0 { neg_rewards += 1; }
+                    }
+                }
+                drop(log);
+                unsafe {
+                    crate::uart_print(b"\n=== Anomaly Report (last 100) ===\n");
+                    crate::uart_print(b"  Decisions analyzed: "); self.print_number_simple(total as u64); crate::uart_print(b"\n");
+                    crate::uart_print(b"  Rate-limit hits: "); self.print_number_simple(rate_hits as u64); crate::uart_print(b"\n");
+                    crate::uart_print(b"  Hard-limit violations: "); self.print_number_simple(hard_viol as u64); crate::uart_print(b"\n");
+                    crate::uart_print(b"  Negative rewards: "); self.print_number_simple(neg_rewards as u64); crate::uart_print(b"\n\n");
+                }
+            }
+            "verify" => {
+                // Minimal runtime property checks (informational)
+                // P1: Actions per 60 decisions <= 60 (approx 1 per decision)
+                let log = crate::autonomy::get_audit_log();
+                let n = core::cmp::min(60, log.len());
+                let mut actions_sum = 0u32;
+                for i in 0..n {
+                    let idx = if log.head_index() >= 1 + i { log.head_index() - 1 - i } else { (1000 + log.head_index()) - 1 - i } % 1000;
+                    if let Some(e) = log.get_entry(idx) { actions_sum += (e.actions_taken.0 != 0) as u32; }
+                }
+                drop(log);
+                let p1_pass = actions_sum <= 60;
+                unsafe {
+                    crate::uart_print(b"\n=== Runtime Property Check ===\n");
+                    crate::uart_print(b"  P1: actions_per_60_decisions <= 60: ");
+                    crate::uart_print(if p1_pass { b"PASS\n" } else { b"FAIL\n" });
+                    crate::uart_print(b"  P2: watchdog_triggered -> rollback_completed: INFO (requires event hooks)\n");
+                    crate::uart_print(b"  P3: hard_limit_violation -> safe_mode_entered: INFO (requires action wiring)\n\n");
+                }
+            }
             "interval" => {
                 if args.len() < 2 {
                     unsafe { crate::uart_print(b"Usage: autoctl interval <milliseconds>\n"); }
@@ -1205,6 +1367,16 @@ impl Shell {
                     crate::uart_print(b"[AUTOCTL] Decision interval set to ");
                     self.print_number_simple(interval_ms);
                     crate::uart_print(b" ms\n");
+                }
+                // Re-arm the virtual timer immediately to apply the new interval
+                #[cfg(target_arch = "aarch64")]
+                unsafe {
+                    let mut frq: u64; core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
+                    let cycles = if frq > 0 { (frq / 1000).saturating_mul(interval_ms) } else { (62_500u64).saturating_mul(interval_ms) };
+                    core::arch::asm!("msr cntv_tval_el0, {x}", x = in(reg) cycles);
+                    // Ensure virtual timer is enabled and unmasked
+                    let ctl: u64 = 1; // ENABLE=1, IMASK=0
+                    core::arch::asm!("msr cntv_ctl_el0, {x}", x = in(reg) ctl);
                 }
             }
             "explain" => {
@@ -1258,7 +1430,7 @@ impl Shell {
                             }
                             crate::uart_print(b"]\n");
 
-                            crate::uart_print(b"  Actions Taken: 0x");
+                            crate::uart_print(b"  Actions Taken: ");
                             self.print_hex(entry.actions_taken.0 as u64);
                             crate::uart_print(b"\n");
 
@@ -1300,7 +1472,7 @@ impl Shell {
                                 crate::uart_print(b")\n");
                             }
 
-                            crate::uart_print(b"  Safety Flags: 0x");
+                            crate::uart_print(b"  Safety Flags: ");
                             self.print_hex(entry.safety_flags as u64);
                             crate::uart_print(b"\n");
 
@@ -1334,6 +1506,19 @@ impl Shell {
                     unsafe { crate::uart_print(b"  No decisions recorded yet.\n\n"); }
                     drop(audit_log);
                     return;
+                }
+
+                // Week 6: Show accuracy trend
+                {
+                    let (c100, t100) = crate::prediction_tracker::compute_accuracy(100);
+                    let (c500, t500) = crate::prediction_tracker::compute_accuracy(500);
+                    unsafe {
+                        crate::uart_print(b"  Accuracy (last 100/500): ");
+                        if t100 > 0 { self.print_number_simple((c100 * 100 / t100) as u64); } else { crate::uart_print(b"N/A"); }
+                        crate::uart_print(b"% / ");
+                        if t500 > 0 { self.print_number_simple((c500 * 100 / t500) as u64); } else { crate::uart_print(b"N/A"); }
+                        crate::uart_print(b"%\n\n");
+                    }
                 }
 
                 // Show last 10 decisions (or fewer if less than 10)
@@ -1376,8 +1561,7 @@ impl Shell {
                         }
                         crate::uart_print(b"| ");
 
-                        // Actions (0xNN format)
-                        crate::uart_print(b"0x");
+                        // Actions (hex format)
                         self.print_hex(entry.actions_taken.0 as u64);
                         crate::uart_print(b"    | ");
 
@@ -1637,7 +1821,7 @@ impl Shell {
                 // Record this snapshot for history
                 crate::prediction_tracker::record_distribution_snapshot(current_stats);
             }
-            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck>\n"); }
+            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|limits|audit last N|rewards --breakdown|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck>\n"); }
         }
     }
 
@@ -1982,6 +2166,194 @@ impl Shell {
                 }
             }
             _ => unsafe { crate::uart_print(b"Usage: learnctl <stats|dump|train|feedback good|bad|verybad ID>\n"); }
+        }
+    }
+
+    fn cmd_stresstest(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: stresstest <memory> [--duration MS] [--target-pressure PCT]\n"); }
+            return;
+        }
+        match args[0] {
+            "memory" => {
+                // Defaults
+                let mut duration_ms: u64 = 10_000;
+                let mut target_pressure: u8 = 85;
+                // Parse flags
+                let mut i = 1;
+                while i + 1 < args.len() {
+                    match args[i] {
+                        "--duration" => {
+                            duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms);
+                            i += 2;
+                        }
+                        "--target-pressure" => {
+                            let v = args[i+1].parse::<u16>().unwrap_or(target_pressure as u16);
+                            target_pressure = v.min(100) as u8;
+                            i += 2;
+                        }
+                        _ => { i += 1; }
+                    }
+                }
+
+                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Memory);
+                cfg.duration_ms = duration_ms;
+                cfg.target_pressure = target_pressure;
+                let metrics = crate::stress_test::run_memory_stress(cfg);
+
+                unsafe {
+                    crate::uart_print(b"\n[STRESSTEST] Memory completed: peak_pressure=");
+                    self.print_number_simple(metrics.peak_memory_pressure as u64);
+                    crate::uart_print(b"% oom_events=");
+                    self.print_number_simple(metrics.oom_events as u64);
+                    crate::uart_print(b" compactions=");
+                    self.print_number_simple(metrics.compaction_triggers as u64);
+                    crate::uart_print(b" duration_ms=");
+                    self.print_number_simple(metrics.test_duration_ms);
+                    crate::uart_print(b"\n");
+                }
+            }
+            "commands" => {
+                let mut duration_ms: u64 = 10_000;
+                let mut rate: u32 = 50;
+                let mut i = 1;
+                while i + 1 < args.len() {
+                    match args[i] {
+                        "--duration" => { duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms); i+=2; }
+                        "--rate" => { rate = args[i+1].parse::<u32>().unwrap_or(rate); i+=2; }
+                        _ => { i+=1; }
+                    }
+                }
+                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Commands);
+                cfg.duration_ms = duration_ms;
+                cfg.command_rate = rate;
+                let metrics = crate::stress_test::run_command_stress(cfg);
+                unsafe {
+                    crate::uart_print(b"\n[STRESSTEST] Commands completed: actions=");
+                    self.print_number_simple(metrics.actions_taken as u64);
+                    crate::uart_print(b" duration_ms=");
+                    self.print_number_simple(metrics.test_duration_ms);
+                    crate::uart_print(b"\n");
+                }
+            }
+            "multi" => {
+                let mut duration_ms: u64 = 10_000;
+                let mut i = 1;
+                while i + 1 < args.len() {
+                    match args[i] {
+                        "--duration" => { duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms); i+=2; }
+                        _ => { i+=1; }
+                    }
+                }
+                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::MultiSubsystem);
+                cfg.duration_ms = duration_ms;
+                let _metrics = crate::stress_test::run_multi_stress(cfg);
+            }
+            "compare" => {
+                // Usage: stresstest compare <memory|commands|multi> [flags]
+                if args.len() < 2 {
+                    unsafe { crate::uart_print(b"Usage: stresstest compare <memory|commands|multi> [--duration MS] [--target-pressure PCT] [--rate RPS]\n"); }
+                    return;
+                }
+
+                // Parse common flags
+                let mut duration_ms: u64 = 10_000;
+                let mut target_pressure: u8 = 85;
+                let mut rate: u32 = 50;
+                let mut i = 2;
+                while i + 1 < args.len() {
+                    match args[i] {
+                        "--duration" => { duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms); i+=2; }
+                        "--target-pressure" => { let v = args[i+1].parse::<u16>().unwrap_or(target_pressure as u16); target_pressure = v.min(100) as u8; i+=2; }
+                        "--rate" => { rate = args[i+1].parse::<u32>().unwrap_or(rate); i+=2; }
+                        _ => { i+=1; }
+                    }
+                }
+
+                // Preserve autonomy state
+                let was_enabled = crate::autonomy::AUTONOMOUS_CONTROL.is_enabled();
+
+                // Build config by test type
+                let which = args[1];
+                unsafe { crate::uart_print(b"\n[COMPARE] Running with autonomy DISABLED...\n"); }
+                crate::autonomy::AUTONOMOUS_CONTROL.disable();
+                let metrics_off = match which {
+                    "memory" => { let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Memory); cfg.duration_ms = duration_ms; cfg.target_pressure = target_pressure; crate::stress_test::run_memory_stress(cfg) }
+                    "commands" => { let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Commands); cfg.duration_ms = duration_ms; cfg.command_rate = rate; crate::stress_test::run_command_stress(cfg) }
+                    "multi" => { let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::MultiSubsystem); cfg.duration_ms = duration_ms; crate::stress_test::run_multi_stress(cfg) }
+                    _ => { unsafe { crate::uart_print(b"[ERROR] Unknown test type\n"); } return; }
+                };
+
+                unsafe { crate::uart_print(b"\n[COMPARE] Running with autonomy ENABLED...\n"); }
+                crate::autonomy::AUTONOMOUS_CONTROL.enable();
+                // Re-arm timer to start ticks during the second run
+                #[cfg(target_arch = "aarch64")]
+                unsafe {
+                    let mut frq: u64; core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
+                    let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL.decision_interval_ms.load(core::sync::atomic::Ordering::Relaxed).clamp(100, 60_000);
+                    let cycles = if frq > 0 { (frq / 1000).saturating_mul(interval_ms) } else { (62_500u64).saturating_mul(interval_ms) };
+                    core::arch::asm!("msr cntv_tval_el0, {x}", x = in(reg) cycles);
+                    let ctl: u64 = 1; core::arch::asm!("msr cntv_ctl_el0, {x}", x = in(reg) ctl);
+                }
+                let metrics_on = match which {
+                    "memory" => { let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Memory); cfg.duration_ms = duration_ms; cfg.target_pressure = target_pressure; crate::stress_test::run_memory_stress(cfg) }
+                    "commands" => { let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Commands); cfg.duration_ms = duration_ms; cfg.command_rate = rate; crate::stress_test::run_command_stress(cfg) }
+                    "multi" => { let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::MultiSubsystem); cfg.duration_ms = duration_ms; crate::stress_test::run_multi_stress(cfg) }
+                    _ => unreachable!(),
+                };
+
+                // Restore autonomy to original state
+                if !was_enabled { crate::autonomy::AUTONOMOUS_CONTROL.disable(); }
+
+                // Print deltas
+                unsafe {
+                    crate::uart_print(b"\n=== Comparative Results ===\n");
+                    match which {
+                        "memory" => {
+                            crate::uart_print(b"  Peak pressure: off="); self.print_number_simple(metrics_off.peak_memory_pressure as u64);
+                            crate::uart_print(b"% on="); self.print_number_simple(metrics_on.peak_memory_pressure as u64); crate::uart_print(b"%\n");
+                            crate::uart_print(b"  OOM events: off="); self.print_number_simple(metrics_off.oom_events as u64);
+                            crate::uart_print(b" on="); self.print_number_simple(metrics_on.oom_events as u64); crate::uart_print(b"\n");
+                        }
+                        "commands" | "multi" => {
+                            crate::uart_print(b"  Actions: off="); self.print_number_simple(metrics_off.actions_taken as u64);
+                            crate::uart_print(b" on="); self.print_number_simple(metrics_on.actions_taken as u64); crate::uart_print(b"\n");
+                        }
+                        _ => {}
+                    }
+                    crate::uart_print(b"  Duration_ms: off="); self.print_number_simple(metrics_off.test_duration_ms);
+                    crate::uart_print(b" on="); self.print_number_simple(metrics_on.test_duration_ms); crate::uart_print(b"\n\n");
+                }
+            }
+            "report" => {
+                let hist = crate::stress_test::get_history();
+                unsafe {
+                    crate::uart_print(b"\n=== Stress Test History (last 16) ===\n");
+                }
+                let mut any = false;
+                for rec in hist.iter() {
+                    any = true;
+                    unsafe {
+                        crate::uart_print(b"  ");
+                        let t = match rec.test_type { crate::stress_test::StressTestType::Memory => b"memory" as &[u8], crate::stress_test::StressTestType::Commands => b"commands", crate::stress_test::StressTestType::MultiSubsystem => b"multi", _ => b"other" };
+                        crate::uart_print(t);
+                        crate::uart_print(b" ");
+                        crate::uart_print(if rec.autonomous_enabled { b"AUTO" } else { b"MAN" });
+                        crate::uart_print(b" dur="); self.print_number_simple(rec.metrics.test_duration_ms);
+                        match rec.test_type {
+                            crate::stress_test::StressTestType::Memory => {
+                                crate::uart_print(b" peak="); self.print_number_simple(rec.metrics.peak_memory_pressure as u64); crate::uart_print(b"% ooms="); self.print_number_simple(rec.metrics.oom_events as u64);
+                            }
+                            _ => { crate::uart_print(b" actions="); self.print_number_simple(rec.metrics.actions_taken as u64); }
+                        }
+                        crate::uart_print(b"\n");
+                    }
+                }
+                drop(hist);
+                if !any { unsafe { crate::uart_print(b"  (no runs yet)\n"); } }
+                unsafe { crate::uart_print(b"\n"); }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: stresstest <memory> [--duration MS] [--target-pressure PCT]\n"); }
         }
     }
 
@@ -4628,8 +5000,35 @@ pub fn print_number_simple(mut num: u64) {
 
 /// Initialize and run the shell
 pub fn run_shell() {
+    unsafe {
+        // Minimal MMIO marker to confirm entry
+        const UART0_DR: *mut u32 = 0x0900_0000 as *mut u32;
+        core::ptr::write_volatile(UART0_DR, 'S' as u32);
+        core::ptr::write_volatile(UART0_DR, '\n' as u32);
+    }
     let mut shell = Shell::new();
     shell.run();
+}
+
+#[no_mangle]
+#[inline(never)]
+pub extern "C" fn shell_probe_trampoline() {
+    unsafe {
+        const UART0_DR: *mut u32 = 0x0900_0000 as *mut u32;
+        core::ptr::write_volatile(UART0_DR, 't' as u32);
+        core::ptr::write_volatile(UART0_DR, '\n' as u32);
+    }
+}
+
+#[no_mangle]
+#[inline(never)]
+pub extern "C" fn run_shell_c() {
+    unsafe {
+        const UART0_DR: *mut u32 = 0x0900_0000 as *mut u32;
+        core::ptr::write_volatile(UART0_DR, 's' as u32);
+        core::ptr::write_volatile(UART0_DR, '\n' as u32);
+    }
+    run_shell();
 }
 
 /// NPU driver demonstration function

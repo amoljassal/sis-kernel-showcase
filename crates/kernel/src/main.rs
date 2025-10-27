@@ -43,6 +43,7 @@ pub mod meta_agent;
 pub mod autonomy;
 pub mod time;
 pub mod prediction_tracker;
+pub mod stress_test;
 // PMU helpers (feature-gated usage)
 pub mod pmu;
 // Deterministic scheduler scaffolding (feature-gated)
@@ -185,6 +186,9 @@ mod bringup {
             super::uart_print(b"\n");
         }
 
+        // Initialize boot timestamp for runtime timing utilities
+        crate::time::init_boot_timestamp();
+
         // 5) Initialize heap allocator for dynamic memory management
         super::uart_print(b"HEAP: INIT\n");
         if let Err(e) = crate::heap::init_heap() {
@@ -243,7 +247,6 @@ mod bringup {
         gicv3_init_qemu();
         timer_init_1hz();
         enable_irq();
-
         // Start IRQ latency benchmark (virtual timer), 64 samples at ~1ms
         start_irq_latency_bench(64);
 
@@ -292,35 +295,51 @@ mod bringup {
             super::uart_print(b"AI: ENABLING PERFORMANCE OPTIMIZATION\n");
             super::uart_print(b"AI: CACHE-AWARE ALGORITHMS ACTIVE\n");
             super::uart_print(b"AI: READY\n");
-            
+
             // Run actual AI benchmarks to demonstrate functionality
             crate::ai_benchmark::run_ai_benchmarks();
         }
 
-        // 7.5) Emit kernel METRICs for test suite (ctx switch proxy + alloc)
+        // 7.5) Emit kernel METRICs and run demos (previously verified working)
+        super::uart_print(b"METRICS: STARTING\n");
         crate::userspace_test::emit_kernel_metrics();
-
-        // 7.6) Real context-switch benchmark (AArch64 only)
+        super::uart_print(b"METRICS: COMPLETE\n");
         #[cfg(target_arch = "aarch64")]
-        crate::userspace_test::bench_real_context_switch();
-
-        // 8) Test syscall functionality
-        super::uart_print(b"SYSCALL TESTS\n");
+        {
+            super::uart_print(b"CONTEXT SWITCH BENCH: STARTING\n");
+            crate::userspace_test::bench_real_context_switch();
+            super::uart_print(b"CONTEXT SWITCH BENCH: COMPLETE\n");
+        }
+        super::uart_print(b"SYSCALL TESTS: STARTING\n");
         crate::userspace_test::run_syscall_tests();
+        super::uart_print(b"SYSCALL TESTS: COMPLETE\n");
 
-        // 9) Initialize memory neural agent
+        // 9) Initialize memory neural agent (mask IRQs to avoid early-boot reentrancy)
         super::uart_print(b"MEMORY AGENT: INIT\n");
+        unsafe { core::arch::asm!("msr daifset, #2", options(nostack, preserves_flags)); }
+        // Initialize memory agent under brief IRQ mask
         crate::neural::init_memory_agent();
+        unsafe { core::arch::asm!("msr daifclr, #2", options(nostack, preserves_flags)); }
         super::uart_print(b"MEMORY AGENT: READY\n");
 
         // 10) Initialize meta-agent for global coordination
         super::uart_print(b"META-AGENT: INIT\n");
+        // Mask IRQs only around the call to avoid preemption during lock
+        unsafe { core::arch::asm!("msr daifset, #2", options(nostack, preserves_flags)); }
         crate::meta_agent::init_meta_agent();
+        unsafe { core::arch::asm!("msr daifclr, #2", options(nostack, preserves_flags)); }
         super::uart_print(b"META-AGENT: READY\n");
 
-        // 11) Launch interactive shell
+        // Mark autonomy ready after agents are initialized (briefly mask IRQs)
+        unsafe { core::arch::asm!("msr daifset, #2", options(nostack, preserves_flags)); }
+        crate::autonomy::AUTONOMY_READY.store(true, core::sync::atomic::Ordering::Release);
+        unsafe { core::arch::asm!("msr daifclr, #2", options(nostack, preserves_flags)); }
+        super::uart_print(b"AUTONOMY: set_ready complete\n");
+
+        // 11) Launch interactive shell (minimal built-in loop to avoid module call issues)
         super::uart_print(b"LAUNCHING SHELL\n");
-        crate::shell::run_shell();
+        super::uart_print(b"[MAIN] STARTING MINI SHELL\n");
+        crate::run_minishell_loop();
     }
 
     unsafe fn install_vectors() {
@@ -442,7 +461,67 @@ mod bringup {
         b .
 
     irq_el1h:
+        // Save all registers to preserve interrupted context
+        sub sp, sp, #(34 * 8)        // Allocate frame similar to sync handler
+        
+        // Save general purpose registers x0-x30
+        stp x0, x1, [sp, #(0 * 8)]
+        stp x2, x3, [sp, #(2 * 8)]
+        stp x4, x5, [sp, #(4 * 8)]
+        stp x6, x7, [sp, #(6 * 8)]
+        stp x8, x9, [sp, #(8 * 8)]
+        stp x10, x11, [sp, #(10 * 8)]
+        stp x12, x13, [sp, #(12 * 8)]
+        stp x14, x15, [sp, #(14 * 8)]
+        stp x16, x17, [sp, #(16 * 8)]
+        stp x18, x19, [sp, #(18 * 8)]
+        stp x20, x21, [sp, #(20 * 8)]
+        stp x22, x23, [sp, #(22 * 8)]
+        stp x24, x25, [sp, #(24 * 8)]
+        stp x26, x27, [sp, #(26 * 8)]
+        stp x28, x29, [sp, #(28 * 8)]
+        str x30, [sp, #(30 * 8)]
+        
+        // Save EL0 SP (optional)
+        mrs x0, sp_el0
+        str x0, [sp, #(31 * 8)]
+        
+        // Save exception info
+        mrs x0, elr_el1
+        mrs x1, spsr_el1
+        stp x0, x1, [sp, #(32 * 8)]
+        
+        // Call Rust IRQ handler
         bl irq_handler
+        
+        // Restore exception info
+        ldp x0, x1, [sp, #(32 * 8)]
+        msr elr_el1, x0
+        msr spsr_el1, x1
+        
+        // Restore EL0 SP
+        ldr x0, [sp, #(31 * 8)]
+        msr sp_el0, x0
+        
+        // Restore GPRs
+        ldp x0, x1, [sp, #(0 * 8)]
+        ldp x2, x3, [sp, #(2 * 8)]
+        ldp x4, x5, [sp, #(4 * 8)]
+        ldp x6, x7, [sp, #(6 * 8)]
+        ldp x8, x9, [sp, #(8 * 8)]
+        ldp x10, x11, [sp, #(10 * 8)]
+        ldp x12, x13, [sp, #(12 * 8)]
+        ldp x14, x15, [sp, #(14 * 8)]
+        ldp x16, x17, [sp, #(16 * 8)]
+        ldp x18, x19, [sp, #(18 * 8)]
+        ldp x20, x21, [sp, #(20 * 8)]
+        ldp x22, x23, [sp, #(22 * 8)]
+        ldp x24, x25, [sp, #(24 * 8)]
+        ldp x26, x27, [sp, #(26 * 8)]
+        ldp x28, x29, [sp, #(28 * 8)]
+        ldr x30, [sp, #(30 * 8)]
+        
+        add sp, sp, #(34 * 8)        // Restore stack
         eret
 
     fiq_el1h:
@@ -680,6 +759,28 @@ mod bringup {
                     }
                 }
             }
+            // If no latency bench is running, drive autonomous ticks on virtual timer (PPI 27)
+            if TIMER_BENCH_WARMUP == 0 && TIMER_BENCH_REMAIN == 0 {
+                // GICv3 INTID is in low bits; mask to 10 bits for PPIs/SPIs
+                let intid: u32 = (irq & 0x3FF) as u32;
+                if intid == 27 && crate::autonomy::is_ready() {
+                    // Rearm timer for next interval (ms -> cycles)
+                    let mut frq: u64; core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
+                    let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL
+                        .decision_interval_ms
+                        .load(core::sync::atomic::Ordering::Relaxed)
+                        .clamp(100, 60_000);
+                    let cycles = if frq > 0 {
+                        (frq / 1000).saturating_mul(interval_ms)
+                    } else { (62_500u64).saturating_mul(interval_ms) };
+                    core::arch::asm!("msr cntv_tval_el0, {x}", x = in(reg) cycles);
+                    // Ensure virtual timer remains enabled and unmasked
+                    let ctl: u64 = 1; // ENABLE=1, IMASK=0
+                    core::arch::asm!("msr cntv_ctl_el0, {x}", x = in(reg) ctl);
+                    // Trigger supervised autonomous decision tick (internally gated)
+                    crate::autonomy::autonomous_decision_tick();
+                }
+            }
             // signal end of interrupt
             asm!("msr icc_eoir1_el1, {x}", x = in(reg) irq);
             asm!("msr icc_dir_el1, {x}", x = in(reg) irq);
@@ -836,6 +937,8 @@ mod bringup {
         super::uart_print(b"GIC:R\n");
     }
 
+    // (shell stack switch trampoline removed)
+
     /// Helper function to print numbers
     unsafe fn print_number(mut num: usize) {
         if num == 0 {
@@ -942,3 +1045,63 @@ pub fn main() -> ! {
         core::hint::spin_loop();
     }
 }
+    // Minimal built-in shell: header + simple command loop using UART
+    #[inline(never)]
+    pub fn run_minishell_loop() -> ! {
+        unsafe {
+            crate::uart_print(b"\n=== SIS Kernel Shell (mini) ===\n");
+            crate::uart_print(b"Type 'help' for commands\n\n");
+        }
+
+        static mut CMD_BUF: [u8; 256] = [0; 256];
+        loop {
+            unsafe { crate::uart_print(b"sis> "); }
+            let len = unsafe { crate::uart::read_line(unsafe { &mut CMD_BUF }) };
+            if len == 0 { continue; }
+            let cmd = unsafe { core::str::from_utf8_unchecked(&CMD_BUF[..len]) };
+            let mut parts = cmd.split_whitespace();
+            match parts.next().unwrap_or("") {
+                "help" => unsafe {
+                    crate::uart_print(b"Commands: help, autoctl on|off|status, stresstest memory [duration_ms] [target_pressure], exit\n");
+                },
+                "autoctl" => {
+                    match parts.next().unwrap_or("") {
+                        "on" => { crate::autonomy::AUTONOMOUS_CONTROL.enable(); unsafe { crate::uart_print(b"Autonomy: ENABLED\n"); } }
+                        "off" => { crate::autonomy::AUTONOMOUS_CONTROL.disable(); unsafe { crate::uart_print(b"Autonomy: DISABLED\n"); } }
+                        "status" => {
+                            let en = crate::autonomy::AUTONOMOUS_CONTROL.is_enabled();
+                            let safe = crate::autonomy::AUTONOMOUS_CONTROL.is_safe_mode();
+                            unsafe {
+                                crate::uart_print(b"Autonomy status: ");
+                                if en { crate::uart_print(b"ENABLED"); } else { crate::uart_print(b"DISABLED"); }
+                                crate::uart_print(b", safe_mode=");
+                                if safe { crate::uart_print(b"ON"); } else { crate::uart_print(b"OFF"); }
+                                crate::uart_print(b", decisions=(n)\n");
+                            }
+                        }
+                        _ => unsafe { crate::uart_print(b"Usage: autoctl on|off|status\n"); }
+                    }
+                }
+                "stresstest" => {
+                    match parts.next().unwrap_or("") {
+                        "memory" => {
+                            let duration_ms: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(2000);
+                            let target: u8 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(80);
+                            let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Memory);
+                            cfg.duration_ms = duration_ms;
+                            cfg.target_pressure = target;
+                            let _m = crate::stress_test::run_memory_stress(cfg);
+                        }
+                        _ => unsafe { crate::uart_print(b"Usage: stresstest memory [duration_ms] [target_pressure]\n"); }
+                    }
+                }
+                "exit" => unsafe {
+                    crate::uart_print(b"Bye.\n");
+                    loop { core::hint::spin_loop(); }
+                },
+                _ => unsafe {
+                    crate::uart_print(b"Unknown command. Type 'help'.\n");
+                }
+            }
+        }
+    }
