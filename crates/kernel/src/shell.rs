@@ -657,8 +657,19 @@ impl Shell {
             "on" => {
                 crate::autonomy::AUTONOMOUS_CONTROL.enable();
                 unsafe { crate::uart_print(b"[AUTOCTL] Autonomous mode ENABLED\n"); }
-                // Arm the virtual timer immediately so periodic ticks begin without waiting
-                // for existing timer activity. Uses decision_interval_ms to program cntv_tval.
+
+                // Reset timer tick counter to prevent issues with rapid fire detection
+                #[cfg(target_arch = "aarch64")]
+                unsafe {
+                    // Access the TIMER_TICK_COUNT from main.rs and reset it
+                    extern "C" {
+                        static mut TIMER_TICK_COUNT: u32;
+                    }
+                    TIMER_TICK_COUNT = 0;
+                    crate::uart_print(b"[AUTOCTL] Timer tick counter reset\n");
+                }
+
+                // Arm the EL1 PHYSICAL timer (not virtual!) to match our IRQ handler which uses PPI 30
                 #[cfg(target_arch = "aarch64")]
                 unsafe {
                     let mut frq: u64; core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
@@ -667,15 +678,35 @@ impl Shell {
                         .load(core::sync::atomic::Ordering::Relaxed)
                         .clamp(100, 60_000);
                     let cycles = if frq > 0 { (frq / 1000).saturating_mul(interval_ms) } else { (62_500u64).saturating_mul(interval_ms) };
-                    core::arch::asm!("msr cntv_tval_el0, {x}", x = in(reg) cycles);
-                    // Ensure virtual timer is enabled and unmasked
+
+                    crate::uart_print(b"[AUTOCTL] Starting EL1 physical timer with ");
+                    self.print_number_simple(interval_ms);
+                    crate::uart_print(b"ms interval (");
+                    self.print_number_simple(cycles);
+                    crate::uart_print(b" cycles)\n");
+
+                    // Use PHYSICAL timer (cntp_*) not virtual (cntv_*)!
+                    core::arch::asm!("msr cntp_tval_el0, {x}", x = in(reg) cycles);
+                    // Enable EL1 physical timer, unmask
                     let ctl: u64 = 1; // ENABLE=1, IMASK=0
-                    core::arch::asm!("msr cntv_ctl_el0, {x}", x = in(reg) ctl);
+                    core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl);
                 }
             }
             "off" => {
                 crate::autonomy::AUTONOMOUS_CONTROL.disable();
                 unsafe { crate::uart_print(b"[AUTOCTL] Autonomous mode DISABLED\n"); }
+
+                // Re-enable metrics when exiting autonomous mode
+                crate::trace::metrics_set_enabled(true);
+
+                // Also disable the EL1 physical timer to stop interrupts
+                #[cfg(target_arch = "aarch64")]
+                unsafe {
+                    let ctl: u64 = 0; // ENABLE=0, IMASK=0 - disable timer
+                    core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl);
+                    crate::uart_print(b"[AUTOCTL] EL1 physical timer stopped\n");
+                    crate::uart_print(b"[AUTOCTL] Metrics re-enabled for manual testing\n");
+                }
             }
             "status" => { self.print_autoctl_status(); }
             "limits" => {

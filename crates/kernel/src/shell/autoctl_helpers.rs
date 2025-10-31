@@ -4,6 +4,7 @@ impl super::Shell {
     pub(crate) fn print_autoctl_status(&self) {
         let enabled = crate::autonomy::AUTONOMOUS_CONTROL.is_enabled();
         let safe_mode = crate::autonomy::AUTONOMOUS_CONTROL.is_safe_mode();
+        let ready = crate::autonomy::is_ready();
         let total_decisions = crate::autonomy::AUTONOMOUS_CONTROL
             .total_decisions
             .load(core::sync::atomic::Ordering::Relaxed);
@@ -18,6 +19,8 @@ impl super::Shell {
             crate::uart_print(b"\n=== Autonomous Control Status ===\n");
             crate::uart_print(b"  Mode: ");
             crate::uart_print(if enabled { b"ENABLED\n" } else { b"DISABLED\n" });
+            crate::uart_print(b"  Ready Flag: ");
+            crate::uart_print(if ready { b"SET (timer will call tick)\n" } else { b"NOT SET (timer will NOT call tick)\n" });
             crate::uart_print(b"  Safe Mode: ");
             crate::uart_print(if safe_mode { b"ACTIVE\n" } else { b"INACTIVE\n" });
             crate::uart_print(b"  Learning: ");

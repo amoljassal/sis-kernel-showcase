@@ -265,9 +265,11 @@ mod bringup {
         super::uart_print(b"GIC: INIT\n");
         gicv3_init_qemu();
         timer_init_1hz();
+        super::uart_print(b"[MAIN] Calling enable_irq() from initialization\n");
         enable_irq();
-        // Start IRQ latency benchmark (virtual timer), 64 samples at ~1ms
-        start_irq_latency_bench(64);
+        // NOTE: IRQ latency benchmark disabled - was causing rapid timer firing issues
+        // To run benchmark manually: use shell command or call start_irq_latency_bench(64)
+        // start_irq_latency_bench(64);
 
         // 6) Initialize driver framework and discover devices (optional)
         // For bring-up stability, skip VirtIO drivers unless explicitly enabled.
@@ -333,26 +335,19 @@ mod bringup {
         crate::userspace_test::run_syscall_tests();
         super::uart_print(b"SYSCALL TESTS: COMPLETE\n");
 
-        // 9) Initialize memory neural agent (mask IRQs to avoid early-boot reentrancy)
+        // 9) Initialize memory neural agent (keep IRQs enabled, agent handles its own locking)
         super::uart_print(b"MEMORY AGENT: INIT\n");
-        unsafe { core::arch::asm!("msr daifset, #2", options(nostack, preserves_flags)); }
-        // Initialize memory agent under brief IRQ mask
+        // Initialize memory agent - it will handle its own IRQ masking internally
         crate::neural::init_memory_agent();
-        unsafe { core::arch::asm!("msr daifclr, #2", options(nostack, preserves_flags)); }
         super::uart_print(b"MEMORY AGENT: READY\n");
 
         // 10) Initialize meta-agent for global coordination
         super::uart_print(b"META-AGENT: INIT\n");
-        // Mask IRQs only around the call to avoid preemption during lock
-        unsafe { core::arch::asm!("msr daifset, #2", options(nostack, preserves_flags)); }
         crate::meta_agent::init_meta_agent();
-        unsafe { core::arch::asm!("msr daifclr, #2", options(nostack, preserves_flags)); }
         super::uart_print(b"META-AGENT: READY\n");
 
-        // Mark autonomy ready after agents are initialized (briefly mask IRQs)
-        unsafe { core::arch::asm!("msr daifset, #2", options(nostack, preserves_flags)); }
+        // Mark autonomy ready after agents are initialized
         crate::autonomy::AUTONOMY_READY.store(true, core::sync::atomic::Ordering::Release);
-        unsafe { core::arch::asm!("msr daifclr, #2", options(nostack, preserves_flags)); }
         super::uart_print(b"AUTONOMY: set_ready complete\n");
 
         // 11) Launch interactive shell
@@ -514,25 +509,46 @@ mod bringup {
         .balign 2048
         .global VECTORS
     VECTORS:
-        // EL1t
+        // Each entry MUST be 0x80 (128) bytes apart!
+
+        // Current EL with SP0 (EL1t) - We don't use these
+        .org VECTORS + 0x000
         b .
+        .org VECTORS + 0x080
         b .
+        .org VECTORS + 0x100
         b .
+        .org VECTORS + 0x180
         b .
-        // EL1h
+
+        // Current EL with SPx (EL1h) - These are what we use!
+        .org VECTORS + 0x200
         b sync_el1h
+        .org VECTORS + 0x280
         b irq_el1h
+        .org VECTORS + 0x300
         b fiq_el1h
+        .org VECTORS + 0x380
         b serr_el1h
-        // EL0_64 (userspace)
+
+        // Lower EL using AArch64 (EL0_64)
+        .org VECTORS + 0x400
         b sync_el0_64
+        .org VECTORS + 0x480
         b .
+        .org VECTORS + 0x500
         b .
+        .org VECTORS + 0x580
         b .
-        // EL0_32 (unused)
+
+        // Lower EL using AArch32 (EL0_32) - unused
+        .org VECTORS + 0x600
         b .
+        .org VECTORS + 0x680
         b .
+        .org VECTORS + 0x700
         b .
+        .org VECTORS + 0x780
         b .
 
     irq_el1h:
@@ -745,9 +761,35 @@ mod bringup {
     #[no_mangle]
     extern "C" fn irq_handler() {
         unsafe {
+            static mut IRQ_COUNT: u32 = 0;
+            IRQ_COUNT += 1;
+
+            // Only print debug output for first 5 IRQs to avoid spam
+            if IRQ_COUNT <= 5 {
+                super::uart_print(b"[IRQ] ENTER\n");
+                super::uart_print(b"[IRQ_HANDLER] IRQ ");
+                print_number(IRQ_COUNT as usize);
+                super::uart_print(b" received!\n");
+            }
+
             let mut irq: u64;
             asm!("mrs {x}, icc_iar1_el1", x = out(reg) irq);
-            let mut t1: u64; core::arch::asm!("mrs {x}, cntvct_el0", x = out(reg) t1);
+
+            // Check for spurious interrupt (INTID 1023)
+            let intid = irq & 0x3FF;
+            if intid == 1023 {
+                // Spurious interrupt - just return without EOI
+                super::uart_print(b"[IRQ_HANDLER] SPURIOUS interrupt (1023), ignoring\n");
+                return;
+            }
+
+            if IRQ_COUNT <= 5 {
+                super::uart_print(b"[IRQ_HANDLER] INTID=");
+                print_number(intid as usize);
+                super::uart_print(b"\n");
+            }
+
+            let mut t1: u64; core::arch::asm!("mrs {x}, cntpct_el0", x = out(reg) t1);
             // Attempt to dispatch device interrupts to drivers (best-effort)
             if let Some(registry) = crate::driver::get_driver_registry() {
                 let intid: u32 = (irq & 0xFFFFFF) as u32;
@@ -782,9 +824,10 @@ mod bringup {
                 }
                 if TIMER_BENCH_WARMUP > 0 || TIMER_BENCH_REMAIN > 0 {
                     TIMER_BENCH_T0 = t1;
-                    core::arch::asm!("msr cntv_tval_el0, {x}", x = in(reg) TIMER_BENCH_INTERVAL);
+                    core::arch::asm!("msr cntp_tval_el0, {x}", x = in(reg) TIMER_BENCH_INTERVAL);
                 } else {
                     // Bench completed: print a brief summary (mean/min/max)
+                    super::uart_print(b"[BENCH] Benchmark completed! Rearming timer for autonomy...\n");
                     if TIMER_SUM_COUNT > 0 {
                         let mean = TIMER_SUM_NS / TIMER_SUM_COUNT as u64;
                         super::uart_print(b"[SUMMARY] irq_latency_ns: count=");
@@ -797,38 +840,244 @@ mod bringup {
                         print_number(TIMER_MAX_NS as usize);
                         super::uart_print(b" ns\n");
                     }
+                    // Set flag to prevent double-rearm on next interrupt
+                    BENCH_JUST_COMPLETED = true;
+
+                    // CRITICAL: Disable timer completely to stop further interrupts
+                    let ctl: u64 = 0; // ENABLE=0, IMASK=0
+                    core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl);
+                    core::arch::asm!("isb");
+
+                    // Clear any timer condition by setting a far future value
+                    let mut frq: u64;
+                    core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
+                    if frq == 0 {
+                        frq = crate::platform::active().timer().freq_hz;
+                    }
+
+                    // Set timer for 1 second in the future
+                    super::uart_print(b"[BENCH] Disabling timer and rearming with interval=");
+                    print_number(frq as usize);
+                    super::uart_print(b" cycles\n");
+                    core::arch::asm!("msr cntp_tval_el0, {x}", x = in(reg) frq);
+                    core::arch::asm!("isb");
+
+                    // Re-enable timer
+                    let ctl: u64 = 1; // ENABLE=1, IMASK=0
+                    core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl);
+                    core::arch::asm!("isb");
                 }
             }
-            // If no latency bench is running, drive autonomous ticks on virtual timer (PPI 27)
-            if TIMER_BENCH_WARMUP == 0 && TIMER_BENCH_REMAIN == 0 {
-                // GICv3 INTID is in low bits; mask to 10 bits for PPIs/SPIs
-                let intid: u32 = (irq & 0x3FF) as u32;
-                if intid == 27 && crate::autonomy::is_ready() {
-                    // Rearm timer for next interval (ms -> cycles)
-                    let mut frq: u64; core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
-                    let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL
-                        .decision_interval_ms
-                        .load(core::sync::atomic::Ordering::Relaxed)
-                        .clamp(100, 60_000);
-                    let cycles = if frq > 0 {
-                        (frq / 1000).saturating_mul(interval_ms)
-                    } else {
-                        let pf = crate::platform::active().timer().freq_hz;
-                        ((pf / 1000).max(1)).saturating_mul(interval_ms)
-                    };
-                    core::arch::asm!("msr cntv_tval_el0, {x}", x = in(reg) cycles);
-                    // Ensure virtual timer remains enabled and unmasked
-                    let ctl: u64 = 1; // ENABLE=1, IMASK=0
-                    core::arch::asm!("msr cntv_ctl_el0, {x}", x = in(reg) ctl);
-                    // Trigger supervised autonomous decision tick (internally gated)
-                    crate::autonomy::autonomous_decision_tick();
-                }
+            // If no latency bench is running, drive autonomous ticks on EL1 physical timer (PPI 30)
+            // IMPORTANT: Don't rearm if benchmark just completed - it already rearmed above!
+            else if TIMER_BENCH_WARMUP == 0 && TIMER_BENCH_REMAIN == 0 {
+                // Check if benchmark JUST completed (flag to prevent double-rearm)
+                static mut DRAIN_COUNT: u32 = 0;
+                if BENCH_JUST_COMPLETED {
+                    // Skip rearming - benchmark already rearmed the timer
+                    super::uart_print(b"[TIMER] Skipping rearm - benchmark just completed\n");
+                    BENCH_JUST_COMPLETED = false;
+                    DRAIN_COUNT = 10; // Drain next 10 rapid interrupts
+                } else if DRAIN_COUNT > 0 {
+                    // Drain rapid interrupts after benchmark
+                    DRAIN_COUNT -= 1;
+                    if DRAIN_COUNT == 0 {
+                        super::uart_print(b"[TIMER] Finished draining rapid interrupts\n");
+                    }
+                    // Don't rearm, just return to drain the interrupt
+                } else {
+                    // GICv3 INTID is in low bits; mask to 10 bits for PPIs/SPIs
+                    let intid: u32 = (irq & 0x3FF) as u32;
+
+                    // Debug: Print first 5 timer interrupts (reduced from 20 for usability)
+                    TIMER_TICK_COUNT += 1;
+                    if TIMER_TICK_COUNT <= 5 {
+                        super::uart_print(b"[TIMER_ISR] Tick ");
+                        print_number(TIMER_TICK_COUNT as usize);
+                        super::uart_print(b" intid=");
+                        print_number(intid as usize);
+                        super::uart_print(b"\n");
+                    } else if TIMER_TICK_COUNT == 6 {
+                        super::uart_print(b"[TIMER] Timer running silently (use 'autoctl status' to check)\n");
+                    }
+
+                    if intid == 30 {
+                        // Track last timer tick time to detect rapid firing
+                        static mut LAST_TIMER_TICK: u64 = 0;
+                        static mut RAPID_TICK_COUNT: u32 = 0;
+
+                        // Get current timer counter
+                        let mut cnt: u64;
+                        core::arch::asm!("mrs {x}, cntpct_el0", x = out(reg) cnt);
+
+                        // Get timer frequency for time calculations
+                        let mut frq: u64;
+                        core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
+
+                        // Check if this tick came too soon (< 10ms since last tick)
+                        // 10ms = frq/100
+                        let min_interval = frq / 100;
+                        if LAST_TIMER_TICK != 0 && (cnt - LAST_TIMER_TICK) < min_interval {
+                            RAPID_TICK_COUNT += 1;
+                            if RAPID_TICK_COUNT > 5 {
+                                super::uart_print(b"\n[TIMER] RAPID FIRING DETECTED (");
+                                print_number(RAPID_TICK_COUNT as usize);
+                                super::uart_print(b" ticks < 10ms apart)!\n");
+                                super::uart_print(b"[TIMER] Disabling timer to prevent system instability.\n");
+                                super::uart_print(b"[TIMER] Use 'autoctl off' then 'autoctl on' to reset.\n\n");
+
+                                // Disable timer completely
+                                let ctl: u64 = 0; // ENABLE=0
+                                core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl);
+                                core::arch::asm!("isb");
+
+                                // Disable autonomous mode
+                                crate::autonomy::AUTONOMOUS_CONTROL.disable();
+
+                                // Reset counters for next time
+                                RAPID_TICK_COUNT = 0;
+                                LAST_TIMER_TICK = 0;
+
+                                // Skip to EOI at bottom
+                            } else {
+                                // Rapid tick detected but not enough yet, just warn
+                                if RAPID_TICK_COUNT == 1 {
+                                    super::uart_print(b"[TIMER] Warning: rapid ticks detected\n");
+                                }
+                            }
+                        } else {
+                            // Normal tick timing, reset rapid counter
+                            if RAPID_TICK_COUNT > 0 {
+                                super::uart_print(b"[TIMER] Normal timing restored\n");
+                                RAPID_TICK_COUNT = 0;
+                            }
+                        }
+
+                        // Update last tick time
+                        LAST_TIMER_TICK = cnt;
+
+                        // Only process timer if not rapidly firing
+                        if RAPID_TICK_COUNT <= 5 {
+
+                            // Clear the interrupt condition first by disabling timer
+                            // This prevents immediate re-firing
+                            let ctl: u64 = 0; // ENABLE=0
+                            core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl);
+                            core::arch::asm!("isb");
+
+                            // Get timer frequency
+                            let mut frq: u64;
+                            core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
+
+                            // Rearm timer with autonomous interval
+                            let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL
+                                .decision_interval_ms
+                                .load(core::sync::atomic::Ordering::Relaxed)
+                                .clamp(100, 60_000);
+
+                            // Debug: show timer frequency
+                            if TIMER_TICK_COUNT == 1 {
+                                super::uart_print(b"[TIMER] Timer freq=");
+                                print_number(frq as usize);
+                                super::uart_print(b" Hz\n");
+                            }
+
+                            let cycles = if frq > 0 {
+                                (frq / 1000).saturating_mul(interval_ms)
+                            } else {
+                                let pf = crate::platform::active().timer().freq_hz;
+                                ((pf / 1000).max(1)).saturating_mul(interval_ms)
+                            };
+
+                            // Only print interval change for first few ticks
+                            if TIMER_TICK_COUNT <= 3 {
+                                super::uart_print(b"[TIMER] Rearming with ");
+                                print_number(interval_ms as usize);
+                                super::uart_print(b"ms interval (");
+                                print_number(cycles as usize);
+                                super::uart_print(b" cycles)\n");
+                            }
+
+                            // Set new timer value while timer is disabled
+                            core::arch::asm!("msr cntp_tval_el0, {x}", x = in(reg) cycles);
+                            core::arch::asm!("isb");
+
+                            // Re-enable timer
+                            let ctl: u64 = 1; // ENABLE=1, IMASK=0
+                            core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl);
+                            core::arch::asm!("isb");
+
+                            // Debug: Confirm rearm happened (only for first 5 ticks)
+                            if TIMER_TICK_COUNT > 3 && TIMER_TICK_COUNT <= 5 {
+                                super::uart_print(b"[TIMER] Tick ");
+                                print_number(TIMER_TICK_COUNT as usize);
+                                super::uart_print(b" rearmed\n");
+                            }
+
+                            // Debug: Verify the timer value was actually set
+                            if TIMER_TICK_COUNT <= 20 {  // Extended debug for more ticks
+                                let mut tval: u64;
+                                core::arch::asm!("mrs {x}, cntp_tval_el0", x = out(reg) tval);
+                                // TVAL is signed, check if it's negative (already expired)
+                                if (tval as i64) < 0 {
+                                    super::uart_print(b"[TIMER] Tick ");
+                                    print_number(TIMER_TICK_COUNT as usize);
+                                    super::uart_print(b" ERROR: TVAL negative! val=");
+                                    print_number((tval as i64).wrapping_abs() as usize);
+                                    super::uart_print(b"\n");
+                                } else if TIMER_TICK_COUNT <= 3 {
+                                    super::uart_print(b"[TIMER] TVAL set OK: ");
+                                    print_number(tval as usize);
+                                    super::uart_print(b" cycles\n");
+                                }
+                            }
+
+                            // Check control register to ensure timer is enabled (only for first 5 ticks)
+                            if TIMER_TICK_COUNT == 4 {
+                                let mut ctl: u64;
+                                core::arch::asm!("mrs {x}, cntp_ctl_el0", x = out(reg) ctl);
+                                super::uart_print(b"[TIMER] Tick ");
+                                print_number(TIMER_TICK_COUNT as usize);
+                                super::uart_print(b" CTL=");
+                                print_number(ctl as usize);
+                                super::uart_print(b" (bit0=enable, bit1=mask, bit2=istatus)\n");
+                            }
+
+                            // Ensure timer remains enabled (should already be from init)
+                            // Only set if not already enabled to avoid any glitches
+                            let mut ctl: u64;
+                            core::arch::asm!("mrs {x}, cntp_ctl_el0", x = out(reg) ctl);
+                            if (ctl & 1) == 0 {
+                                super::uart_print(b"[TIMER] WARNING: Timer was disabled, re-enabling\n");
+                                ctl = 1; // ENABLE=1, IMASK=0
+                                core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl);
+                            }
+
+                            // Only call autonomous_decision_tick() if autonomy is enabled AND ready
+                            let autonomy_enabled = crate::autonomy::AUTONOMOUS_CONTROL.is_enabled();
+                            let autonomy_ready = crate::autonomy::is_ready();
+
+                            if autonomy_enabled && autonomy_ready {
+                                // Only print debug message for first few ticks
+                                if TIMER_TICK_COUNT <= 5 {
+                                    super::uart_print(b"[TIMER] Calling autonomous_decision_tick()\n");
+                                }
+                                // Trigger supervised autonomous decision tick (internally gated)
+                                crate::autonomy::autonomous_decision_tick();
+                            }
+                        } // Close the 'if RAPID_TICK_COUNT <= 5' block
+                    } // Close the 'if intid == 30' block
+                } // Close the 'else' block from BENCH_JUST_COMPLETED check
             }
             // signal end of interrupt
             asm!("msr icc_eoir1_el1, {x}", x = in(reg) irq);
             asm!("msr icc_dir_el1, {x}", x = in(reg) irq);
         }
     }
+
+    // Timer tick counter - made pub(crate) so it can be reset from shell.rs
+    #[no_mangle]
+    pub static mut TIMER_TICK_COUNT: u32 = 0;
 
     static mut TIMER_BENCH_REMAIN: u32 = 0;
     static mut TIMER_BENCH_INTERVAL: u64 = 0;
@@ -838,6 +1087,7 @@ mod bringup {
     static mut TIMER_MIN_NS: u64 = u64::MAX;
     static mut TIMER_MAX_NS: u64 = 0;
     static mut TIMER_SUM_COUNT: u32 = 0;
+    static mut BENCH_JUST_COMPLETED: bool = false;
 
     unsafe fn delta_ns(t0: u64, t1: u64) -> u64 {
         let mut f: u64; core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) f);
@@ -846,32 +1096,215 @@ mod bringup {
         (d.saturating_mul(1_000_000_000)) / f
     }
 
+    // Keep this function for manual benchmarking but allow dead_code warning
+    // It was disabled at boot to prevent automatic timer firing
+    #[allow(dead_code)]
     unsafe fn start_irq_latency_bench(samples: u32) {
+        super::uart_print(b"[BENCH_START] Starting IRQ latency benchmark with ");
+        print_number(samples as usize);
+        super::uart_print(b" samples\n");
         let mut frq: u64; core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
-        TIMER_BENCH_INTERVAL = frq / 2000; // ~0.5ms per sample
+        TIMER_BENCH_INTERVAL = frq / 100; // ~10ms per sample (was 0.5ms, too fast!)
         TIMER_BENCH_REMAIN = samples;
         TIMER_BENCH_WARMUP = 4; // discard first 4 samples
-        core::arch::asm!("mrs {x}, cntvct_el0", x = out(reg) TIMER_BENCH_T0);
+        super::uart_print(b"[BENCH_START] Interval: ");
+        print_number(TIMER_BENCH_INTERVAL as usize);
+        super::uart_print(b" cycles, warmup=4, remain=");
+        print_number(samples as usize);
+        super::uart_print(b"\n");
+        core::arch::asm!("mrs {x}, cntpct_el0", x = out(reg) TIMER_BENCH_T0);
         TIMER_SUM_NS = 0; TIMER_MIN_NS = u64::MAX; TIMER_MAX_NS = 0; TIMER_SUM_COUNT = 0;
-        core::arch::asm!("msr cntv_tval_el0, {x}", x = in(reg) TIMER_BENCH_INTERVAL);
+        core::arch::asm!("msr cntp_tval_el0, {x}", x = in(reg) TIMER_BENCH_INTERVAL);
+
+        // Check timer control register status bits
+        let mut ctl_check: u64;
+        core::arch::asm!("mrs {x}, cntp_ctl_el0", x = out(reg) ctl_check);
+        super::uart_print(b"[BENCH_START] Timer control: ");
+        print_number(ctl_check as usize);
+        super::uart_print(b" (bit 0=ENABLE, bit 1=IMASK, bit 2=ISTATUS)\n");
+
+        // Check current counter value
+        let mut cval: u64;
+        core::arch::asm!("mrs {x}, cntpct_el0", x = out(reg) cval);
+        super::uart_print(b"[BENCH_START] Counter value: ");
+        print_number(cval as usize);
+        super::uart_print(b"\n");
+
+        // Check timer compare value
+        let mut tval: u64;
+        core::arch::asm!("mrs {x}, cntp_tval_el0", x = out(reg) tval);
+        super::uart_print(b"[BENCH_START] Timer value (signed): ");
+        print_number(tval as usize);
+        super::uart_print(b"\n");
+
+        super::uart_print(b"[BENCH_START] Benchmark armed, waiting for first IRQ...\n");
     }
 
     unsafe fn enable_irq() {
-        // Unmask IRQs in PSTATE
-        asm!("msr daifclr, #2", options(nostack, preserves_flags));
-    }
+        super::uart_print(b"[IRQ_ENABLE] enable_irq() called\n");
 
-    unsafe fn timer_init_1hz() {
+        // CRITICAL: Keep interrupts masked during configuration
+        super::uart_print(b"[IRQ_ENABLE] Starting IRQ enable sequence...\n");
+
+        // Check VBAR_EL1 first
+        let mut vbar: u64;
+        asm!("mrs {x}, vbar_el1", x = out(reg) vbar);
+        super::uart_print(b"[IRQ_ENABLE] VBAR_EL1: 0x");
+        print_number(vbar as usize);
+        super::uart_print(b"\n");
+
+        // Check what the vector table address should be
+        extern "C" {
+            static VECTORS: u8;
+        }
+        let vectors_addr = &VECTORS as *const u8 as usize;
+        super::uart_print(b"[IRQ_ENABLE] Expected vectors at: 0x");
+        print_number(vectors_addr);
+        if vectors_addr == vbar as usize {
+            super::uart_print(b" (MATCH)\n");
+        } else {
+            super::uart_print(b" (MISMATCH!)\n");
+        }
+
+        // Check ICC_IGRPEN1_EL1 (GIC CPU interface group enable)
+        let mut igrpen: u64;
+        asm!("mrs {x}, icc_igrpen1_el1", x = out(reg) igrpen);
+        super::uart_print(b"[IRQ_ENABLE] ICC_IGRPEN1_EL1: ");
+        print_number(igrpen as usize);
+        super::uart_print(b" (should be 1)\n");
+
+        // Check ICC_PMR_EL1 (Priority mask)
+        let mut pmr: u64;
+        asm!("mrs {x}, icc_pmr_el1", x = out(reg) pmr);
+        super::uart_print(b"[IRQ_ENABLE] ICC_PMR_EL1: ");
+        print_number(pmr as usize);
+        super::uart_print(b" (should be 0xFF to unmask all)\n");
+
+        // Set timer to expire in 1 second (not 100 cycles!) to avoid immediate interrupt
         let mut frq: u64;
-        asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
+        core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
         if frq == 0 {
             frq = crate::platform::active().timer().freq_hz;
         }
+        super::uart_print(b"[IRQ_ENABLE] Setting timer for 1 second (");
+        print_number(frq as usize);
+        super::uart_print(b" cycles)...\n");
+        core::arch::asm!("msr cntp_tval_el0, {x}", x = in(reg) frq);
+
+        // NOW unmask IRQs in PSTATE as the very last step
+        super::uart_print(b"[IRQ_ENABLE] Unmasking IRQs in PSTATE...\n");
+        asm!("msr daifclr, #2", options(nostack, preserves_flags));
+
+        // Read back DAIF to verify
+        let mut daif: u64;
+        asm!("mrs {x}, daif", x = out(reg) daif);
+        super::uart_print(b"[IRQ_ENABLE] DAIF register: 0x");
+        print_number(daif as usize);
+        if (daif & 0x80) != 0 {  // Bit 7 (I flag) = 0x80
+            super::uart_print(b" (ERROR: IRQs are MASKED! Bit 7 is set)\n");
+            // Try to unmask again
+            super::uart_print(b"[IRQ_ENABLE] Attempting to unmask IRQs again...\n");
+            asm!("msr daifclr, #2", options(nostack, preserves_flags));
+            // Check again
+            let mut daif2: u64;
+            asm!("mrs {x}, daif", x = out(reg) daif2);
+            super::uart_print(b"[IRQ_ENABLE] DAIF after retry: 0x");
+            print_number(daif2 as usize);
+            if (daif2 & 0x80) != 0 {
+                super::uart_print(b" (STILL MASKED!)\n");
+            } else {
+                super::uart_print(b" (OK - unmasked)\n");
+            }
+        } else {
+            super::uart_print(b" (OK - IRQs unmasked)\n");
+        }
+
+        super::uart_print(b"[IRQ_ENABLE] IRQ system setup complete.\n");
+    }
+
+    unsafe fn timer_init_1hz() {
+        super::uart_print(b"[TIMER_INIT] Starting timer initialization...\n");
+
+        // Check current exception level
+        let mut current_el: u64;
+        asm!("mrs {x}, CurrentEL", x = out(reg) current_el);
+        let el = (current_el >> 2) & 0x3;
+        super::uart_print(b"[TIMER_INIT] Current EL: ");
+        print_number(el as usize);
+        super::uart_print(b"\n");
+
+        let mut frq: u64;
+        asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
+        super::uart_print(b"[TIMER_INIT] Counter frequency: ");
+        print_number(frq as usize);
+        super::uart_print(b" Hz\n");
+        if frq == 0 {
+            frq = crate::platform::active().timer().freq_hz;
+            super::uart_print(b"[TIMER_INIT] Using platform freq: ");
+            print_number(frq as usize);
+            super::uart_print(b" Hz\n");
+        }
         // Set initial interval ~1s
-        asm!("msr cntv_tval_el0, {x}", x = in(reg) frq);
-        // Enable virtual timer, unmask
-        let ctl: u64 = 1; // ENABLE=1, IMASK=0
-        asm!("msr cntv_ctl_el0, {x}", x = in(reg) ctl);
+        super::uart_print(b"[TIMER_INIT] Setting timer interval: ");
+        print_number(frq as usize);
+        super::uart_print(b" cycles\n");
+        asm!("msr cntp_tval_el0, {x}", x = in(reg) frq);
+        // IMPORTANT: Do NOT enable timer here - wait for explicit user command
+        // Timer will be enabled when user runs 'autoctl on' or starts a benchmark
+        let ctl: u64 = 0; // ENABLE=0, IMASK=0 - timer configured but disabled
+        asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl);
+        super::uart_print(b"[TIMER_INIT] EL1 physical timer configured but NOT enabled (ctl=0)\n");
+        super::uart_print(b"[TIMER_INIT] Timer will start when user runs 'autoctl on' or benchmark\n");
+
+        // Read back control register to verify
+        let mut ctl_read: u64;
+        asm!("mrs {x}, cntp_ctl_el0", x = out(reg) ctl_read);
+        super::uart_print(b"[TIMER_INIT] Control register readback: ");
+        print_number(ctl_read as usize);
+        super::uart_print(b" (bit 0=enable, bit 1=mask, bit 2=istatus)\n");
+
+        // Final diagnostic: Check GIC state for PPI 30
+        super::uart_print(b"[TIMER_INIT] Final GIC state check for PPI 30:\n");
+
+        // Get redistributor base for diagnostic
+        let g = crate::platform::active().gic();
+        let gicr_base = g.gicr as u64;
+        const SGI_BASE: u64 = 0x10000;  // SGI/PPI config is in second page
+        let isenabler0 = (gicr_base + SGI_BASE + 0x0100) as *const u32;
+        let enabled = core::ptr::read_volatile(isenabler0);
+        super::uart_print(b"  GICR_ISENABLER0: 0x");
+        print_number(enabled as usize);
+        if (enabled & (1 << 30)) != 0 {
+            super::uart_print(b" (PPI 30 ENABLED)\n");
+        } else {
+            super::uart_print(b" (WARNING: PPI 30 NOT ENABLED!)\n");
+        }
+
+        // Check interrupt priority for PPI 30
+        let iprio = (gicr_base + SGI_BASE + 0x0400) as *const u32;
+        let prio_reg = iprio.add(30 / 4); // 4 priorities per register
+        let prio_val = core::ptr::read_volatile(prio_reg);
+        let prio_shift = (30 % 4) * 8;
+        let prio = (prio_val >> prio_shift) & 0xFF;
+        super::uart_print(b"  PPI 30 priority: ");
+        print_number(prio as usize);
+        super::uart_print(b" (expected 96, must be < ICC_PMR_EL1 to fire)\n");
+
+        // Check current ICC_PMR_EL1 state
+        let pmr: u64;
+        asm!("mrs {x}, icc_pmr_el1", x = out(reg) pmr);
+        super::uart_print(b"  Current ICC_PMR_EL1: ");
+        print_number(pmr as usize);
+        super::uart_print(b" (should be 255)\n");
+
+        // Check Group 1 enable state
+        let grp1_en: u64;
+        asm!("mrs {x}, icc_igrpen1_el1", x = out(reg) grp1_en);
+        super::uart_print(b"  ICC_IGRPEN1_EL1: ");
+        print_number(grp1_en as usize);
+        super::uart_print(b" (should be 1)\n");
+
+        super::uart_print(b"[TIMER_INIT] Timer initialization complete.\n");
     }
 
     unsafe fn gicv3_init_qemu() {
@@ -893,10 +1326,12 @@ mod bringup {
         const GICD_IPRIORITYR: u64 = 0x0400;
 
         // GIC Redistributor registers
-        const GICR_WAKER: u64 = 0x0014;
-        const GICR_IGROUPR0: u64 = 0x0080;
-        const GICR_ISENABLER0: u64 = 0x0100;
-        const GICR_IPRIORITYR: u64 = 0x0400;
+        // IMPORTANT: SGI/PPI configuration is in the second 64KB page!
+        const GICR_WAKER: u64 = 0x0014;  // In RD_base (first page)
+        const SGI_BASE: u64 = 0x10000;   // SGI/PPI config base (second page)
+        const GICR_IGROUPR0: u64 = SGI_BASE + 0x0080;
+        const GICR_ISENABLER0: u64 = SGI_BASE + 0x0100;
+        const GICR_IPRIORITYR: u64 = SGI_BASE + 0x0400;
 
         // 1) Initialize GIC Distributor
         super::uart_print(b"GIC:B\n");
@@ -915,8 +1350,31 @@ mod bringup {
             super::uart_print(b"GIC:F\n");
         }
 
-        // 2) Wake up redistributor for CPU0
+        // 2) Verify redistributor and wake it up for CPU0
         super::uart_print(b"GIC:G\n");
+
+        // Check GICR_TYPER to verify this is the right redistributor
+        const GICR_TYPER: u64 = 0x0008;
+        let typer_lo = (gicr_base + GICR_TYPER) as *const u32;
+        let typer_hi = (gicr_base + GICR_TYPER + 4) as *const u32;
+        let typer_val_lo = core::ptr::read_volatile(typer_lo);
+        let typer_val_hi = core::ptr::read_volatile(typer_hi);
+        super::uart_print(b"  GICR_TYPER: 0x");
+        print_number(typer_val_hi as usize);
+        print_number(typer_val_lo as usize);
+        super::uart_print(b"\n");
+
+        // Check if this is the last redistributor (bit 4)
+        if (typer_val_lo & (1 << 4)) != 0 {
+            super::uart_print(b"  This is the LAST redistributor\n");
+        }
+
+        // Get CPU number from TYPER
+        let cpu_num = (typer_val_hi >> 8) & 0xFFFF;
+        super::uart_print(b"  CPU number: ");
+        print_number(cpu_num as usize);
+        super::uart_print(b"\n");
+
         let waker = (gicr_base + GICR_WAKER) as *mut u32;
         super::uart_print(b"GIC:H\n");
 
@@ -947,40 +1405,212 @@ mod bringup {
             super::uart_print(b"GIC:M\n");
         }
 
-        // 3) Configure PPI 27 (virtual timer) as Group 1 (non-secure)
+        // 3) Configure PPI 30 (EL1 physical timer) as Group 1 (non-secure)
         super::uart_print(b"GIC:N\n");
+        super::uart_print(b"[GIC] Using SGI/PPI base at offset 0x10000 from redistributor\n");
+
+        // First, disable all PPIs in ICENABLER0
+        const GICR_ICENABLER0: u64 = SGI_BASE + 0x0180;
+        let icenabler0 = (gicr_base + GICR_ICENABLER0) as *mut u32;
+        core::ptr::write_volatile(icenabler0, 0xFFFFFFFF); // Clear all enables
+        core::arch::asm!("dsb sy", "isb", options(nostack, preserves_flags));
+
+        // Now set Group 1 for PPI 30
         let igroupr0 = (gicr_base + GICR_IGROUPR0) as *mut u32;
         let mut grp = core::ptr::read_volatile(igroupr0);
-        grp |= 1 << 27;
+        super::uart_print(b"  IGROUPR0 before: 0x");
+        print_number(grp as usize);
+        super::uart_print(b"\n");
+
+        grp |= 1 << 30;
         core::ptr::write_volatile(igroupr0, grp);
         core::arch::asm!("dsb sy", "isb", options(nostack, preserves_flags));
 
-        // 4) Set priority for PPI 27
+        // Verify group was set
+        let grp_check = core::ptr::read_volatile(igroupr0);
+        super::uart_print(b"  IGROUPR0 after: 0x");
+        print_number(grp_check as usize);
+        if (grp_check & (1 << 30)) != 0 {
+            super::uart_print(b" (PPI 30 is Group 1)\n");
+        } else {
+            super::uart_print(b" (WARNING: PPI 30 NOT Group 1!)\n");
+        }
+
+        // 4) Set priority for PPI 30
+        // Must be < ICC_PMR_EL1 to fire. Since ICC_PMR_EL1 is stuck at 248 (0xF8),
+        // we need priority < 248. Set to 0x60 (96) for safety.
         let iprio = (gicr_base + GICR_IPRIORITYR) as *mut u32;
-        let prio_reg = iprio.add(27 / 4); // 4 priorities per 32-bit register
-        let shift = (27 % 4) * 8;
+        let prio_reg = iprio.add(30 / 4); // 4 priorities per 32-bit register
+        let shift = (30 % 4) * 8;
         super::uart_print(b"GIC:O\n");
-        let mut prio_val = core::ptr::read_volatile(prio_reg);
-        prio_val &= !(0xFF << shift);
-        prio_val |= 0x80 << shift; // Medium priority
+
+        // Try direct write of full register
+        // PPI 30 is in bits [15:8] of this register (30 % 4 = 2, so shift by 16)
+        let prio_val: u32 = 0x60606060; // Set all 4 priorities to 0x60
+        super::uart_print(b"  Writing priority register 0x");
+        print_number(prio_val as usize);
+        super::uart_print(b" to offset ");
+        print_number((30 / 4) as usize);
+        super::uart_print(b"\n");
+
         core::ptr::write_volatile(prio_reg, prio_val);
         core::arch::asm!("dsb sy", "isb", options(nostack, preserves_flags));
 
-        // 5) Enable PPI 27
-        super::uart_print(b"GIC: ENABLE PPI27\n");
+        // Verify priority was set
+        let prio_check = core::ptr::read_volatile(prio_reg);
+        super::uart_print(b"  Priority register readback: 0x");
+        print_number(prio_check as usize);
+        super::uart_print(b"\n");
+
+        let actual_prio = (prio_check >> shift) & 0xFF;
+        super::uart_print(b"  PPI 30 priority: ");
+        print_number(actual_prio as usize);
+        if actual_prio == 0x60 {
+            super::uart_print(b" (OK - set to 96)\n");
+        } else if actual_prio == 0 {
+            super::uart_print(b" (ERROR - still 0!)\n");
+        } else {
+            super::uart_print(b" (unexpected value)\n");
+        }
+
+        // 5) Enable PPI 30 with retries
+        super::uart_print(b"GIC: ENABLE PPI30\n");
         let isenabler0 = (gicr_base + GICR_ISENABLER0) as *mut u32;
-        core::ptr::write_volatile(isenabler0, 1 << 27);
-        core::arch::asm!("dsb sy", "isb", options(nostack, preserves_flags));
+
+        // First, verify redistributor is awake
+        let waker_check = core::ptr::read_volatile(waker);
+        if (waker_check & 0x6) != 0 {  // Check both ChildrenAsleep and ProcessorSleep
+            super::uart_print(b"[WARNING] Redistributor may not be fully awake: ");
+            print_number(waker_check as usize);
+            super::uart_print(b"\n");
+        }
+
+        // Try multiple times to enable PPI 30
+        for attempt in 0..3 {
+            // Write directly (not read-modify-write) to set bit 30
+            core::ptr::write_volatile(isenabler0, 1u32 << 30);
+            core::arch::asm!("dsb sy", "isb", options(nostack, preserves_flags));
+
+            // Small delay to let write settle
+            for _ in 0..100 {
+                core::arch::asm!("nop");
+            }
+
+            // Read back to verify
+            let enabled = core::ptr::read_volatile(isenabler0);
+            if (enabled & (1 << 30)) != 0 {
+                super::uart_print(b"GIC: ISENABLER0 success on attempt ");
+                print_number(attempt as usize + 1);
+                super::uart_print(b", readback: 0x");
+                print_number(enabled as usize);
+                super::uart_print(b"\n");
+                break;
+            } else if attempt == 2 {
+                super::uart_print(b"GIC: ISENABLER0 FAILED after 3 attempts, readback: 0x");
+                print_number(enabled as usize);
+                super::uart_print(b" (bit 30 NOT set!)\n");
+
+                // Try to understand why it's failing
+                super::uart_print(b"  Redistributor GICR_WAKER: ");
+                let waker_final = core::ptr::read_volatile(waker);
+                print_number(waker_final as usize);
+                super::uart_print(b"\n");
+
+                // Check if we can write ANY bits to ISENABLER0
+                core::ptr::write_volatile(isenabler0, 0xFFFFFFFF);
+                core::arch::asm!("dsb sy", "isb", options(nostack, preserves_flags));
+                let test_write = core::ptr::read_volatile(isenabler0);
+                super::uart_print(b"  Test write 0xFFFFFFFF readback: 0x");
+                print_number(test_write as usize);
+                super::uart_print(b"\n");
+
+                // Restore to just PPI 30
+                core::ptr::write_volatile(isenabler0, 1u32 << 30);
+                core::arch::asm!("dsb sy", "isb", options(nostack, preserves_flags));
+            }
+        }
+
+        // Final verification
+        let enabled = core::ptr::read_volatile(isenabler0);
+        super::uart_print(b"GIC: ISENABLER0 readback: 0x");
+        print_number(enabled as usize);
+        super::uart_print(b" (bit 30 should be set)\n");
 
         super::uart_print(b"GIC:P\n");
 
         // CPU interface via system registers
         super::uart_print(b"GIC:Q\n");
-        let pmr: u64 = 0xFF; // unmask all priorities
+
+        // Set priority mask to unmask all interrupts - try multiple approaches
+        super::uart_print(b"[GIC] Setting ICC_PMR_EL1...\n");
+
+        // First attempt: Direct write of 0xFF
+        let pmr: u64 = 0xFF;
         asm!("msr icc_pmr_el1, {x}", x = in(reg) pmr);
+        asm!("isb", options(nostack, preserves_flags));
+
+        let pmr_readback1: u64;
+        asm!("mrs {x}, icc_pmr_el1", x = out(reg) pmr_readback1);
+        super::uart_print(b"  Attempt 1 (0xFF): readback=");
+        print_number(pmr_readback1 as usize);
+        super::uart_print(b"\n");
+
+        if pmr_readback1 != 0xFF {
+            // Try writing 0xF0 instead (might be more permissive than 0xF8)
+            let pmr2: u64 = 0xF0;
+            asm!("msr icc_pmr_el1, {x}", x = in(reg) pmr2);
+            asm!("isb", options(nostack, preserves_flags));
+
+            let pmr_readback2: u64;
+            asm!("mrs {x}, icc_pmr_el1", x = out(reg) pmr_readback2);
+            super::uart_print(b"  Attempt 2 (0xF0): readback=");
+            print_number(pmr_readback2 as usize);
+            super::uart_print(b"\n");
+
+            // Try one more time with original 0xFF
+            let pmr3: u64 = 0xFF;
+            asm!("msr icc_pmr_el1, {x}", x = in(reg) pmr3);
+            asm!("dsb sy", options(nostack, preserves_flags));
+            asm!("isb", options(nostack, preserves_flags));
+
+            let pmr_readback3: u64;
+            asm!("mrs {x}, icc_pmr_el1", x = out(reg) pmr_readback3);
+            super::uart_print(b"  Attempt 3 (0xFF with dsb): readback=");
+            print_number(pmr_readback3 as usize);
+            super::uart_print(b"\n");
+        }
+
+        // Final readback for status
+        let pmr_readback: u64;
+        asm!("mrs {x}, icc_pmr_el1", x = out(reg) pmr_readback);
+        super::uart_print(b"[GIC] ICC_PMR_EL1 final: ");
+        print_number(pmr_readback as usize);
+        if pmr_readback == 0xFF {
+            super::uart_print(b" (OK)\n");
+        } else if pmr_readback == 0xF8 {
+            super::uart_print(b" (WARNING: Stuck at 0xF8! Will allow priorities 0-0xF7)\n");
+        } else if pmr_readback == 0xF0 {
+            super::uart_print(b" (WARNING: Set to 0xF0! Will allow priorities 0-0xEF)\n");
+        } else {
+            super::uart_print(b" (WARNING: Unexpected value!)\n");
+        }
+
+        // Enable Group 1 interrupts
         let grp1: u64 = 1;
         asm!("msr icc_igrpen1_el1, {x}", x = in(reg) grp1);
         asm!("isb", options(nostack, preserves_flags));
+
+        // Verify Group 1 enable
+        let grp1_readback: u64;
+        asm!("mrs {x}, icc_igrpen1_el1", x = out(reg) grp1_readback);
+        super::uart_print(b"[GIC] ICC_IGRPEN1_EL1 set to 1, readback: ");
+        print_number(grp1_readback as usize);
+        if grp1_readback != 1 {
+            super::uart_print(b" (WARNING: Expected 1!)\n");
+        } else {
+            super::uart_print(b" (OK)\n");
+        }
+
         super::uart_print(b"GIC:R\n");
     }
 

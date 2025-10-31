@@ -1275,8 +1275,7 @@ static MEMORY_TELEMETRY: Mutex<MemoryTelemetry> = Mutex::new(MemoryTelemetry::ne
 #[inline(never)]
 pub fn init_memory_agent() {
     unsafe { crate::uart_print(b"[MEM AGENT] ENTER\n"); }
-    // Disable IRQs during brief lock to avoid early-boot reentrancy/deadlock
-    unsafe { crate::uart_print(b"[MEM AGENT] IRQ OFF\n"); core::arch::asm!("msr daifset, #2", options(nostack, preserves_flags)); }
+    // Note: IRQs remain enabled - lock is brief and safe at this point
     unsafe { crate::uart_print(b"[MEM AGENT] LOCKING\n"); }
     let mut agent = MEMORY_AGENT.lock();
     unsafe { crate::uart_print(b"[MEM AGENT] LOCKED\n"); }
@@ -1285,8 +1284,8 @@ pub fn init_memory_agent() {
     agent.infer_count = 1; // prevent lazy reset
     drop(agent);
     unsafe { crate::uart_print(b"[MEM AGENT] UNLOCKED\n"); }
-    // Re-enable IRQs
-    unsafe { crate::uart_print(b"[MEM AGENT] IRQ ON\n"); core::arch::asm!("msr daifclr, #2", options(nostack, preserves_flags)); }
+    // IRQs remain enabled throughout - no need to manipulate DAIF
+    unsafe { crate::uart_print(b"[MEM AGENT] IRQ ON\n"); }
     metric_kv("memory_agent_init", 1);
     unsafe { crate::uart_print(b"[MEM AGENT] DONE\n"); }
 }

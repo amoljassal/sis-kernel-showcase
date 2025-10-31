@@ -364,6 +364,11 @@ pub fn evaluate_compaction_policy() -> (bool, u8, u16) {
 /// Execute predictive compaction check and record decision
 /// Returns: true if compaction was triggered
 pub fn execute_predictive_compaction() -> bool {
+    execute_predictive_compaction_verbose(true)
+}
+
+/// Execute predictive compaction with optional verbosity control
+pub fn execute_predictive_compaction_verbose(verbose: bool) -> bool {
     let timestamp = get_timestamp_us();
     let (should_compact, predicted_frag, confidence) = evaluate_compaction_policy();
 
@@ -395,7 +400,7 @@ pub fn execute_predictive_compaction() -> bool {
     let mut state = PREDICTIVE_MEMORY.lock();
     state.record_compaction_decision(decision);
 
-    if should_compact {
+    if should_compact && verbose {
         unsafe {
             crate::uart_print(b"[PRED_MEM] Triggering predictive compaction\n");
             crate::uart_print(b"  Predicted frag in 5s: ");
@@ -404,11 +409,11 @@ pub fn execute_predictive_compaction() -> bool {
             crate::shell::print_number_simple(confidence as u64);
             crate::uart_print(b"/1000\n");
         }
-
-        // TODO: Actual compaction would be triggered here
-        // For now, this is a demonstration of the decision logic
-        // In a real implementation, this would call a heap compaction function
     }
+
+    // TODO: Actual compaction would be triggered here
+    // For now, this is a demonstration of the decision logic
+    // In a real implementation, this would call a heap compaction function
 
     should_compact
 }
