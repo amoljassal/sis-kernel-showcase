@@ -12,7 +12,12 @@ EFI_SIS_DIR="$ESP_DIR/EFI/SIS"
 
 echo "[*] Building UEFI app (aarch64-unknown-uefi)..."
 rustup target add aarch64-unknown-uefi >/dev/null 2>&1 || true
-cargo build -p uefi-boot --release --target aarch64-unknown-uefi
+if [[ -n "${BOOT_FEATURES:-}" ]]; then
+  echo "[*] Building uefi-boot with features: ${BOOT_FEATURES}"
+  cargo build -p uefi-boot --release --target aarch64-unknown-uefi --features "${BOOT_FEATURES}"
+else
+  cargo build -p uefi-boot --release --target aarch64-unknown-uefi
+fi
 
 UEFI_APP="$ROOT_DIR/target/aarch64-unknown-uefi/release/uefi-boot.efi"
 if [[ ! -f "$UEFI_APP" ]]; then
@@ -68,6 +73,14 @@ fi
 if [[ -n "${SIS_FEATURES:-}" ]]; then
   echo "[*] Adding SIS_FEATURES: ${SIS_FEATURES}"
   FEATURES="${FEATURES},${SIS_FEATURES}"
+fi
+
+# Default: enable framed control path for graphctl add-channel/add-operator (can disable with GRAPHCTL_FRAMED=0)
+if [[ "${GRAPHCTL_FRAMED:-1}" != "0" ]]; then
+  echo "[*] Enabling graphctl-framed feature (framed add-channel/add-operator)"
+  FEATURES="${FEATURES},graphctl-framed"
+else
+  echo "[*] graphctl-framed disabled by env"
 fi
 
 # Remove leading comma if present

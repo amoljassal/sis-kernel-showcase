@@ -47,6 +47,11 @@ virtio-console = []   # Enable VirtIO console driver path during bring-up
 graph-autostats = []  # Auto-create a baseline graph and emit graph_stats_* METRICs
 llm = []             # Kernel-resident LLM operator/service (feature-gated)
 crypto-real = []     # Enable real SHA-256 + Ed25519 cryptography (production mode)
+demos = []           # Include demo commands (aidemo/graphdemo/...); off for hw-minimal
+hw-minimal = []      # Preset marker for hardware-lean builds (docs/script controlled)
+syscall-verbose = [] # Verbose syscall tracing
+dt-override = []     # Enable DT override + platform banner in bring-up
+graphctl-framed = [] # Use framed control for add-channel/add-operator from shell
 
 [build-dependencies]
 bootloader = { version = "=0.11.11", default-features = false, features = ["bios"] }

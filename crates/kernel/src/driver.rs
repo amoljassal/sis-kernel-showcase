@@ -227,32 +227,36 @@ impl DriverRegistry {
                     );
                 }
 
-                // Fallback to simulated devices for testing
-                let test_devices = [DeviceInfo {
-                    id: DeviceId {
-                        vendor_id: 0x1AF4, // Red Hat (VirtIO)
-                        device_id: 0x0003, // VirtIO Console
-                        class: 0x07,       // Communication controller
-                        subclass: 0x80,    // Other
-                    },
-                    base_addr: 0x0A000000,
-                    size: 0x200,
-                    irq: Some(16),
-                    device_data: 2, // VirtIO 1.0+ version
-                }];
+                // Fallback to a single hinted device if platform provides virtio-mmio hint
+                if let Some((base, slot_size, irq_base)) = crate::platform::active().virtio_mmio_hint() {
+                    let test_devices = [DeviceInfo {
+                        id: DeviceId {
+                            vendor_id: 0x1AF4, // Red Hat (VirtIO)
+                            device_id: 0x0003, // VirtIO Console
+                            class: 0x07,       // Communication controller
+                            subclass: 0x80,    // Other
+                        },
+                        base_addr: base as u64,
+                        size: slot_size as u64,
+                        irq: Some(irq_base as u32),
+                        device_data: 2, // VirtIO 1.0+ version
+                    }];
 
-                for device in &test_devices {
-                    unsafe {
-                        crate::uart_print(b"[DRIVER] Fallback device: vendor=");
-                        self.print_hex16(device.id.vendor_id);
-                        crate::uart_print(b" device=");
-                        self.print_hex16(device.id.device_id);
-                        crate::uart_print(b"\n");
-                    }
+                    for device in &test_devices {
+                        unsafe {
+                            crate::uart_print(b"[DRIVER] Fallback device: vendor=");
+                            self.print_hex16(device.id.vendor_id);
+                            crate::uart_print(b" device=");
+                            self.print_hex16(device.id.device_id);
+                            crate::uart_print(b"\n");
+                        }
 
-                    if let Ok(_) = self.bind_device(device) {
-                        bound_count += 1;
+                        if let Ok(_) = self.bind_device(device) {
+                            bound_count += 1;
+                        }
                     }
+                } else {
+                    unsafe { crate::uart_print(b"[DRIVER] No virtio-mmio hint; skipping fallback device\n"); }
                 }
             }
         }

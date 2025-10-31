@@ -77,6 +77,7 @@ fn write_decimal_u64(buf: &mut HString<192>, mut v: u64) -> Result<(), ()> {
     Ok(())
 }
 
+#[cfg(feature = "llm")]
 #[inline(always)]
 fn token_split(tok: u64) -> (u8, u64) {
     let rights = (tok >> 56) as u8;
@@ -84,6 +85,7 @@ fn token_split(tok: u64) -> (u8, u64) {
     (rights, secret)
 }
 
+#[cfg(feature = "llm")]
 #[inline(always)]
 fn check_embedded_rights(tok: u64, need_admin: bool, need_submit: bool) -> Result<(), CtrlError> {
     let (rights, secret) = token_split(tok);
@@ -98,6 +100,7 @@ fn check_embedded_rights(tok: u64, need_admin: bool, need_submit: bool) -> Resul
     Ok(())
 }
 
+#[cfg(feature = "llm")]
 #[inline(always)]
 fn check_token_admin(tok: u64) -> Result<(), CtrlError> {
     let expect = CONTROL_TOKEN_ADMIN.load(Ordering::Relaxed);
@@ -105,6 +108,7 @@ fn check_token_admin(tok: u64) -> Result<(), CtrlError> {
     Ok(())
 }
 
+#[cfg(feature = "llm")]
 #[inline(always)]
 fn check_token_submit_or_admin(tok: u64) -> Result<(), CtrlError> {
     let a = CONTROL_TOKEN_ADMIN.load(Ordering::Relaxed);
@@ -282,7 +286,10 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
             }
         }
         0x10 => { // LlmLoad
+            #[cfg(feature = "llm")]
             let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            #[cfg(not(feature = "llm"))]
+            let (tok, _p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
             // Explicit allow/deny with audit
             #[cfg(feature = "llm")]
             {
@@ -322,7 +329,10 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
         }
         0x11 => { // LlmInferStart
             if payload.len() < (8+2) { return Err(CtrlError::BadFrame); }
+            #[cfg(feature = "llm")]
             let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            #[cfg(not(feature = "llm"))]
+            let (tok, _p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
             #[cfg(feature = "llm")]
             {
                 // Accept explicit submit/admin tokens, or embedded submit/admin rights
@@ -361,16 +371,18 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
             }
         }
         0x12 => { // LlmInferPoll (id + optional max)
+            #[cfg(feature = "llm")]
             let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            #[cfg(not(feature = "llm"))]
+            let (tok, _p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
             check_token(tok)?;
             // Expected: infer_id (u32 LE), optional max (u16 LE)
+            #[cfg(feature = "llm")]
             let (infer_id, max) = if p.len() >= 4 {
                 let id = u32::from_le_bytes([p[0],p[1],p[2],p[3]]) as usize;
                 let m = if p.len() >= 6 { u16::from_le_bytes([p[4],p[5]]) as usize } else { 4 };
                 (id, m)
-            } else {
-                (0usize, 4usize)
-            };
+            } else { (0usize, 4usize) };
             #[cfg(feature = "llm")]
             {
                 let (id, n, done, items) = if infer_id != 0 { crate::llm::ctl_poll_id(infer_id, max) } else { crate::llm::ctl_poll(max) };
@@ -424,8 +436,12 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
             Ok(())
         }
         0x13 => { // LlmCancel (by id)
+            #[cfg(feature = "llm")]
             let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            #[cfg(not(feature = "llm"))]
+            let (tok, _p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
             check_token(tok)?;
+            #[cfg(feature = "llm")]
             let id = if p.len() >= 4 { u32::from_le_bytes([p[0],p[1],p[2],p[3]]) as usize } else { 0 };
             #[cfg(feature = "llm")]
             {

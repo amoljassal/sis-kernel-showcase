@@ -155,18 +155,14 @@ pub fn handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
 
         // Fall through to regular syscall if vDSO failed
     }
+    #[cfg(feature = "syscall-verbose")]
     unsafe {
         crate::uart_print(b"[SYSCALL] Raw x8 register: ");
         let raw_x8 = frame.gpr[8];
-        // Print the raw x8 register value in hex
         crate::uart_print(b"0x");
         for i in (0..16).rev() {
             let nibble = (raw_x8 >> (i * 4)) & 0xF;
-            let c = if nibble < 10 {
-                b'0' + nibble as u8
-            } else {
-                b'A' + (nibble - 10) as u8
-            };
+            let c = if nibble < 10 { b'0' + nibble as u8 } else { b'A' + (nibble - 10) as u8 };
             crate::uart_print(&[c]);
         }
         crate::uart_print(b"\n");
@@ -178,40 +174,24 @@ pub fn handle_syscall(frame: &mut SyscallFrame) -> SyscallResult {
     // Performance measurement start
     let start_cycles = read_cycle_counter();
 
+    #[cfg(feature = "syscall-verbose")]
     unsafe {
         crate::uart_print(b"[SYSCALL] Dispatching syscall number: ");
-        // Print the actual syscall number for debugging
         let num = syscall_num as u64;
-        if num == 64 {
-            crate::uart_print(b"WRITE(64)");
-        } else if num == 63 {
-            crate::uart_print(b"READ(63)");
-        } else if num == 93 {
-            crate::uart_print(b"EXIT(93)");
-        } else if num == 172 {
-            crate::uart_print(b"GETPID(172)");
-        } else if num == 220 {
-            crate::uart_print(b"FORK(220)");
-        } else if num == u64::MAX {
-            crate::uart_print(b"INVALID(MAX)");
-        } else {
-            crate::uart_print(b"UNKNOWN(");
-            // Print raw number in a simple way
-            if num < 10 {
-                crate::uart_print(&[b'0' + num as u8]);
-            } else if num < 100 {
-                crate::uart_print(&[b'0' + (num / 10) as u8, b'0' + (num % 10) as u8]);
-            } else {
-                crate::uart_print(b"XXX");
-            }
-            crate::uart_print(b")");
-        }
+        if num == 64 { crate::uart_print(b"WRITE(64)"); }
+        else if num == 63 { crate::uart_print(b"READ(63)"); }
+        else if num == 93 { crate::uart_print(b"EXIT(93)"); }
+        else if num == 172 { crate::uart_print(b"GETPID(172)"); }
+        else if num == 220 { crate::uart_print(b"FORK(220)"); }
+        else if num == u64::MAX { crate::uart_print(b"INVALID(MAX)"); }
+        else { crate::uart_print(b"UNKNOWN\n"); }
         crate::uart_print(b"\n");
     }
 
     let result = match syscall_num {
         SyscallNumber::Read => sys_read(args.x0 as i32, args.x1 as *mut u8, args.x2),
         SyscallNumber::Write => {
+            #[cfg(feature = "syscall-verbose")]
             unsafe {
                 crate::uart_print(b"[SYSCALL] Calling sys_write with fd=");
                 crate::uart_print(if args.x0 == 1 { b"1(stdout)" } else { b"OTHER" });
@@ -287,20 +267,19 @@ fn sys_write(fd: i32, buf: *const u8, count: u64) -> SyscallResult {
 
     // Implement UART write for stdout/stderr (fd 1, 2)
     if fd == 1 || fd == 2 {
+        #[cfg(feature = "syscall-verbose")]
         unsafe {
             crate::uart_print(
                 b"[SYSCALL] sys_write: fd is stdout/stderr, calling uart_write_bytes\n",
             );
         }
         let bytes_written = uart_write_bytes(buf, count as usize)?;
-        unsafe {
-            crate::uart_print(b"[SYSCALL] sys_write: uart_write_bytes succeeded\n");
-        }
+        #[cfg(feature = "syscall-verbose")]
+        unsafe { crate::uart_print(b"[SYSCALL] sys_write: uart_write_bytes succeeded\n"); }
         Ok(bytes_written as u64)
     } else {
-        unsafe {
-            crate::uart_print(b"[SYSCALL] sys_write: fd is not stdout/stderr, returning ENOSYS\n");
-        }
+        #[cfg(feature = "syscall-verbose")]
+        unsafe { crate::uart_print(b"[SYSCALL] sys_write: fd is not stdout/stderr, returning ENOSYS\n"); }
         // NOTE: SIS filesystem module integration pending
         Err(SyscallError::ENOSYS)
     }
@@ -309,6 +288,7 @@ fn sys_write(fd: i32, buf: *const u8, count: u64) -> SyscallResult {
 /// Exit system call - terminate current process
 fn sys_exit(_status: i32) -> SyscallResult {
     // Use existing uart_print function
+    #[cfg(feature = "syscall-verbose")]
     unsafe {
         crate::uart_print(b"[SYSCALL] Process exit with status: ");
         // Convert status to string and print (simplified)
@@ -778,18 +758,23 @@ pub fn run_syscall_microbenchmark(syscall: SyscallNumber, iterations: u32) -> (u
 /// The caller must ensure the pointer is valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn syscall_handler(frame: *mut SyscallFrame) {
+    #[cfg(feature = "syscall-verbose")]
     crate::uart_print(b"[SYSCALL] Handler called\n");
     let frame_ref = &mut *frame;
+    #[cfg(feature = "syscall-verbose")]
     crate::uart_print(b"[SYSCALL] About to handle syscall\n");
     match handle_syscall(frame_ref) {
         Ok(result) => {
+            #[cfg(feature = "syscall-verbose")]
             crate::uart_print(b"[SYSCALL] Success, setting return value\n");
             frame_ref.set_return_value(result);
         }
         Err(error) => {
+            #[cfg(feature = "syscall-verbose")]
             crate::uart_print(b"[SYSCALL] Error, setting error value\n");
             frame_ref.set_return_value(error.into());
         }
     }
+    #[cfg(feature = "syscall-verbose")]
     crate::uart_print(b"[SYSCALL] Handler returning\n");
 }

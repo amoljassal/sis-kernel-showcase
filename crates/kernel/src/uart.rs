@@ -5,27 +5,46 @@
 
 use core::ptr;
 
-/// PL011 UART register offsets
-const UART_BASE: usize = 0x0900_0000;
-const UART_DR: usize = UART_BASE + 0x000; // Data Register
-const UART_RSR_ECR: usize = UART_BASE + 0x004; // Receive Status/Error Clear
-const UART_FR: usize = UART_BASE + 0x018; // Flag Register
+// Runtime-configurable base and clock populated during init()
+// Default to 0 to avoid hardcoded MMIO; early-boot prints use platform UART directly.
+static mut UART_BASE_ADDR: usize = 0;
+static mut UART_CLOCK_HZ: u32 = 24_000_000;     // default when platform doesn't specify
+
+/// PL011 UART register offsets helpers (computed from runtime base)
+#[inline(always)]
+fn uart_base() -> usize { unsafe { UART_BASE_ADDR } }
+#[inline(always)]
+fn reg_dr() -> usize { uart_base() + 0x000 }
+#[inline(always)]
+fn reg_rsr_ecr() -> usize { uart_base() + 0x004 }
+#[inline(always)]
+fn reg_fr() -> usize { uart_base() + 0x018 }
 #[allow(dead_code)]
-const UART_ILPR: usize = UART_BASE + 0x020; // IrDA Low-Power Counter
-const UART_IBRD: usize = UART_BASE + 0x024; // Integer Baud Rate Divisor
-const UART_FBRD: usize = UART_BASE + 0x028; // Fractional Baud Rate Divisor
-const UART_LCRH: usize = UART_BASE + 0x02C; // Line Control Register
-const UART_CR: usize = UART_BASE + 0x030; // Control Register
+#[inline(always)]
+fn reg_ilpr() -> usize { uart_base() + 0x020 }
+#[inline(always)]
+fn reg_ibrd() -> usize { uart_base() + 0x024 }
+#[inline(always)]
+fn reg_fbrd() -> usize { uart_base() + 0x028 }
+#[inline(always)]
+fn reg_lcrh() -> usize { uart_base() + 0x02C }
+#[inline(always)]
+fn reg_cr() -> usize { uart_base() + 0x030 }
 #[allow(dead_code)]
-const UART_IFLS: usize = UART_BASE + 0x034; // Interrupt FIFO Level Select
+#[inline(always)]
+fn reg_ifls() -> usize { uart_base() + 0x034 }
 #[allow(dead_code)]
-const UART_IMSC: usize = UART_BASE + 0x038; // Interrupt Mask Set/Clear
+#[inline(always)]
+fn reg_imsc() -> usize { uart_base() + 0x038 }
 #[allow(dead_code)]
-const UART_RIS: usize = UART_BASE + 0x03C; // Raw Interrupt Status
+#[inline(always)]
+fn reg_ris() -> usize { uart_base() + 0x03C }
 #[allow(dead_code)]
-const UART_MIS: usize = UART_BASE + 0x040; // Masked Interrupt Status
+#[inline(always)]
+fn reg_mis() -> usize { uart_base() + 0x040 }
 #[allow(dead_code)]
-const UART_ICR: usize = UART_BASE + 0x044; // Interrupt Clear Register
+#[inline(always)]
+fn reg_icr() -> usize { uart_base() + 0x044 }
 
 /// Flag Register bits
 #[allow(dead_code)]
@@ -83,22 +102,30 @@ impl Uart {
 
     /// Initialize the UART controller
     pub unsafe fn init(&mut self) {
-        // Disable UART during initialization
-        ptr::write_volatile(UART_CR as *mut u32, 0);
+        // Capture platform-provided UART base/clock
+        let desc = crate::platform::active().uart();
+        UART_BASE_ADDR = desc.base;
+        UART_CLOCK_HZ = if desc.clock_hz != 0 { desc.clock_hz } else { UART_CLOCK_HZ };
 
-        // Set baud rate to 115200 (assuming 24MHz UARTCLK)
+        // Disable UART during initialization
+        ptr::write_volatile(reg_cr() as *mut u32, 0);
+
+        // Set baud rate to 115200 using platform clock
         // Baud rate divisor = UARTCLK / (16 * baud_rate)
-        // For 24MHz clock and 115200 baud: divisor = 24000000 / (16 * 115200) = 13.0208...
-        // Integer part: 13, Fractional part: 0.0208 * 64 = 1.33 ≈ 1
-        ptr::write_volatile(UART_IBRD as *mut u32, 13);
-        ptr::write_volatile(UART_FBRD as *mut u32, 1);
+        let baud: u32 = 115_200;
+        let clk: u32 = UART_CLOCK_HZ;
+        let div_times_64: u32 = (clk / (16 * baud)) * 64 + (((clk % (16 * baud)) * 64) / (16 * baud));
+        let ibrd: u32 = div_times_64 / 64;
+        let fbrd: u32 = div_times_64 % 64;
+        ptr::write_volatile(reg_ibrd() as *mut u32, ibrd.max(1));
+        ptr::write_volatile(reg_fbrd() as *mut u32, fbrd);
 
         // Set 8 bits, no parity, 1 stop bit, enable FIFOs
-        ptr::write_volatile(UART_LCRH as *mut u32, UART_LCRH_WLEN_8 | UART_LCRH_FEN);
+        ptr::write_volatile(reg_lcrh() as *mut u32, UART_LCRH_WLEN_8 | UART_LCRH_FEN);
 
         // Enable UART, transmit, and receive
         ptr::write_volatile(
-            UART_CR as *mut u32,
+            reg_cr() as *mut u32,
             UART_CR_UARTEN | UART_CR_TXE | UART_CR_RXE,
         );
 
@@ -108,11 +135,11 @@ impl Uart {
     /// Write a single byte to UART
     pub unsafe fn write_byte(&self, byte: u8) {
         // Wait for transmit FIFO to have space
-        while ptr::read_volatile(UART_FR as *const u32) & UART_FR_TXFF != 0 {
+        while ptr::read_volatile(reg_fr() as *const u32) & UART_FR_TXFF != 0 {
             core::hint::spin_loop();
         }
 
-        ptr::write_volatile(UART_DR as *mut u32, byte as u32);
+        ptr::write_volatile(reg_dr() as *mut u32, byte as u32);
     }
 
     /// Write bytes to UART
@@ -126,16 +153,16 @@ impl Uart {
     /// Returns None if no data is available
     pub unsafe fn read_byte(&self) -> Option<u8> {
         // Check if receive FIFO is empty
-        if ptr::read_volatile(UART_FR as *const u32) & UART_FR_RXFE != 0 {
+        if ptr::read_volatile(reg_fr() as *const u32) & UART_FR_RXFE != 0 {
             return None;
         }
 
-        let data = ptr::read_volatile(UART_DR as *const u32);
+        let data = ptr::read_volatile(reg_dr() as *const u32);
 
         // Check for errors
         if data & (UART_DR_OE | UART_DR_BE | UART_DR_PE | UART_DR_FE) != 0 {
             // Clear error flags
-            ptr::write_volatile(UART_RSR_ECR as *mut u32, 0);
+            ptr::write_volatile(reg_rsr_ecr() as *mut u32, 0);
             return None;
         }
 
@@ -196,17 +223,17 @@ impl Uart {
 
     /// Check if UART is ready for transmission
     pub unsafe fn is_tx_ready(&self) -> bool {
-        ptr::read_volatile(UART_FR as *const u32) & UART_FR_TXFF == 0
+        ptr::read_volatile(reg_fr() as *const u32) & UART_FR_TXFF == 0
     }
 
     /// Check if UART has received data
     pub unsafe fn has_rx_data(&self) -> bool {
-        ptr::read_volatile(UART_FR as *const u32) & UART_FR_RXFE == 0
+        ptr::read_volatile(reg_fr() as *const u32) & UART_FR_RXFE == 0
     }
 
     /// Flush transmit buffer
     pub unsafe fn flush_tx(&self) {
-        while ptr::read_volatile(UART_FR as *const u32) & UART_FR_BUSY != 0 {
+        while ptr::read_volatile(reg_fr() as *const u32) & UART_FR_BUSY != 0 {
             core::hint::spin_loop();
         }
     }
