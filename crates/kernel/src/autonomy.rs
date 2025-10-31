@@ -1288,8 +1288,9 @@ pub fn execute_scheduling_directive(
                 crate::uart_print(b")\n");
             }
 
-            // TODO: Adjust operator priorities when graph system supports it
-            // crate::graph::adjust_operator_priorities(-200);
+            // Use predictive scheduling to adjust priorities
+            let verbose = false; // Already printed action above
+            let _ = crate::predictive_scheduling::execute_scheduling_directive(directive, verbose);
             ActionResult::Executed
         }
         d if d > 500 => {
@@ -1304,8 +1305,9 @@ pub fn execute_scheduling_directive(
                 crate::uart_print(b")\n");
             }
 
-            // TODO: Restore priorities
-            // crate::graph::adjust_operator_priorities(0);
+            // Use predictive scheduling to restore priorities
+            let verbose = false;
+            let _ = crate::predictive_scheduling::execute_scheduling_directive(directive, verbose);
             ActionResult::Executed
         }
         _ => {

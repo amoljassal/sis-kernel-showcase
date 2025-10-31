@@ -1,0 +1,9 @@
+help
+autoctl on
+autoctl status
+autoctl off
+autoctl on
+memctl strategy test
+memctl predict compaction
+memctl learn stats
+autoctl off
