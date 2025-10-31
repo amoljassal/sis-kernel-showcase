@@ -1,0 +1,5 @@
+# Add file globs here to whitelist specific kernel sources from the HW-first MMIO guard.
+# Example:
+# crates/kernel/src/driver.rs
+# crates/kernel/src/experiments/*
+

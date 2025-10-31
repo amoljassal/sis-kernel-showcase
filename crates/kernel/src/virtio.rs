@@ -249,11 +249,6 @@ impl VirtIOMMIOTransport {
 pub struct VirtIODiscovery;
 
 impl VirtIODiscovery {
-    /// QEMU ARM64 virt machine VirtIO MMIO addresses
-    /// Based on QEMU virt machine layout: 0x0a000000-0x0a0001ff
-    const VIRTIO_MMIO_BASE: u64 = 0x0A000000;
-    const VIRTIO_MMIO_SIZE: u64 = 0x200;
-    const VIRTIO_MMIO_IRQ_BASE: u32 = 16;
     const MAX_VIRTIO_DEVICES: usize = 32;
 
     /// Discover VirtIO devices
@@ -264,8 +259,17 @@ impl VirtIODiscovery {
             crate::uart_print(b"[VIRTIO] Starting VirtIO device discovery...\n");
         }
 
+        let hint = crate::platform::active().virtio_mmio_hint();
+        let (virtio_base, slot_size, irq_base) = match hint {
+            Some((b, s, irq)) => (b as u64, s as u64, irq),
+            None => {
+                unsafe { crate::uart_print(b"[VIRTIO] No virtio-mmio hint from platform; skipping discovery\n"); }
+                return Ok(devices);
+            }
+        };
+
         for i in 0..Self::MAX_VIRTIO_DEVICES {
-            let base_addr = Self::VIRTIO_MMIO_BASE + (i as u64 * Self::VIRTIO_MMIO_SIZE);
+            let base_addr = virtio_base + (i as u64 * slot_size);
 
             unsafe {
                 crate::uart_print(b"[VIRTIO] Probing device slot ");
@@ -276,11 +280,7 @@ impl VirtIODiscovery {
             }
 
             // Try to create VirtIO transport for this address
-            match VirtIOMMIOTransport::new(
-                base_addr,
-                Self::VIRTIO_MMIO_SIZE,
-                Some(Self::VIRTIO_MMIO_IRQ_BASE + i as u32),
-            ) {
+            match VirtIOMMIOTransport::new(base_addr, slot_size, Some(irq_base + i as u32)) {
                 Ok(transport) => {
                     let device_type = transport.device_type();
 
@@ -323,8 +323,8 @@ impl VirtIODiscovery {
                             subclass: Self::get_device_subclass(device_type),
                         },
                         base_addr,
-                        size: Self::VIRTIO_MMIO_SIZE,
-                        irq: Some(Self::VIRTIO_MMIO_IRQ_BASE + i as u32),
+                        size: slot_size,
+                        irq: Some(irq_base + i as u32),
                         device_data: transport.version as u64,
                     };
 

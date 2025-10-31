@@ -548,6 +548,101 @@ fn chainload_kernel(
     ));
     st.boot_services().stall(100_000);
 
+    #[cfg(feature = "dt-override")]
+    {
+    // Attempt to find a Device Tree (DTB) pointer in UEFI configuration tables
+    let dtb_ptr_opt: Option<*const u8> = {
+        let mut found: Option<*const u8> = None;
+        for t in st.config_table() {
+            let ptr = t.address as *const u8;
+            if !ptr.is_null() {
+                unsafe {
+                    let magic = core::ptr::read(ptr as *const u32).to_be();
+                    if magic == 0xD00D_FEED { found = Some(ptr); break; }
+                }
+            }
+        }
+        if let Some(p) = found {
+            let _ = st.stdout().write_fmt(format_args!("Found DTB at 0x{:x}\r\n", p as usize));
+            st.boot_services().stall(50_000);
+        }
+        found
+    };
+
+    // If we found a DTB pointer, try to locate DTB_PTR symbol in kernel and patch it
+    if let Some(dtb_ptr) = dtb_ptr_opt {
+        // Reuse or re-parse symtab/strtab to find DTB_PTR
+        let shoff = ehdr.e_shoff as usize;
+        let shentsize = ehdr.e_shentsize as usize;
+        let shnum = ehdr.e_shnum as usize;
+        if shoff > 0 && shentsize >= core::mem::size_of::<Elf64Shdr>() && shnum > 0 {
+            let _ = st.stdout().write_str("Patching DTB_PTR symbol...\r\n");
+            st.boot_services().stall(20_000);
+            let mut sht = vec![0u8; shentsize * shnum];
+            file.set_position(shoff as u64).ok();
+            if let Ok(r) = file.read(&mut sht[..]) {
+                if r >= sht.len() {
+                    // Find symtab and strtab
+                    let mut symtab_off = 0usize;
+                    let mut symtab_size = 0usize;
+                    let mut symtab_entsize = 0usize;
+                    let mut strtab_off = 0usize;
+                    let mut strtab_size = 0usize;
+                    for i in 0..shnum {
+                        let off = i * shentsize;
+                        let sh: Elf64Shdr =
+                            unsafe { core::ptr::read_unaligned(sht.as_ptr().add(off) as *const _) };
+                        if sh.sh_type == SHT_STRTAB && strtab_off == 0 {
+                            strtab_off = sh.sh_offset as usize;
+                            strtab_size = sh.sh_size as usize;
+                        }
+                        if sh.sh_type == SHT_SYMTAB {
+                            symtab_off = sh.sh_offset as usize;
+                            symtab_size = sh.sh_size as usize;
+                            symtab_entsize = sh.sh_entsize as usize;
+                        }
+                    }
+                    if symtab_off > 0 && symtab_entsize >= core::mem::size_of::<Elf64Sym>() && strtab_off > 0 {
+                        // Read strtab
+                        let mut strtab = vec![0u8; strtab_size];
+                        file.set_position(strtab_off as u64).ok();
+                        let _ = file.read(&mut strtab[..]);
+                        // Iterate symbols and find DTB_PTR
+                        let count = symtab_size / symtab_entsize;
+                        let mut patched = false;
+                        for i in 0..count {
+                            let off = symtab_off + i * symtab_entsize;
+                            let mut buf = [0u8; core::mem::size_of::<Elf64Sym>()];
+                            file.set_position(off as u64).ok();
+                            if file.read(&mut buf).ok().unwrap_or(0) < buf.len() { break; }
+                            let sym: Elf64Sym = unsafe { core::ptr::read_unaligned(buf.as_ptr() as *const _) };
+                            let name_off = sym.st_name as usize;
+                            // Compare with "DTB_PTR\0"
+                            let pat = b"DTB_PTR\0";
+                            let mut matches = true;
+                            if name_off + pat.len() <= strtab.len() {
+                                for j in 0..pat.len() { if strtab[name_off + j] != pat[j] { matches = false; break; } }
+                            } else { matches = false; }
+                            if matches {
+                                let addr = sym.st_value as usize;
+                                unsafe { core::ptr::write_volatile(addr as *mut usize, dtb_ptr as usize); }
+                                let _ = st.stdout().write_fmt(format_args!("DTB_PTR patched at 0x{:x}\r\n", addr));
+                                st.boot_services().stall(20_000);
+                                patched = true;
+                                break;
+                            }
+                        }
+                        if !patched {
+                            let _ = st.stdout().write_str("DTB_PTR symbol not found in kernel\r\n");
+                            st.boot_services().stall(20_000);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    }
+
     let _ = st.stdout().write_str("Exiting boot services...\r\n");
     st.boot_services().stall(100_000);
     let (_rt, _mmap) = st.exit_boot_services();

@@ -7,3 +7,5 @@ edition = "2021"
 uefi = { version = "0.24", default-features = false, features = ["alloc"] }
 uefi-services = { version = "0.21" }
 
+[features]
+dt-override = []

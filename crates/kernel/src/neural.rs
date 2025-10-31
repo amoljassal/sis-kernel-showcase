@@ -1247,7 +1247,7 @@ pub fn print_scheduling_audit() {
 static MEMORY_AGENT: Mutex<NeuralAgent> = Mutex::new(NeuralAgent::new());
 
 /// Memory telemetry for neural predictions
-struct MemoryTelemetry {
+pub(crate) struct MemoryTelemetry {
     free_memory_percent: u32,      // 0-100
     allocation_rate: u32,           // Allocs per second (windowed)
     fragmentation_level: u32,       // 0-100 (estimated)
@@ -1333,6 +1333,21 @@ pub fn update_memory_telemetry() {
     // Update tracking state
     telem.last_update_ns = now_ns;
     telem.prev_alloc_count = stats.total_allocations();
+}
+
+/// Get current memory telemetry (for predictive memory module)
+#[allow(dead_code)]
+pub(crate) fn get_memory_telemetry() -> MemoryTelemetry {
+    update_memory_telemetry();
+    let telem = MEMORY_TELEMETRY.lock();
+    MemoryTelemetry {
+        free_memory_percent: telem.free_memory_percent,
+        allocation_rate: telem.allocation_rate,
+        fragmentation_level: telem.fragmentation_level,
+        recent_failures: telem.recent_failures,
+        last_update_ns: telem.last_update_ns,
+        prev_alloc_count: telem.prev_alloc_count,
+    }
 }
 
 /// Predict memory health and compaction need

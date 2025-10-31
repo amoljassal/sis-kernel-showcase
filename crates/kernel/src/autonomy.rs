@@ -1770,6 +1770,16 @@ pub fn autonomous_decision_tick() {
     }
 
     // ========================================================================
+    // Step 3.5: Predictive Memory Management (Week 8)
+    // ========================================================================
+
+    // Update allocation strategy based on memory directive
+    let _strategy_changed = crate::predictive_memory::update_allocation_strategy(directives[0]);
+
+    // Execute predictive compaction check (5-second lookahead)
+    let _compaction_triggered = crate::predictive_memory::execute_predictive_compaction();
+
+    // ========================================================================
     // Step 4: Confidence-Based Action Gating
     // ========================================================================
 

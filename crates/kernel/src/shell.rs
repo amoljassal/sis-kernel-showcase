@@ -5,7 +5,7 @@
 
 use crate::syscall::{SyscallError, SyscallNumber};
 use core::arch::asm;
-use alloc::format;
+// use alloc::format; // not currently used
 
 /// Maximum command line length
 const MAX_CMD_LEN: usize = 256;
@@ -20,6 +20,25 @@ const SHELL_PROMPT: &[u8] = b"sis> ";
 pub struct Shell {
     running: bool,
 }
+
+mod shell_metricsctl;
+mod autoctl_helpers;
+mod memctl_helpers;
+mod neuralctl_helpers;
+mod graphctl_helpers;
+mod agentctl_helpers;
+mod coordctl_helpers;
+mod learnctl_helpers;
+mod pmu_helpers;
+mod stresstest_helpers;
+mod ctlhex_helpers;
+mod metaclassctl_helpers;
+mod mlctl_helpers;
+mod actorctl_helpers;
+#[cfg(feature = "llm")]
+mod llmctl_helpers;
+#[cfg(feature = "demos")]
+mod demos;
 
 impl Shell {
     /// Create new shell instance
@@ -125,73 +144,89 @@ impl Shell {
                 "bench" => { self.cmd_bench(); true },
                 "stress" => { self.cmd_stress(); true },
                 "overhead" => { self.cmd_overhead(); true },
+                #[cfg(feature = "demos")]
                 "graphdemo" => { self.cmd_graph_demo(); true },
+                #[cfg(feature = "demos")]
                 "imagedemo" => { self.cmd_image_demo(); true },
+                #[cfg(feature = "demos")]
                 "detdemo" => { self.cmd_deterministic_demo(); true },
+                #[cfg(feature = "demos")]
                 "aidemo" => { self.cmd_ai_scheduler_demo(); true },
+                #[cfg(feature = "demos")]
                 "cbsdemo" => { self.cmd_cbs_budget_demo(); true },
+                #[cfg(feature = "demos")]
                 "mldemo" => { self.cmd_ml_demo(); true },
+                #[cfg(feature = "demos")]
                 "infdemo" => { self.cmd_inference_demo(); true },
+                #[cfg(feature = "demos")]
                 "npudemo" => { self.cmd_npu_demo(); true },
+                #[cfg(feature = "demos")]
                 "npudriver" => { self.cmd_npu_driver_demo(); true },
+                #[cfg(feature = "demos")]
                 "rtaivalidation" => { self.cmd_realtime_ai_validation(); true },
                 "neuralctl" => { self.cmd_neuralctl(&parts[1..]); true },
-                "agentctl" => { self.cmd_agentctl(&parts[1..]); true },
-                "coordctl" => { self.cmd_coordctl(&parts[1..]); true },
+                "agentctl" => { self.agentctl_cmd(&parts[1..]); true },
+                "coordctl" => { self.coordctl_cmd(&parts[1..]); true },
+                #[cfg(feature = "demos")]
                 "coorddemo" => { self.cmd_coord_demo(); true },
-                "metaclassctl" => { self.cmd_metaclassctl(&parts[1..]); true },
+                "metaclassctl" => { self.metaclassctl_cmd(&parts[1..]); true },
+                #[cfg(feature = "demos")]
                 "metademo" => { self.cmd_meta_demo(); true },
-                "mlctl" => { self.cmd_mlctl(&parts[1..]); true },
+                "mlctl" => { self.mlctl_cmd(&parts[1..]); true },
+                #[cfg(feature = "demos")]
                 "mladvdemo" => { self.cmd_ml_advanced_demo(); true },
-                "actorctl" => { self.cmd_actorctl(&parts[1..]); true },
+                "actorctl" => { self.actorctl_cmd(&parts[1..]); true },
+                #[cfg(feature = "demos")]
                 "actorcriticdemo" => { self.cmd_actor_critic_demo(); true },
                 "autoctl" => { self.cmd_autoctl(&parts[1..]); true },
-                "learnctl" => { self.cmd_learnctl(&parts[1..]); true },
+                "learnctl" => { self.learnctl_cmd(&parts[1..]); true },
                 "memctl" => { self.cmd_memctl(&parts[1..]); true },
                 "ask-ai" => { self.cmd_ask_ai(&parts[1..]); true },
                 "nnjson" => { self.cmd_nn_json(); true },
                 "nnact" => { self.cmd_nn_act(&parts[1..]); true },
                 "metricsctl" => { self.cmd_metricsctl(&parts[1..]); true },
                 "metrics" => { self.cmd_metrics(&parts[1..]); true },
-                "stresstest" => { self.cmd_stresstest(&parts[1..]); true },
+                "stresstest" => { self.stresstest_cmd(&parts[1..]); true },
+                #[cfg(feature = "demos")]
                 "temporaliso" => { self.cmd_temporal_isolation_demo(); true },
+                #[cfg(feature = "demos")]
                 "phase3validation" => { self.cmd_phase3_validation(); true },
                 #[cfg(feature = "llm")]
-                "llmctl" => { self.cmd_llmctl(&parts[1..]); true },
+                "llmctl" => { self.llmctl_cmd(&parts[1..]); true },
                 #[cfg(feature = "llm")]
-                "llminfer" => { self.cmd_llminfer(&parts[1..]); true },
+                "llminfer" => { self.llminfer_cmd(&parts[1..]); true },
                 #[cfg(feature = "llm")]
-                "llmstats" => { self.cmd_llmstats(); true },
+                "llmstats" => { self.llmstats_cmd(); true },
                 #[cfg(feature = "llm")]
-                "llmstream" => { self.cmd_llmstream(&parts[1..]); true },
+                "llmstream" => { self.llmstream_cmd(&parts[1..]); true },
                 #[cfg(feature = "llm")]
-                "llmgraph" => { self.cmd_llmgraph(&parts[1..]); true },
+                "llmgraph" => { self.llmgraph_cmd(&parts[1..]); true },
                 #[cfg(feature = "llm")]
-                "llmjson" => { self.cmd_llm_audit_json(); true },
+                "llmjson" => { self.llm_audit_json_cmd(); true },
                 #[cfg(feature = "llm")]
-                "llmsig" => { self.cmd_llmsig(&parts[1..]); true },
+                "llmsig" => { self.llmsig_cmd(&parts[1..]); true },
                 #[cfg(feature = "llm")]
-                "llmpoll" => { self.cmd_llmpoll(&parts[1..]); true },
+                "llmpoll" => { self.llmpoll_cmd(&parts[1..]); true },
                 #[cfg(feature = "llm")]
-                "llmcancel" => { self.cmd_llmcancel(&parts[1..]); true },
+                "llmcancel" => { self.llmcancel_cmd(&parts[1..]); true },
                 #[cfg(feature = "llm")]
-                "llmsummary" => { self.cmd_llm_summary(); true },
+                "llmsummary" => { self.llm_summary_cmd(); true },
                 #[cfg(feature = "llm")]
-                "llmverify" => { self.cmd_llm_verify(); true },
+                "llmverify" => { self.llm_verify_cmd(); true },
                 #[cfg(feature = "llm")]
-                "llmhash" => { self.cmd_llm_hash(&parts[1..]); true },
+                "llmhash" => { self.llm_hash_cmd(&parts[1..]); true },
                 #[cfg(feature = "llm")]
-                "llmkey" => { self.cmd_llm_key(); true },
+                "llmkey" => { self.llm_key_cmd(); true },
                 "ctlkey" => { self.cmd_ctlkey(&parts[1..]); true },
                 "ctladmin" => { self.cmd_ctladmin(&parts[1..]); true },
                 "ctlsubmit" => { self.cmd_ctlsubmit(&parts[1..]); true },
                 "ctlembed" => { self.cmd_ctlembed(&parts[1..]); true },
                 "det" => { self.cmd_det(&parts[1..]); true },
                 "graphctl" => { self.cmd_graphctl(&parts[1..]); true },
-                "ctlhex" => { self.cmd_ctlhex(&parts[1..]); true },
+                "ctlhex" => { self.ctlhex_cmd(&parts[1..]); true },
                 #[cfg(feature = "virtio-console")]
                 "vconwrite" => { self.cmd_vconwrite(&parts[1..]); true },
-                "pmu" => { self.cmd_pmu_demo(); true },
+                "pmu" => { self.pmu_demo_cmd(); true },
                 "mem" => { self.cmd_mem(); true },
                 "regs" => { self.cmd_regs(); true },
                 "dtb" => { self.cmd_dtb(); true },
@@ -311,107 +346,16 @@ impl Shell {
             return;
         }
         match args[0] {
-            "status" => {
-                crate::neural::print_status();
-            }
-            "reset" => {
-                crate::neural::reset();
-                unsafe { crate::uart_print(b"[NN] reset\n"); }
-            }
-            "infer" => {
-                if args.len() < 2 {
-                    unsafe { crate::uart_print(b"Usage: neuralctl infer <m1 m2 ...> (values in milli)\n"); }
-                    return;
-                }
-                let mut vals: heapless::Vec<i32, 32> = heapless::Vec::new();
-                for a in &args[1..] {
-                    if let Ok(v) = a.parse::<i32>() { let _ = vals.push(v); }
-                }
-                let n = crate::neural::infer_from_milli(&vals);
-                crate::neural::print_status();
-                unsafe { crate::uart_print(b"[NN] out_len="); }
-                self.print_number_simple(n as u64);
-                unsafe { crate::uart_print(b"\n"); }
-            }
-            "update" => {
-                if args.len() < 2 {
-                    unsafe { crate::uart_print(b"Usage: neuralctl update <weights in milli: w1(h*in),b1(h),w2(out*h),b2(out)>\n"); }
-                    return;
-                }
-                let mut vals: heapless::Vec<i32, 1024> = heapless::Vec::new();
-                for a in &args[1..] {
-                    if let Ok(v) = a.parse::<i32>() { let _ = vals.push(v); }
-                }
-                if crate::neural::update_from_milli(&vals) {
-                    unsafe { crate::uart_print(b"[NN] weights updated\n"); }
-                } else {
-                    unsafe { crate::uart_print(b"[NN] update failed (count mismatch)\n"); }
-                }
-            }
-            "teach" => {
-                // Format: neuralctl teach <i1 i2 ...>|<t1 t2 ...>
-                if args.len() < 2 { unsafe { crate::uart_print(b"Usage: neuralctl teach <i...>|<t...> (milli)\n"); } return; }
-                let mut inputs: heapless::Vec<i32, 32> = heapless::Vec::new();
-                let mut targets: heapless::Vec<i32, 32> = heapless::Vec::new();
-                let mut sep = false;
-                for a in &args[1..] {
-                    if *a == "|" { sep = true; continue; }
-                    if let Ok(v) = a.parse::<i32>() {
-                        if !sep { let _ = inputs.push(v); } else { let _ = targets.push(v); }
-                    }
-                }
-                let ok = crate::neural::teach_milli(&inputs, &targets);
-                unsafe { crate::uart_print(if ok { b"[NN] teach ok\n" } else { b"[NN] teach failed\n" }); }
-            }
-            "selftest" => {
-                let ok = crate::neural::selftest();
-                unsafe { crate::uart_print(if ok { b"[NN] selftest: PASS\n" } else { b"[NN] selftest: FAIL\n" }); }
-                crate::neural::print_status();
-            }
-            "learn" => {
-                if args.len() < 2 { unsafe { crate::uart_print(b"Usage: neuralctl learn on|off [limit N]\n"); } return; }
-                match args[1] {
-                    "on" => {
-                        let mut limit: Option<usize> = None;
-                        if args.len() >= 4 && args[2] == "limit" {
-                            if let Ok(v) = args[3].parse::<usize>() { limit = Some(v); }
-                        }
-                        crate::neural::learn_set(true, limit);
-                        unsafe { crate::uart_print(b"[NN] learn: ON\n"); }
-                    }
-                    "off" => { crate::neural::learn_set(false, None); unsafe { crate::uart_print(b"[NN] learn: OFF\n"); } }
-                    _ => unsafe { crate::uart_print(b"Usage: neuralctl learn on|off [limit N]\n"); }
-                }
-            }
-            "tick" => {
-                let applied = crate::neural::learn_tick();
-                unsafe { crate::uart_print(b"[NN] tick applied="); }
-                self.print_number_simple(applied as u64);
-                unsafe { crate::uart_print(b"\n"); }
-            }
-            "dump" => {
-                crate::neural::dump_milli();
-            }
-            "load" => {
-                // Format: neuralctl load <in> <hid> <out> | <weights...>
-                let mut i = 1usize;
-                if args.len() < 5 { unsafe { crate::uart_print(b"Usage: neuralctl load <in> <hid> <out> | <weights...>\n"); } return; }
-                let di = match args[i].parse::<usize>() { Ok(v)=>v, Err(_)=>{ unsafe{ crate::uart_print(b"[NN] bad in\n"); } return; } }; i+=1;
-                let dh = match args[i].parse::<usize>() { Ok(v)=>v, Err(_)=>{ unsafe{ crate::uart_print(b"[NN] bad hid\n"); } return; } }; i+=1;
-                let do_ = match args[i].parse::<usize>() { Ok(v)=>v, Err(_)=>{ unsafe{ crate::uart_print(b"[NN] bad out\n"); } return; } }; i+=1;
-                if args[i] != "|" { unsafe { crate::uart_print(b"[NN] expect '|' before weights\n"); } return; }
-                i += 1;
-                let mut weights: heapless::Vec<i32, 1024> = heapless::Vec::new();
-                while i < args.len() {
-                    if let Ok(v) = args[i].parse::<i32>() { let _ = weights.push(v); }
-                    i += 1;
-                }
-                if crate::neural::load_all_milli((di, dh, do_), &weights) {
-                    unsafe { crate::uart_print(b"[NN] load ok\n"); }
-                } else {
-                    unsafe { crate::uart_print(b"[NN] load failed\n"); }
-                }
-            }
+            "status" => { self.neuralctl_status(); }
+            "reset" => { self.neuralctl_reset(); }
+            "infer" => { self.neuralctl_infer(&args[1..]); }
+            "update" => { self.neuralctl_update(&args[1..]); }
+            "teach" => { self.neuralctl_teach(&args[1..]); }
+            "selftest" => { self.neuralctl_selftest(); }
+            "learn" => { self.neuralctl_learn(&args[1..]); }
+            "tick" => { self.neuralctl_tick(); }
+            "dump" => { self.neuralctl_dump(); }
+            "load" => { self.neuralctl_load(&args[1..]); }
             "demo-metrics" => {
                 let n = if args.len() >= 2 { args[1].parse::<usize>().unwrap_or(1) } else { 1 };
                 // Snapshot and compute simple averages for last n values
@@ -596,33 +540,52 @@ impl Shell {
 
     fn cmd_memctl(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress> ...\n"); }
+            unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress|strategy|learn> ...\n"); }
             return;
         }
         match args[0] {
-            "status" => {
-                // Show memory agent status with telemetry and predictions
-                crate::neural::print_memory_agent_status();
+            "status" => { self.memctl_status(); }
+            "strategy" => {
+                // Show or update allocation strategy
+                if args.len() > 1 && args[1] == "status" {
+                    let strategy = crate::predictive_memory::get_current_strategy();
+                    unsafe { crate::uart_print(b"[PRED_MEM] Current Allocation Strategy: "); }
+                    unsafe { crate::uart_print(strategy.as_str().as_bytes()); }
+                    unsafe { crate::uart_print(b"\n"); }
+
+                    // Show reasoning based on meta-agent state
+                    let state = crate::meta_agent::collect_telemetry();
+                    unsafe { crate::uart_print(b"  Memory pressure: "); }
+                    self.print_number_simple(state.memory_pressure as u64);
+                    unsafe { crate::uart_print(b"%\n  Fragmentation: "); }
+                    self.print_number_simple(state.memory_fragmentation as u64);
+                    unsafe { crate::uart_print(b"%\n"); }
+                } else if args.len() > 1 && args[1] == "test" {
+                    // Test strategy selection with different directives
+                    unsafe { crate::uart_print(b"[PRED_MEM] Testing strategy selection:\n"); }
+                    for directive in [-800i16, -400, 0, 400, 800] {
+                        let strat = crate::predictive_memory::select_allocation_strategy(directive);
+                        unsafe { crate::uart_print(b"  Directive "); }
+                        print_number_signed(directive as i64);
+                        unsafe { crate::uart_print(b" -> "); }
+                        unsafe { crate::uart_print(strat.as_str().as_bytes()); }
+                        unsafe { crate::uart_print(b"\n"); }
+                    }
+                } else {
+                    unsafe { crate::uart_print(b"Usage: memctl strategy <status|test>\n"); }
+                }
+            }
+            "learn" => {
+                // Show allocation prediction statistics
+                if args.len() > 1 && args[1] == "stats" {
+                    crate::predictive_memory::print_statistics();
+                } else {
+                    unsafe { crate::uart_print(b"Usage: memctl learn stats\n"); }
+                }
             }
             "predict" => {
-                // Run prediction and show results
-                let (conf, oom_risk, compact_needed) = crate::neural::predict_memory_health();
-                unsafe { crate::uart_print(b"[MEM] Prediction:\n"); }
-                unsafe { crate::uart_print(b"  Confidence: "); }
-                self.print_number_simple(conf as u64);
-                unsafe { crate::uart_print(b"/1000\n"); }
-                unsafe { crate::uart_print(b"  OOM Risk: "); }
-                if oom_risk {
-                    unsafe { crate::uart_print(b"YES (Low memory predicted)\n"); }
-                } else {
-                    unsafe { crate::uart_print(b"NO (Memory healthy)\n"); }
-                }
-                unsafe { crate::uart_print(b"  Compaction Needed: "); }
-                if compact_needed {
-                    unsafe { crate::uart_print(b"YES (Fragmentation detected)\n"); }
-                } else {
-                    unsafe { crate::uart_print(b"NO (Memory compact)\n"); }
-                }
+                let mode = args.get(1).copied();
+                self.memctl_predict(mode);
             }
             "stress" => {
                 // Stress test memory with allocations
@@ -668,480 +631,21 @@ impl Shell {
                 unsafe { crate::uart_print(b"[MEM] Stress test complete\n"); }
                 crate::heap::print_heap_stats();
             }
-            _ => unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress> ...\n"); }
+            _ => unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress|strategy|learn> ...\n"); }
         }
     }
 
-    fn cmd_agentctl(&self, args: &[&str]) {
-        if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: agentctl <bus|stats|clear>\n"); }
-            return;
-        }
-        match args[0] {
-            "bus" => {
-                // Show all messages in the agent bus
-                let messages = crate::agent_bus::get_all_messages();
+    // agentctl/coordctl moved to helpers
 
-                unsafe { crate::uart_print(b"[AGENT BUS] Messages ("); }
-                self.print_number_simple(messages.len() as u64);
-                unsafe { crate::uart_print(b" total):\n"); }
 
-                if messages.is_empty() {
-                    unsafe { crate::uart_print(b"  (no messages)\n"); }
-                } else {
-                    for msg in messages.iter() {
-                        crate::agent_bus::print_message(msg);
-                    }
-                }
-            }
-            "stats" => {
-                // Show message bus statistics
-                crate::agent_bus::print_bus_stats();
-            }
-            "clear" => {
-                // Clear all messages from the bus
-                crate::agent_bus::clear_message_bus();
-                unsafe { crate::uart_print(b"[AGENT BUS] Cleared all messages\n"); }
-            }
-            _ => unsafe { crate::uart_print(b"Usage: agentctl <bus|stats|clear>\n"); }
-        }
-    }
 
-    fn cmd_coordctl(&self, args: &[&str]) {
-        if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: coordctl <process|stats>\n"); }
-            return;
-        }
-        match args[0] {
-            "process" => {
-                // Manually trigger coordination processing
-                unsafe { crate::uart_print(b"[COORDCTL] Processing cross-agent coordination...\n"); }
-                crate::neural::process_agent_coordination();
-                unsafe { crate::uart_print(b"[COORDCTL] Coordination processing complete\n"); }
-            }
-            "stats" => {
-                // Show coordination statistics
-                let (mem_events, sched_events, cmd_events) = crate::neural::get_coordination_stats();
+    #[allow(dead_code)]
+    // metaclassctl moved to helpers
 
-                unsafe { crate::uart_print(b"[COORDCTL] Coordination Statistics (last 5 seconds):\n"); }
-                unsafe { crate::uart_print(b"  Memory Events: "); }
-                self.print_number_simple(mem_events as u64);
-                unsafe { crate::uart_print(b"\n"); }
-                unsafe { crate::uart_print(b"  Scheduling Events: "); }
-                self.print_number_simple(sched_events as u64);
-                unsafe { crate::uart_print(b"\n"); }
-                unsafe { crate::uart_print(b"  Command Events: "); }
-                self.print_number_simple(cmd_events as u64);
-                unsafe { crate::uart_print(b"\n"); }
 
-                let total = mem_events + sched_events + cmd_events;
-                unsafe { crate::uart_print(b"  Total Events: "); }
-                self.print_number_simple(total as u64);
-                unsafe { crate::uart_print(b"\n"); }
 
-                // Also show bus stats
-                unsafe { crate::uart_print(b"\n"); }
-                crate::agent_bus::print_bus_stats();
-            }
-            _ => unsafe { crate::uart_print(b"Usage: coordctl <process|stats>\n"); }
-        }
-    }
-
-    fn cmd_coord_demo(&self) {
-        unsafe { crate::uart_print(b"\n=== Cross-Agent Coordination Demo ===\n\n"); }
-
-        // Clear the bus to start fresh
-        crate::agent_bus::clear_message_bus();
-
-        // Phase 1: Simulate memory stress
-        unsafe { crate::uart_print(b"[DEMO] Phase 1: Simulating memory stress...\n"); }
-
-        // Trigger memory predictions which will publish messages
-        let (_conf1, _oom1, _compact1) = crate::neural::predict_memory_health();
-
-        // Small delay (busy wait)
-        for _ in 0..100000 { core::hint::spin_loop(); }
-
-        // Phase 2: Simulate rapid commands
-        unsafe { crate::uart_print(b"[DEMO] Phase 2: Simulating rapid command stream...\n"); }
-
-        // Trigger multiple command predictions quickly
-        for i in 0..15 {
-            let cmd = if i % 2 == 0 { "test" } else { "stress" };
-            let (_conf, _success) = crate::neural::predict_command(cmd);
-        }
-
-        // Small delay
-        for _ in 0..100000 { core::hint::spin_loop(); }
-
-        // Phase 3: Check agent bus
-        unsafe { crate::uart_print(b"\n[DEMO] Phase 3: Checking agent bus for messages...\n"); }
-        let messages = crate::agent_bus::get_all_messages();
-        unsafe { crate::uart_print(b"  Messages published: "); }
-        self.print_number_simple(messages.len() as u64);
-        unsafe { crate::uart_print(b"\n\n"); }
-
-        // Show first 5 messages
-        for (idx, msg) in messages.iter().take(5).enumerate() {
-            unsafe { crate::uart_print(b"  ["); }
-            self.print_number_simple(idx as u64);
-            unsafe { crate::uart_print(b"] "); }
-            crate::agent_bus::print_message(msg);
-        }
-
-        // Phase 4: Process coordination
-        unsafe { crate::uart_print(b"\n[DEMO] Phase 4: Processing cross-agent coordination...\n"); }
-        crate::neural::process_agent_coordination();
-
-        // Phase 5: Show coordination stats
-        unsafe { crate::uart_print(b"\n[DEMO] Phase 5: Coordination statistics:\n"); }
-        let (mem_events, sched_events, cmd_events) = crate::neural::get_coordination_stats();
-        unsafe { crate::uart_print(b"  Memory events: "); }
-        self.print_number_simple(mem_events as u64);
-        unsafe { crate::uart_print(b"\n  Scheduling events: "); }
-        self.print_number_simple(sched_events as u64);
-        unsafe { crate::uart_print(b"\n  Command events: "); }
-        self.print_number_simple(cmd_events as u64);
-        unsafe { crate::uart_print(b"\n  Total: "); }
-        self.print_number_simple((mem_events + sched_events + cmd_events) as u64);
-        unsafe { crate::uart_print(b"\n\n"); }
-
-        // Final summary
-        unsafe { crate::uart_print(b"[DEMO] SUCCESS: Cross-agent coordination demo complete\n"); }
-        unsafe { crate::uart_print(b"[DEMO] Agents successfully communicated via message bus\n"); }
-        unsafe { crate::uart_print(b"[DEMO] Use 'agentctl bus' to inspect messages\n"); }
-        unsafe { crate::uart_print(b"[DEMO] Use 'coordctl stats' for detailed statistics\n\n"); }
-    }
-
-    fn cmd_metaclassctl(&self, args: &[&str]) {
-        if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: metaclassctl <status|force|config|on|off>\n"); }
-            return;
-        }
-        match args[0] {
-            "status" => {
-                // Show meta-agent status
-                crate::meta_agent::print_meta_status();
-            }
-            "force" => {
-                // Force immediate meta-agent decision
-                unsafe { crate::uart_print(b"[META] Forcing immediate decision...\n"); }
-
-                // Collect fresh telemetry
-                let state = crate::meta_agent::collect_telemetry();
-                unsafe { crate::uart_print(b"[META] Telemetry collected\n"); }
-
-                // Force decision
-                let decision = crate::meta_agent::force_meta_decision();
-
-                unsafe { crate::uart_print(b"[META] Decision executed:\n"); }
-                unsafe { crate::uart_print(b"  Memory directive: "); }
-                self.print_number_simple(decision.memory_directive.abs() as u64);
-                unsafe { crate::uart_print(if decision.memory_directive < 0 { b" (negative)\n" } else { b" (positive)\n" }); }
-                unsafe { crate::uart_print(b"  Scheduling directive: "); }
-                self.print_number_simple(decision.scheduling_directive.abs() as u64);
-                unsafe { crate::uart_print(if decision.scheduling_directive < 0 { b" (negative)\n" } else { b" (positive)\n" }); }
-                unsafe { crate::uart_print(b"  Command directive: "); }
-                self.print_number_simple(decision.command_directive.abs() as u64);
-                unsafe { crate::uart_print(if decision.command_directive < 0 { b" (negative)\n" } else { b" (positive)\n" }); }
-                unsafe { crate::uart_print(b"  Confidence: "); }
-                self.print_number_simple(decision.confidence as u64);
-                unsafe { crate::uart_print(b"/1000\n"); }
-
-                unsafe { crate::uart_print(b"\n[META] State at decision time:\n"); }
-                unsafe { crate::uart_print(b"  Memory pressure: "); }
-                self.print_number_simple(state.memory_pressure as u64);
-                unsafe { crate::uart_print(b"%\n"); }
-            }
-            "config" => {
-                // Configure meta-agent parameters
-                let mut config = crate::meta_agent::get_meta_config();
-
-                // Parse arguments
-                let mut i = 1;
-                while i < args.len() {
-                    match args[i] {
-                        "--interval" if i + 1 < args.len() => {
-                            if let Ok(ms) = args[i + 1].parse::<u64>() {
-                                config.decision_interval_us = ms * 1000; // Convert ms to us
-                                i += 2;
-                            } else {
-                                unsafe { crate::uart_print(b"Invalid interval value\n"); }
-                                return;
-                            }
-                        }
-                        "--threshold" if i + 1 < args.len() => {
-                            if let Ok(thresh) = args[i + 1].parse::<u16>() {
-                                config.confidence_threshold = thresh.min(1000);
-                                i += 2;
-                            } else {
-                                unsafe { crate::uart_print(b"Invalid threshold value\n"); }
-                                return;
-                            }
-                        }
-                        _ => {
-                            unsafe { crate::uart_print(b"Unknown config option\n"); }
-                            return;
-                        }
-                    }
-                }
-
-                crate::meta_agent::set_meta_config(config);
-                unsafe { crate::uart_print(b"[META] Configuration updated\n"); }
-                unsafe { crate::uart_print(b"  Interval: "); }
-                self.print_number_simple((config.decision_interval_us / 1000) as u64);
-                unsafe { crate::uart_print(b" ms\n"); }
-                unsafe { crate::uart_print(b"  Threshold: "); }
-                self.print_number_simple(config.confidence_threshold as u64);
-                unsafe { crate::uart_print(b"/1000\n"); }
-            }
-            "on" => {
-                // Enable meta-agent
-                let mut config = crate::meta_agent::get_meta_config();
-                config.enabled = true;
-                crate::meta_agent::set_meta_config(config);
-                unsafe { crate::uart_print(b"[META] Meta-agent enabled\n"); }
-            }
-            "off" => {
-                // Disable meta-agent
-                let mut config = crate::meta_agent::get_meta_config();
-                config.enabled = false;
-                crate::meta_agent::set_meta_config(config);
-                unsafe { crate::uart_print(b"[META] Meta-agent disabled\n"); }
-            }
-            _ => unsafe { crate::uart_print(b"Usage: metaclassctl <status|force|config|on|off>\n"); }
-        }
-    }
-
-    fn cmd_meta_demo(&self) {
-        unsafe { crate::uart_print(b"\n=== Meta-Agent Coordination Demo ===\n\n"); }
-
-        // Phase 1: Setup - lower threshold for demo
-        unsafe { crate::uart_print(b"[DEMO] Phase 1: Configuring meta-agent...\n"); }
-        let mut config = crate::meta_agent::get_meta_config();
-        let original_threshold = config.confidence_threshold;
-        config.confidence_threshold = 200; // Lower threshold for demo
-        config.enabled = true;
-        crate::meta_agent::set_meta_config(config);
-        unsafe { crate::uart_print(b"  Threshold: 200/1000 (lowered for demo)\n"); }
-        unsafe { crate::uart_print(b"  Enabled: YES\n\n"); }
-
-        // Phase 2: Create multi-subsystem stress
-        unsafe { crate::uart_print(b"[DEMO] Phase 2: Simulating multi-subsystem stress...\n"); }
-
-        // Memory stress
-        unsafe { crate::uart_print(b"  Allocating memory...\n"); }
-        let mut allocations: heapless::Vec<alloc::vec::Vec<u8>, 8> = heapless::Vec::new();
-        for i in 0..8 {
-            let mut v = alloc::vec::Vec::new();
-            if v.try_reserve_exact(2048).is_ok() {
-                v.resize(2048, (i % 256) as u8);
-                let _ = allocations.push(v);
-            }
-        }
-
-        // Rapid commands
-        unsafe { crate::uart_print(b"  Generating rapid commands...\n"); }
-        for i in 0..20 {
-            let cmd = if i % 3 == 0 { "stress" } else { "test" };
-            let _ = crate::neural::predict_command(cmd);
-        }
-
-        // Memory prediction
-        unsafe { crate::uart_print(b"  Running memory prediction...\n"); }
-        let _ = crate::neural::predict_memory_health();
-
-        // Small delay
-        for _ in 0..100000 { core::hint::spin_loop(); }
-
-        unsafe { crate::uart_print(b"\n[DEMO] Phase 3: Collecting telemetry from all agents...\n"); }
-        let state = crate::meta_agent::collect_telemetry();
-
-        unsafe { crate::uart_print(b"  Memory: pressure="); }
-        self.print_number_simple(state.memory_pressure as u64);
-        unsafe { crate::uart_print(b"% frag="); }
-        self.print_number_simple(state.memory_fragmentation as u64);
-        unsafe { crate::uart_print(b"%\n"); }
-
-        unsafe { crate::uart_print(b"  Scheduling: load="); }
-        self.print_number_simple(state.scheduling_load as u64);
-        unsafe { crate::uart_print(b"% misses="); }
-        self.print_number_simple(state.deadline_misses as u64);
-        unsafe { crate::uart_print(b"\n"); }
-
-        unsafe { crate::uart_print(b"  Command: rate="); }
-        self.print_number_simple(state.command_rate as u64);
-        unsafe { crate::uart_print(b" heavy="); }
-        self.print_number_simple(state.command_heaviness as u64);
-        unsafe { crate::uart_print(b"\n\n"); }
-
-        // Phase 4: Force meta-agent decision
-        unsafe { crate::uart_print(b"[DEMO] Phase 4: Meta-agent making coordination decision...\n"); }
-        let decision = crate::meta_agent::force_meta_decision();
-
-        unsafe { crate::uart_print(b"  Decision:\n"); }
-        unsafe { crate::uart_print(b"    Memory directive: "); }
-        if decision.memory_directive < 0 {
-            unsafe { crate::uart_print(b"-"); }
-            self.print_number_simple((-decision.memory_directive) as u64);
-        } else {
-            unsafe { crate::uart_print(b"+"); }
-            self.print_number_simple(decision.memory_directive as u64);
-        }
-        unsafe { crate::uart_print(b"/1000\n"); }
-
-        unsafe { crate::uart_print(b"    Scheduling directive: "); }
-        if decision.scheduling_directive < 0 {
-            unsafe { crate::uart_print(b"-"); }
-            self.print_number_simple((-decision.scheduling_directive) as u64);
-        } else {
-            unsafe { crate::uart_print(b"+"); }
-            self.print_number_simple(decision.scheduling_directive as u64);
-        }
-        unsafe { crate::uart_print(b"/1000\n"); }
-
-        unsafe { crate::uart_print(b"    Command directive: "); }
-        if decision.command_directive < 0 {
-            unsafe { crate::uart_print(b"-"); }
-            self.print_number_simple((-decision.command_directive) as u64);
-        } else {
-            unsafe { crate::uart_print(b"+"); }
-            self.print_number_simple(decision.command_directive as u64);
-        }
-        unsafe { crate::uart_print(b"/1000\n"); }
-
-        unsafe { crate::uart_print(b"    Confidence: "); }
-        self.print_number_simple(decision.confidence as u64);
-        unsafe { crate::uart_print(b"/1000\n\n"); }
-
-        // Phase 5: Show statistics
-        unsafe { crate::uart_print(b"[DEMO] Phase 5: Meta-agent statistics:\n"); }
-        let stats = crate::meta_agent::get_meta_stats();
-        unsafe { crate::uart_print(b"  Total decisions: "); }
-        self.print_number_simple(stats.total_decisions as u64);
-        unsafe { crate::uart_print(b"\n  Autonomous actions: "); }
-        self.print_number_simple(stats.autonomous_actions as u64);
-        unsafe { crate::uart_print(b"\n  Memory adjustments: "); }
-        self.print_number_simple(stats.memory_adjustments as u64);
-        unsafe { crate::uart_print(b"\n  Scheduling adjustments: "); }
-        self.print_number_simple(stats.scheduling_adjustments as u64);
-        unsafe { crate::uart_print(b"\n  Command adjustments: "); }
-        self.print_number_simple(stats.command_adjustments as u64);
-        unsafe { crate::uart_print(b"\n\n"); }
-
-        // Cleanup: restore original threshold
-        unsafe { crate::uart_print(b"[DEMO] Restoring original configuration...\n"); }
-        config.confidence_threshold = original_threshold;
-        crate::meta_agent::set_meta_config(config);
-
-        // Free allocations
-        drop(allocations);
-
-        unsafe { crate::uart_print(b"\n[DEMO] SUCCESS: Meta-agent coordination demo complete\n"); }
-        unsafe { crate::uart_print(b"[DEMO] Meta-agent observed 12 inputs from 3 agents\n"); }
-        unsafe { crate::uart_print(b"[DEMO] Neural network made global coordination decision\n"); }
-        unsafe { crate::uart_print(b"[DEMO] Use 'metaclassctl status' to inspect state\n\n"); }
-    }
-
-    fn cmd_mlctl(&self, args: &[&str]) {
-        if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: mlctl <status|replay N|weights P W L|features>\n"); }
-            return;
-        }
-
-        match args[0] {
-            "status" => {
-                crate::meta_agent::print_advanced_ml_status();
-            }
-            "replay" => {
-                if args.len() < 2 {
-                    unsafe { crate::uart_print(b"Usage: mlctl replay <batch_size>\n"); }
-                    return;
-                }
-                let batch_size = args[1].parse::<usize>().unwrap_or(10);
-                unsafe {
-                    crate::uart_print(b"[ML] Training from replay buffer (batch_size=");
-                    self.print_number_simple(batch_size as u64);
-                    crate::uart_print(b")...\n");
-                }
-                crate::meta_agent::train_from_replay(batch_size);
-                let (count, capacity) = crate::meta_agent::get_replay_stats();
-                unsafe {
-                    crate::uart_print(b"[ML] Replay buffer: ");
-                    self.print_number_simple(count as u64);
-                    crate::uart_print(b"/");
-                    self.print_number_simple(capacity as u64);
-                    crate::uart_print(b" entries\n");
-                }
-            }
-            "weights" => {
-                if args.len() < 4 {
-                    unsafe { crate::uart_print(b"Usage: mlctl weights <perf> <power> <latency>\n"); }
-                    return;
-                }
-                let perf = args[1].parse::<u8>().unwrap_or(40).min(100);
-                let power = args[2].parse::<u8>().unwrap_or(30).min(100);
-                let latency = args[3].parse::<u8>().unwrap_or(30).min(100);
-
-                let mut config = crate::meta_agent::get_meta_config();
-                config.performance_weight = perf;
-                config.power_weight = power;
-                config.latency_weight = latency;
-                crate::meta_agent::set_meta_config(config);
-
-                unsafe {
-                    crate::uart_print(b"[ML] Reward weights updated:\n");
-                    crate::uart_print(b"  Performance: ");
-                    self.print_number_simple(perf as u64);
-                    crate::uart_print(b"%\n");
-                    crate::uart_print(b"  Power: ");
-                    self.print_number_simple(power as u64);
-                    crate::uart_print(b"%\n");
-                    crate::uart_print(b"  Latency: ");
-                    self.print_number_simple(latency as u64);
-                    crate::uart_print(b"%\n");
-                }
-            }
-            "features" => {
-                let mut config = crate::meta_agent::get_meta_config();
-
-                // Parse feature flags
-                let mut i = 1;
-                while i < args.len() {
-                    match args[i] {
-                        "--replay" if i + 1 < args.len() => {
-                            config.replay_enabled = args[i + 1] == "on";
-                            i += 2;
-                        }
-                        "--td" if i + 1 < args.len() => {
-                            config.td_learning_enabled = args[i + 1] == "on";
-                            i += 2;
-                        }
-                        "--topology" if i + 1 < args.len() => {
-                            config.topology_adapt_enabled = args[i + 1] == "on";
-                            i += 2;
-                        }
-                        _ => {
-                            i += 1;
-                        }
-                    }
-                }
-
-                crate::meta_agent::set_meta_config(config);
-
-                unsafe {
-                    crate::uart_print(b"[ML] Feature configuration updated:\n");
-                    crate::uart_print(b"  Experience Replay: ");
-                    crate::uart_print(if config.replay_enabled { b"ON\n" } else { b"OFF\n" });
-                    crate::uart_print(b"  TD Learning: ");
-                    crate::uart_print(if config.td_learning_enabled { b"ON\n" } else { b"OFF\n" });
-                    crate::uart_print(b"  Topology Adaptation: ");
-                    crate::uart_print(if config.topology_adapt_enabled { b"ON\n" } else { b"OFF\n" });
-                }
-            }
-            _ => unsafe { crate::uart_print(b"Usage: mlctl <status|replay N|weights P W L|features>\n"); }
-        }
-    }
+    #[allow(dead_code)]
+    // mlctl moved to helpers
 
     fn cmd_autoctl(&self, args: &[&str]) {
         if args.is_empty() {
@@ -1173,63 +677,7 @@ impl Shell {
                 crate::autonomy::AUTONOMOUS_CONTROL.disable();
                 unsafe { crate::uart_print(b"[AUTOCTL] Autonomous mode DISABLED\n"); }
             }
-            "status" => {
-                let enabled = crate::autonomy::AUTONOMOUS_CONTROL.is_enabled();
-                let safe_mode = crate::autonomy::AUTONOMOUS_CONTROL.is_safe_mode();
-                let total_decisions = crate::autonomy::AUTONOMOUS_CONTROL.total_decisions.load(core::sync::atomic::Ordering::Relaxed);
-                let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL.decision_interval_ms.load(core::sync::atomic::Ordering::Relaxed);
-                let learning_frozen = crate::autonomy::AUTONOMOUS_CONTROL.learning_frozen.load(core::sync::atomic::Ordering::Relaxed);
-
-                unsafe {
-                    crate::uart_print(b"\n=== Autonomous Control Status ===\n");
-                    crate::uart_print(b"  Mode: ");
-                    crate::uart_print(if enabled { b"ENABLED\n" } else { b"DISABLED\n" });
-                    crate::uart_print(b"  Safe Mode: ");
-                    crate::uart_print(if safe_mode { b"ACTIVE\n" } else { b"INACTIVE\n" });
-                    crate::uart_print(b"  Learning: ");
-                    crate::uart_print(if learning_frozen { b"FROZEN\n" } else { b"ACTIVE\n" });
-                    crate::uart_print(b"  Decision Interval: ");
-                    self.print_number_simple(interval_ms);
-                    crate::uart_print(b" ms\n");
-                    crate::uart_print(b"  Total Decisions: ");
-                    self.print_number_simple(total_decisions);
-                    crate::uart_print(b"\n");
-                }
-
-                let audit_log = crate::autonomy::get_audit_log();
-                unsafe {
-                    crate::uart_print(b"  Audit Log: ");
-                    self.print_number_simple(audit_log.len() as u64);
-                    crate::uart_print(b"/1000 entries\n");
-                }
-                drop(audit_log);
-
-                // Week 6: Prediction accuracy trend (last 100)
-                {
-                    let (correct_100, total_100) = crate::prediction_tracker::compute_accuracy(100);
-                    let (correct_500, total_500) = crate::prediction_tracker::compute_accuracy(500);
-                    unsafe {
-                        crate::uart_print(b"  Accuracy (last 100): ");
-                        if total_100 > 0 { self.print_number_simple((correct_100 * 100 / total_100) as u64); crate::uart_print(b"%\n"); }
-                        else { crate::uart_print(b"N/A\n"); }
-                        crate::uart_print(b"  Accuracy (last 500): ");
-                        if total_500 > 0 { self.print_number_simple((correct_500 * 100 / total_500) as u64); crate::uart_print(b"%\n"); }
-                        else { crate::uart_print(b"N/A\n"); }
-                    }
-                }
-
-                let watchdog = crate::autonomy::get_watchdog();
-                unsafe {
-                    crate::uart_print(b"  Watchdog Triggers: ");
-                    self.print_number_simple(watchdog.consecutive_low_rewards as u64);
-                    crate::uart_print(b" low rewards, ");
-                    self.print_number_simple(watchdog.consecutive_high_td_errors as u64);
-                    crate::uart_print(b" high TD errors\n");
-                }
-                drop(watchdog);
-
-                unsafe { crate::uart_print(b"\n"); }
-            }
+            "status" => { self.print_autoctl_status(); }
             "limits" => {
                 // Show safety hard limits and current rate limiter counters
                 let (compactions, prio_adj, strat_changes) = crate::autonomy::get_rate_limiter_stats();
@@ -1830,1047 +1278,14 @@ impl Shell {
         }
     }
 
-    fn cmd_learnctl(&self, args: &[&str]) {
-        if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: learnctl <stats|dump|train|feedback good|bad|verybad ID>\n"); }
-            return;
-        }
+    
 
-        match args[0] {
-            "stats" => {
-                let ledger = crate::prediction_tracker::get_ledger();
 
-                unsafe {
-                    crate::uart_print(b"\n=== Prediction Statistics ===\n");
-                    crate::uart_print(b"  Total Predictions: ");
-                    self.print_number_simple(ledger.len() as u64);
-                    crate::uart_print(b"/1000\n\n");
-                }
 
-                if ledger.len() == 0 {
-                    unsafe { crate::uart_print(b"  No predictions recorded yet.\n\n"); }
-                    drop(ledger);
-                    return;
-                }
+    #[allow(dead_code)]
+    // actorctl moved to helpers
 
-                // Overall accuracy
-                let (correct_100, total_100) = ledger.compute_accuracy(100);
-                let (correct_500, total_500) = ledger.compute_accuracy(500);
-                let (correct_all, total_all) = ledger.compute_accuracy(1000);
 
-                unsafe {
-                    crate::uart_print(b"Overall Accuracy:\n");
-                    crate::uart_print(b"  Last 100: ");
-                    if total_100 > 0 {
-                        self.print_number_simple(correct_100 as u64);
-                        crate::uart_print(b"/");
-                        self.print_number_simple(total_100 as u64);
-                        let pct = (correct_100 * 100) / total_100;
-                        crate::uart_print(b" (");
-                        self.print_number_simple(pct as u64);
-                        crate::uart_print(b"%)\n");
-                    } else {
-                        crate::uart_print(b"N/A (no outcomes yet)\n");
-                    }
-
-                    crate::uart_print(b"  Last 500: ");
-                    if total_500 > 0 {
-                        self.print_number_simple(correct_500 as u64);
-                        crate::uart_print(b"/");
-                        self.print_number_simple(total_500 as u64);
-                        let pct = (correct_500 * 100) / total_500;
-                        crate::uart_print(b" (");
-                        self.print_number_simple(pct as u64);
-                        crate::uart_print(b"%)\n");
-                    } else {
-                        crate::uart_print(b"N/A\n");
-                    }
-
-                    crate::uart_print(b"  All time: ");
-                    if total_all > 0 {
-                        self.print_number_simple(correct_all as u64);
-                        crate::uart_print(b"/");
-                        self.print_number_simple(total_all as u64);
-                        let pct = (correct_all * 100) / total_all;
-                        crate::uart_print(b" (");
-                        self.print_number_simple(pct as u64);
-                        crate::uart_print(b"%)\n\n");
-                    } else {
-                        crate::uart_print(b"N/A\n\n");
-                    }
-                }
-
-                // Accuracy by type
-                use crate::prediction_tracker::PredictionType;
-                let types = [
-                    (PredictionType::MemoryPressure, b"Memory Pressure"),
-                    (PredictionType::MemoryCompactionNeeded, b"Memory Compact "),
-                    (PredictionType::SchedulingDeadlineMiss, b"Deadline Miss  "),
-                    (PredictionType::CommandHeavy, b"Command Heavy  "),
-                    (PredictionType::CommandRapidStream, b"Rapid Stream   "),
-                ];
-
-                unsafe {
-                    crate::uart_print(b"Accuracy by Type:\n");
-                    crate::uart_print(b"  Type             | Count | Accuracy\n");
-                    crate::uart_print(b"  -----------------|-------|----------\n");
-                }
-
-                for (pred_type, name) in &types {
-                    let (correct, total_with_outcomes, total_all) = ledger.compute_accuracy_by_type(*pred_type, 1000);
-                    unsafe {
-                        crate::uart_print(b"  ");
-                        crate::uart_print(*name);
-                        crate::uart_print(b" | ");
-                        self.print_number_simple(total_all as u64);
-                        for _ in 0..(5 - if total_all < 10 { 1 } else if total_all < 100 { 2 } else { 3 }) {
-                            crate::uart_print(b" ");
-                        }
-                        crate::uart_print(b" | ");
-                        if total_with_outcomes > 0 {
-                            self.print_number_simple(correct as u64);
-                            crate::uart_print(b"/");
-                            self.print_number_simple(total_with_outcomes as u64);
-                            let pct = (correct * 100) / total_with_outcomes;
-                            crate::uart_print(b" (");
-                            self.print_number_simple(pct as u64);
-                            crate::uart_print(b"%)\n");
-                        } else {
-                            crate::uart_print(b"N/A\n");
-                        }
-                    }
-                }
-
-                // Human Feedback Statistics (RLHF)
-                let audit_log = crate::autonomy::get_audit_log();
-                let mut feedback_good = 0u32;
-                let mut feedback_bad = 0u32;
-                let mut feedback_verybad = 0u32;
-                let mut total_feedback = 0u32;
-
-                for i in 0..audit_log.len() {
-                    if let Some(entry) = audit_log.get_entry(i) {
-                        if entry.feedback_applied {
-                            total_feedback += 1;
-                            match entry.human_feedback {
-                                100 => feedback_good += 1,
-                                -50 => feedback_bad += 1,
-                                -200 => feedback_verybad += 1,
-                                _ => {}
-                            }
-                        }
-                    }
-                }
-                drop(audit_log);
-
-                if total_feedback > 0 {
-                    unsafe {
-                        crate::uart_print(b"\nHuman Feedback (RLHF):\n");
-                        crate::uart_print(b"  Total Decisions w/ Feedback: ");
-                        self.print_number_simple(total_feedback as u64);
-                        crate::uart_print(b"\n");
-                        crate::uart_print(b"  GOOD (+100):    ");
-                        self.print_number_simple(feedback_good as u64);
-                        crate::uart_print(b"\n");
-                        crate::uart_print(b"  BAD (-50):      ");
-                        self.print_number_simple(feedback_bad as u64);
-                        crate::uart_print(b"\n");
-                        crate::uart_print(b"  VERY BAD (-200): ");
-                        self.print_number_simple(feedback_verybad as u64);
-                        crate::uart_print(b"\n");
-                    }
-                }
-
-                // Learning rate adaptation info
-                let lr_state = crate::prediction_tracker::get_learning_rate_state();
-                unsafe {
-                    crate::uart_print(b"Learning Rate Adaptation:\n");
-                    crate::uart_print(b"  Current Rate: ");
-                    // Convert Q8.8 to percentage for display
-                    let lr_pct = (lr_state.current_rate as u64 * 100) / 256;
-                    self.print_number_simple(lr_pct);
-                    crate::uart_print(b"/100\n");
-                    crate::uart_print(b"  Last Accuracy: ");
-                    self.print_number_simple(lr_state.last_accuracy as u64);
-                    crate::uart_print(b"%\n");
-                    crate::uart_print(b"  Adjustments: ");
-                    self.print_number_simple(lr_state.adjustments_made as u64);
-                    crate::uart_print(b"\n");
-                }
-
-                unsafe { crate::uart_print(b"\n"); }
-                drop(ledger);
-            }
-            "dump" => {
-                let ledger = crate::prediction_tracker::get_ledger();
-                let n = if args.len() > 1 {
-                    args[1].parse::<usize>().unwrap_or(10)
-                } else {
-                    10
-                };
-
-                unsafe {
-                    crate::uart_print(b"\n=== Raw Prediction Records (last ");
-                    self.print_number_simple(n as u64);
-                    crate::uart_print(b") ===\n\n");
-                }
-
-                if ledger.len() == 0 {
-                    unsafe { crate::uart_print(b"  No predictions recorded yet.\n\n"); }
-                    drop(ledger);
-                    return;
-                }
-
-                let predictions = ledger.get_last_n(n);
-
-                for record in predictions {
-                    if !record.valid {
-                        continue;
-                    }
-
-                    unsafe {
-                        crate::uart_print(b"ID ");
-                        self.print_number_simple(record.id);
-                        crate::uart_print(b" | Type: ");
-
-                        // Print prediction type
-                        match record.prediction_type {
-                            crate::prediction_tracker::PredictionType::MemoryPressure => {
-                                crate::uart_print(b"MemoryPressure(0)");
-                            }
-                            crate::prediction_tracker::PredictionType::MemoryCompactionNeeded => {
-                                crate::uart_print(b"MemoryCompact(1)");
-                            }
-                            crate::prediction_tracker::PredictionType::SchedulingDeadlineMiss => {
-                                crate::uart_print(b"DeadlineMiss(2)");
-                            }
-                            crate::prediction_tracker::PredictionType::CommandHeavy => {
-                                crate::uart_print(b"CommandHeavy(3)");
-                            }
-                            crate::prediction_tracker::PredictionType::CommandRapidStream => {
-                                crate::uart_print(b"RapidStream(4)");
-                            }
-                        }
-
-                        crate::uart_print(b" | Value: ");
-                        if record.predicted_value < 0 {
-                            crate::uart_print(b"-");
-                            self.print_number_simple((-record.predicted_value) as u64);
-                        } else {
-                            self.print_number_simple(record.predicted_value as u64);
-                        }
-
-                        crate::uart_print(b" | Conf: ");
-                        self.print_number_simple(record.confidence as u64);
-
-                        crate::uart_print(b" | Actual: ");
-                        if let Some(actual) = record.actual_value {
-                            self.print_number_simple(actual as u64);
-                        } else {
-                            crate::uart_print(b"None");
-                        }
-
-                        crate::uart_print(b"\n");
-                    }
-                }
-
-                unsafe { crate::uart_print(b"\n"); }
-                drop(ledger);
-            }
-            "train" => {
-                // Train OOD detector with current telemetry
-                let state = crate::meta_agent::collect_telemetry();
-                let mut features = [0i16; 12];
-                features[0] = state.memory_pressure as i16;
-                features[1] = state.memory_fragmentation as i16;
-                features[2] = state.memory_alloc_rate as i16;
-                features[3] = state.memory_failures as i16;
-                features[4] = state.scheduling_load as i16;
-                features[5] = state.deadline_misses as i16;
-                features[6] = state.operator_latency_ms as i16;
-                features[7] = state.critical_ops_count as i16;
-                features[8] = state.command_rate as i16;
-                features[9] = state.command_heaviness as i16;
-                features[10] = state.prediction_accuracy as i16;
-                features[11] = state.rapid_stream_detected as i16;
-
-                crate::prediction_tracker::train_ood_detector(&features);
-
-                // Also record distribution snapshot for drift monitoring
-                let (_, ood_stats) = crate::prediction_tracker::get_ood_stats();
-                if ood_stats.valid {
-                    crate::prediction_tracker::record_distribution_snapshot(ood_stats);
-                }
-
-                // Adapt learning rate based on current accuracy
-                let (new_lr, adjusted) = crate::prediction_tracker::adapt_learning_rate();
-
-                unsafe {
-                    crate::uart_print(b"[LEARNCTL] OOD detector trained with current state\n");
-                    if adjusted {
-                        crate::uart_print(b"[LEARNCTL] Learning rate adapted: ");
-                        let lr_pct = (new_lr as u64 * 100) / 256;
-                        self.print_number_simple(lr_pct);
-                        crate::uart_print(b"/100\n");
-                    }
-                    crate::uart_print(b"Run 'autoctl oodcheck' to see updated distribution\n");
-                    crate::uart_print(b"Run 'autoctl driftcheck' to check for distribution shift\n");
-                }
-            }
-            "feedback" => {
-                if args.len() < 3 {
-                    unsafe { crate::uart_print(b"Usage: learnctl feedback <good|bad|verybad> <decision_id>\n"); }
-                    return;
-                }
-
-                let decision_id = args[2].parse::<u64>().unwrap_or(0);
-                if decision_id == 0 {
-                    unsafe { crate::uart_print(b"[ERROR] Invalid decision ID\n"); }
-                    return;
-                }
-
-                let reward_override = match args[1] {
-                    "good" => 100i16,
-                    "bad" => -50i16,
-                    "verybad" => -200i16,
-                    _ => {
-                        unsafe { crate::uart_print(b"[ERROR] Feedback must be good, bad, or verybad\n"); }
-                        return;
-                    }
-                };
-
-                // Apply human feedback to override reward
-                let success = crate::autonomy::apply_human_feedback(decision_id, reward_override);
-
-                if success {
-                    unsafe {
-                        crate::uart_print(b"[LEARNCTL] Human feedback applied to decision #");
-                        self.print_number_simple(decision_id);
-                        crate::uart_print(b": ");
-                        crate::uart_print(match reward_override {
-                            100 => b"GOOD (+100 reward)\n",
-                            -50 => b"BAD (-50 reward)\n",
-                            -200 => b"VERY BAD (-200 reward)\n",
-                            _ => b"UNKNOWN\n",
-                        });
-                        crate::uart_print(b"Reward overridden in decision record.\n");
-
-                        // For "verybad" feedback, add warning
-                        if reward_override == -200 {
-                            crate::uart_print(b"[WARNING] VERY BAD feedback recorded. ");
-                            crate::uart_print(b"Decision marked for analysis.\n");
-                        }
-                    }
-                } else {
-                    unsafe {
-                        crate::uart_print(b"[ERROR] Decision ID #");
-                        self.print_number_simple(decision_id);
-                        crate::uart_print(b" not found in audit log\n");
-                        crate::uart_print(b"Use 'autoctl dashboard' to see recent decisions\n");
-                    }
-                }
-            }
-            _ => unsafe { crate::uart_print(b"Usage: learnctl <stats|dump|train|feedback good|bad|verybad ID>\n"); }
-        }
-    }
-
-    fn cmd_stresstest(&self, args: &[&str]) {
-        if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: stresstest <memory|commands|multi|learning|redteam|chaos|compare|report> [options]\n"); }
-            return;
-        }
-        match args[0] {
-            "memory" => {
-                // Defaults
-                let mut duration_ms: u64 = 10_000;
-                let mut target_pressure: u8 = 85;
-                // Parse flags
-                let mut i = 1;
-                while i + 1 < args.len() {
-                    match args[i] {
-                        "--duration" => {
-                            duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms);
-                            i += 2;
-                        }
-                        "--target-pressure" => {
-                            let v = args[i+1].parse::<u16>().unwrap_or(target_pressure as u16);
-                            target_pressure = v.min(100) as u8;
-                            i += 2;
-                        }
-                        _ => { i += 1; }
-                    }
-                }
-
-                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Memory);
-                cfg.duration_ms = duration_ms;
-                cfg.target_pressure = target_pressure;
-                let metrics = crate::stress_test::run_memory_stress(cfg);
-
-                unsafe {
-                    crate::uart_print(b"\n[STRESSTEST] Memory completed: peak_pressure=");
-                    self.print_number_simple(metrics.peak_memory_pressure as u64);
-                    crate::uart_print(b"% oom_events=");
-                    self.print_number_simple(metrics.oom_events as u64);
-                    crate::uart_print(b" compactions=");
-                    self.print_number_simple(metrics.compaction_triggers as u64);
-                    crate::uart_print(b" duration_ms=");
-                    self.print_number_simple(metrics.test_duration_ms);
-                    crate::uart_print(b"\n");
-                }
-            }
-            "commands" => {
-                let mut duration_ms: u64 = 10_000;
-                let mut rate: u32 = 50;
-                let mut i = 1;
-                while i + 1 < args.len() {
-                    match args[i] {
-                        "--duration" => { duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms); i+=2; }
-                        "--rate" => { rate = args[i+1].parse::<u32>().unwrap_or(rate); i+=2; }
-                        _ => { i+=1; }
-                    }
-                }
-                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Commands);
-                cfg.duration_ms = duration_ms;
-                cfg.command_rate = rate;
-                let metrics = crate::stress_test::run_command_stress(cfg);
-                unsafe {
-                    crate::uart_print(b"\n[STRESSTEST] Commands completed: actions=");
-                    self.print_number_simple(metrics.actions_taken as u64);
-                    crate::uart_print(b" duration_ms=");
-                    self.print_number_simple(metrics.test_duration_ms);
-                    crate::uart_print(b"\n");
-                }
-            }
-            "multi" => {
-                let mut duration_ms: u64 = 10_000;
-                let mut i = 1;
-                while i + 1 < args.len() {
-                    match args[i] {
-                        "--duration" => { duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms); i+=2; }
-                        _ => { i+=1; }
-                    }
-                }
-                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::MultiSubsystem);
-                cfg.duration_ms = duration_ms;
-                let _metrics = crate::stress_test::run_multi_stress(cfg);
-            }
-            "learning" => {
-                let mut episodes: u32 = 10;
-                let mut i = 1;
-                while i + 1 < args.len() {
-                    match args[i] {
-                        "--episodes" => { episodes = args[i+1].parse::<u32>().unwrap_or(episodes); i+=2; }
-                        _ => { i+=1; }
-                    }
-                }
-                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Learning);
-                cfg.episodes = episodes;
-                let metrics = crate::stress_test::run_learning_stress(cfg);
-                unsafe {
-                    crate::uart_print(b"\n[STRESSTEST] Learning completed: total_rewards=");
-                    self.print_number_simple(metrics.total_rewards as u64);
-                    crate::uart_print(b" decisions=");
-                    self.print_number_simple(metrics.decisions_made as u64);
-                    crate::uart_print(b" avg_reward=");
-                    self.print_number_simple(metrics.avg_reward_per_decision as u64);
-                    crate::uart_print(b"\n");
-                }
-            }
-            "redteam" => {
-                let mut duration_ms: u64 = 10_000;
-                let mut i = 1;
-                while i + 1 < args.len() {
-                    match args[i] {
-                        "--duration" => { duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms); i+=2; }
-                        _ => { i+=1; }
-                    }
-                }
-                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::RedTeam);
-                cfg.duration_ms = duration_ms;
-                let metrics = crate::stress_test::run_redteam_stress(cfg);
-                unsafe {
-                    crate::uart_print(b"\n[STRESSTEST] Red team completed: attacks_survived=");
-                    self.print_number_simple(metrics.actions_taken as u64);
-                    crate::uart_print(b" duration_ms=");
-                    self.print_number_simple(metrics.test_duration_ms);
-                    crate::uart_print(b"\n");
-                }
-            }
-            "chaos" => {
-                let mut duration_ms: u64 = 10_000;
-                let mut i = 1;
-                while i + 1 < args.len() {
-                    match args[i] {
-                        "--duration" => { duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms); i+=2; }
-                        _ => { i+=1; }
-                    }
-                }
-                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Chaos);
-                cfg.duration_ms = duration_ms;
-                let _metrics = crate::stress_test::run_chaos_stress(cfg);
-            }
-            "compare" => {
-                // Usage: stresstest compare <memory|commands|multi> [flags]
-                if args.len() < 2 {
-                    unsafe { crate::uart_print(b"Usage: stresstest compare <memory|commands|multi> [--duration MS] [--target-pressure PCT] [--rate RPS]\n"); }
-                    return;
-                }
-
-                // Parse common flags
-                let mut duration_ms: u64 = 10_000;
-                let mut target_pressure: u8 = 85;
-                let mut rate: u32 = 50;
-                let mut i = 2;
-                while i + 1 < args.len() {
-                    match args[i] {
-                        "--duration" => { duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms); i+=2; }
-                        "--target-pressure" => { let v = args[i+1].parse::<u16>().unwrap_or(target_pressure as u16); target_pressure = v.min(100) as u8; i+=2; }
-                        "--rate" => { rate = args[i+1].parse::<u32>().unwrap_or(rate); i+=2; }
-                        _ => { i+=1; }
-                    }
-                }
-
-                // Preserve autonomy state
-                let was_enabled = crate::autonomy::AUTONOMOUS_CONTROL.is_enabled();
-
-                // Build config by test type
-                let which = args[1];
-                unsafe { crate::uart_print(b"\n[COMPARE] Running with autonomy DISABLED...\n"); }
-                crate::autonomy::AUTONOMOUS_CONTROL.disable();
-                let metrics_off = match which {
-                    "memory" => { let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Memory); cfg.duration_ms = duration_ms; cfg.target_pressure = target_pressure; crate::stress_test::run_memory_stress(cfg) }
-                    "commands" => { let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Commands); cfg.duration_ms = duration_ms; cfg.command_rate = rate; crate::stress_test::run_command_stress(cfg) }
-                    "multi" => { let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::MultiSubsystem); cfg.duration_ms = duration_ms; crate::stress_test::run_multi_stress(cfg) }
-                    _ => { unsafe { crate::uart_print(b"[ERROR] Unknown test type\n"); } return; }
-                };
-
-                unsafe { crate::uart_print(b"\n[COMPARE] Running with autonomy ENABLED...\n"); }
-                crate::autonomy::AUTONOMOUS_CONTROL.enable();
-                // Re-arm timer to start ticks during the second run
-                #[cfg(target_arch = "aarch64")]
-                unsafe {
-                    let mut frq: u64; core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
-                    let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL.decision_interval_ms.load(core::sync::atomic::Ordering::Relaxed).clamp(100, 60_000);
-                    let cycles = if frq > 0 { (frq / 1000).saturating_mul(interval_ms) } else { (62_500u64).saturating_mul(interval_ms) };
-                    core::arch::asm!("msr cntv_tval_el0, {x}", x = in(reg) cycles);
-                    let ctl: u64 = 1; core::arch::asm!("msr cntv_ctl_el0, {x}", x = in(reg) ctl);
-                }
-                let metrics_on = match which {
-                    "memory" => { let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Memory); cfg.duration_ms = duration_ms; cfg.target_pressure = target_pressure; crate::stress_test::run_memory_stress(cfg) }
-                    "commands" => { let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Commands); cfg.duration_ms = duration_ms; cfg.command_rate = rate; crate::stress_test::run_command_stress(cfg) }
-                    "multi" => { let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::MultiSubsystem); cfg.duration_ms = duration_ms; crate::stress_test::run_multi_stress(cfg) }
-                    _ => unreachable!(),
-                };
-
-                // Restore autonomy to original state
-                if !was_enabled { crate::autonomy::AUTONOMOUS_CONTROL.disable(); }
-
-                // Print deltas
-                unsafe {
-                    crate::uart_print(b"\n=== Comparative Results ===\n");
-                    match which {
-                        "memory" => {
-                            crate::uart_print(b"  Peak pressure: off="); self.print_number_simple(metrics_off.peak_memory_pressure as u64);
-                            crate::uart_print(b"% on="); self.print_number_simple(metrics_on.peak_memory_pressure as u64); crate::uart_print(b"%\n");
-                            crate::uart_print(b"  OOM events: off="); self.print_number_simple(metrics_off.oom_events as u64);
-                            crate::uart_print(b" on="); self.print_number_simple(metrics_on.oom_events as u64); crate::uart_print(b"\n");
-                        }
-                        "commands" | "multi" => {
-                            crate::uart_print(b"  Actions: off="); self.print_number_simple(metrics_off.actions_taken as u64);
-                            crate::uart_print(b" on="); self.print_number_simple(metrics_on.actions_taken as u64); crate::uart_print(b"\n");
-                        }
-                        _ => {}
-                    }
-                    crate::uart_print(b"  Duration_ms: off="); self.print_number_simple(metrics_off.test_duration_ms);
-                    crate::uart_print(b" on="); self.print_number_simple(metrics_on.test_duration_ms); crate::uart_print(b"\n\n");
-                }
-            }
-            "report" => {
-                let hist = crate::stress_test::get_history();
-                unsafe {
-                    crate::uart_print(b"\n=== Stress Test History (last 16) ===\n");
-                }
-                let mut any = false;
-                for rec in hist.iter() {
-                    any = true;
-                    unsafe {
-                        crate::uart_print(b"  ");
-                        let t = match rec.test_type {
-                            crate::stress_test::StressTestType::Memory => b"memory" as &[u8],
-                            crate::stress_test::StressTestType::Commands => b"commands",
-                            crate::stress_test::StressTestType::MultiSubsystem => b"multi",
-                            crate::stress_test::StressTestType::Learning => b"learning",
-                            crate::stress_test::StressTestType::RedTeam => b"redteam",
-                            crate::stress_test::StressTestType::Chaos => b"chaos",
-                        };
-                        crate::uart_print(t);
-                        crate::uart_print(b" ");
-                        crate::uart_print(if rec.autonomous_enabled { b"AUTO" } else { b"MAN" });
-                        crate::uart_print(b" dur="); self.print_number_simple(rec.metrics.test_duration_ms);
-                        match rec.test_type {
-                            crate::stress_test::StressTestType::Memory => {
-                                crate::uart_print(b" peak="); self.print_number_simple(rec.metrics.peak_memory_pressure as u64); crate::uart_print(b"% ooms="); self.print_number_simple(rec.metrics.oom_events as u64);
-                            }
-                            crate::stress_test::StressTestType::Learning => {
-                                crate::uart_print(b" rewards="); self.print_number_simple(rec.metrics.total_rewards as u64); crate::uart_print(b" decisions="); self.print_number_simple(rec.metrics.decisions_made as u64);
-                            }
-                            _ => { crate::uart_print(b" actions="); self.print_number_simple(rec.metrics.actions_taken as u64); }
-                        }
-                        crate::uart_print(b"\n");
-                    }
-                }
-                drop(hist);
-                if !any { unsafe { crate::uart_print(b"  (no runs yet)\n"); } }
-                unsafe { crate::uart_print(b"\n"); }
-            }
-            _ => unsafe { crate::uart_print(b"Usage: stresstest <memory|commands|multi|learning|redteam|chaos|compare|report> [options]\n"); }
-        }
-    }
-
-    fn cmd_ml_advanced_demo(&self) {
-        unsafe { crate::uart_print(b"\n=== Advanced ML Features Demo ===\n\n"); }
-
-        // Phase 1: Enable all advanced features
-        unsafe { crate::uart_print(b"[DEMO] Phase 1: Enabling advanced ML features...\n"); }
-        let mut config = crate::meta_agent::get_meta_config();
-        let original_replay = config.replay_enabled;
-        let original_td = config.td_learning_enabled;
-        let original_topology = config.topology_adapt_enabled;
-        let original_threshold = config.confidence_threshold;
-
-        config.replay_enabled = true;
-        config.td_learning_enabled = true;
-        config.topology_adapt_enabled = false; // Keep off for demo stability
-        config.confidence_threshold = 200; // Lower for demo
-        config.performance_weight = 50;
-        config.power_weight = 30;
-        config.latency_weight = 20;
-        crate::meta_agent::set_meta_config(config);
-
-        unsafe {
-            crate::uart_print(b"  Experience Replay: ON\n");
-            crate::uart_print(b"  TD Learning: ON\n");
-            crate::uart_print(b"  Topology Adaptation: OFF (stable for demo)\n");
-            crate::uart_print(b"  Reward weights: 50/30/20 (perf/power/lat)\n\n");
-        }
-
-        // Phase 2: Create varied workload patterns
-        unsafe { crate::uart_print(b"[DEMO] Phase 2: Generating workload patterns...\n"); }
-
-        for episode in 0..5 {
-            unsafe {
-                crate::uart_print(b"  Episode ");
-                self.print_number_simple((episode + 1) as u64);
-                crate::uart_print(b"/5: ");
-            }
-
-            // Vary the workload
-            match episode % 3 {
-                0 => {
-                    unsafe { crate::uart_print(b"Memory stress\n"); }
-                    let mut v = alloc::vec::Vec::new();
-                    if v.try_reserve_exact(4096).is_ok() {
-                        v.resize(4096, 0xAA);
-                    }
-                    drop(v);
-                }
-                1 => {
-                    unsafe { crate::uart_print(b"Rapid commands\n"); }
-                    for _ in 0..15 {
-                        let _ = crate::neural::predict_command("test");
-                    }
-                }
-                2 => {
-                    unsafe { crate::uart_print(b"Mixed load\n"); }
-                    let _ = crate::neural::predict_memory_health();
-                    for _ in 0..5 {
-                        let _ = crate::neural::predict_command("stress");
-                    }
-                }
-                _ => {}
-            }
-
-            // Collect telemetry and trigger learning
-            let state = crate::meta_agent::collect_telemetry();
-            crate::meta_agent::update_meta_state_with_learning(state);
-
-            // Make decision
-            let _ = crate::meta_agent::force_meta_decision();
-
-            // Small delay
-            for _ in 0..50000 { core::hint::spin_loop(); }
-        }
-
-        unsafe { crate::uart_print(b"\n[DEMO] Phase 3: Training from experience replay...\n"); }
-        crate::meta_agent::train_from_replay(10);
-
-        let (replay_count, replay_capacity) = crate::meta_agent::get_replay_stats();
-        unsafe {
-            crate::uart_print(b"  Replay buffer: ");
-            self.print_number_simple(replay_count as u64);
-            crate::uart_print(b"/");
-            self.print_number_simple(replay_capacity as u64);
-            crate::uart_print(b" entries\n\n");
-        }
-
-        // Phase 4: Show learning statistics
-        unsafe { crate::uart_print(b"[DEMO] Phase 4: Learning statistics:\n"); }
-        let stats = crate::meta_agent::get_meta_stats();
-
-        unsafe {
-            crate::uart_print(b"  Total decisions: ");
-            self.print_number_simple(stats.total_decisions as u64);
-            crate::uart_print(b"\n  Replay samples: ");
-            self.print_number_simple(stats.replay_samples as u64);
-            crate::uart_print(b"\n  TD updates: ");
-            self.print_number_simple(stats.td_updates as u64);
-            crate::uart_print(b"\n  Average reward: ");
-            if stats.avg_reward < 0 {
-                crate::uart_print(b"-");
-                self.print_number_simple((-stats.avg_reward) as u64);
-            } else {
-                crate::uart_print(b"+");
-                self.print_number_simple(stats.avg_reward as u64);
-            }
-            crate::uart_print(b"/1000\n");
-            crate::uart_print(b"  Reward samples: ");
-            self.print_number_simple(stats.reward_samples as u64);
-            crate::uart_print(b"\n\n");
-        }
-
-        // Cleanup: restore original configuration
-        unsafe { crate::uart_print(b"[DEMO] Restoring original configuration...\n"); }
-        config.replay_enabled = original_replay;
-        config.td_learning_enabled = original_td;
-        config.topology_adapt_enabled = original_topology;
-        config.confidence_threshold = original_threshold;
-        crate::meta_agent::set_meta_config(config);
-
-        unsafe {
-            crate::uart_print(b"\n[DEMO] SUCCESS: Advanced ML demo complete\n");
-            crate::uart_print(b"[DEMO] Experience replay recorded ");
-            self.print_number_simple(stats.replay_samples as u64);
-            crate::uart_print(b" samples\n");
-            crate::uart_print(b"[DEMO] TD learning updated value function ");
-            self.print_number_simple(stats.td_updates as u64);
-            crate::uart_print(b" times\n");
-            crate::uart_print(b"[DEMO] Multi-objective rewards computed with weighted sum\n");
-            crate::uart_print(b"[DEMO] Use 'mlctl status' to inspect advanced ML state\n\n");
-        }
-    }
-
-    fn cmd_actorctl(&self, args: &[&str]) {
-        if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: actorctl <status|policy|sample|lambda N|natural on/off|kl N|on|off>\n"); }
-            return;
-        }
-
-        match args[0] {
-            "status" => {
-                crate::meta_agent::print_actor_critic_status();
-            }
-            "policy" => {
-                let params = crate::meta_agent::get_policy_params();
-                unsafe {
-                    crate::uart_print(b"\n=== Current Policy Parameters ===\n\n");
-                    crate::uart_print(b"Gaussian Policy (means +/- stddevs):\n");
-                    crate::uart_print(b"  Memory: mean=");
-                }
-                if params.memory_mean < 0 {
-                    unsafe { crate::uart_print(b"-"); }
-                    self.print_number_simple((-params.memory_mean) as u64);
-                } else {
-                    unsafe { crate::uart_print(b"+"); }
-                    self.print_number_simple(params.memory_mean as u64);
-                }
-                unsafe { crate::uart_print(b" stddev="); }
-                self.print_number_simple(params.memory_stddev as u64);
-                unsafe { crate::uart_print(b"\n  Scheduling: mean="); }
-                if params.scheduling_mean < 0 {
-                    unsafe { crate::uart_print(b"-"); }
-                    self.print_number_simple((-params.scheduling_mean) as u64);
-                } else {
-                    unsafe { crate::uart_print(b"+"); }
-                    self.print_number_simple(params.scheduling_mean as u64);
-                }
-                unsafe { crate::uart_print(b" stddev="); }
-                self.print_number_simple(params.scheduling_stddev as u64);
-                unsafe { crate::uart_print(b"\n  Command: mean="); }
-                if params.command_mean < 0 {
-                    unsafe { crate::uart_print(b"-"); }
-                    self.print_number_simple((-params.command_mean) as u64);
-                } else {
-                    unsafe { crate::uart_print(b"+"); }
-                    self.print_number_simple(params.command_mean as u64);
-                }
-                unsafe { crate::uart_print(b" stddev="); }
-                self.print_number_simple(params.command_stddev as u64);
-                unsafe { crate::uart_print(b"\n\n"); }
-            }
-            "sample" => {
-                let state = crate::meta_agent::collect_telemetry();
-                let action = crate::meta_agent::actor_sample_action(&state);
-                unsafe {
-                    crate::uart_print(b"\n[ACTOR] Sampled action from policy:\n");
-                    crate::uart_print(b"  Memory: ");
-                }
-                if action.memory_directive < 0 {
-                    unsafe { crate::uart_print(b"-"); }
-                    self.print_number_simple((-action.memory_directive) as u64);
-                } else {
-                    unsafe { crate::uart_print(b"+"); }
-                    self.print_number_simple(action.memory_directive as u64);
-                }
-                unsafe { crate::uart_print(b"\n  Scheduling: "); }
-                if action.scheduling_directive < 0 {
-                    unsafe { crate::uart_print(b"-"); }
-                    self.print_number_simple((-action.scheduling_directive) as u64);
-                } else {
-                    unsafe { crate::uart_print(b"+"); }
-                    self.print_number_simple(action.scheduling_directive as u64);
-                }
-                unsafe { crate::uart_print(b"\n  Command: "); }
-                if action.command_directive < 0 {
-                    unsafe { crate::uart_print(b"-"); }
-                    self.print_number_simple((-action.command_directive) as u64);
-                } else {
-                    unsafe { crate::uart_print(b"+"); }
-                    self.print_number_simple(action.command_directive as u64);
-                }
-                unsafe { crate::uart_print(b"\n  Log Prob: "); }
-                self.print_number_simple(action.log_prob.abs() as u64);
-                unsafe { crate::uart_print(b"\n\n"); }
-            }
-            "lambda" => {
-                if args.len() < 2 {
-                    unsafe { crate::uart_print(b"Usage: actorctl lambda <value 0-1000>\n"); }
-                    return;
-                }
-                let lambda_milli = args[1].parse::<u16>().unwrap_or(800).min(1000);
-                let lambda_q88 = ((lambda_milli as i32 * 256) / 1000) as i16;
-
-                let mut config = crate::meta_agent::get_actor_critic_config();
-                config.lambda = lambda_q88;
-                crate::meta_agent::set_actor_critic_config(config);
-
-                unsafe {
-                    crate::uart_print(b"[ACTOR] Lambda set to ");
-                    self.print_number_simple(lambda_milli as u64);
-                    crate::uart_print(b"/1000\n");
-                }
-            }
-            "natural" => {
-                if args.len() < 2 {
-                    unsafe { crate::uart_print(b"Usage: actorctl natural <on|off>\n"); }
-                    return;
-                }
-                let mut config = crate::meta_agent::get_actor_critic_config();
-                config.natural_gradient = args[1] == "on";
-                crate::meta_agent::set_actor_critic_config(config);
-
-                unsafe {
-                    crate::uart_print(b"[ACTOR] Natural gradient: ");
-                    crate::uart_print(if config.natural_gradient { b"ON\n" } else { b"OFF\n" });
-                }
-            }
-            "kl" => {
-                if args.len() < 2 {
-                    unsafe { crate::uart_print(b"Usage: actorctl kl <threshold 0-100>\n"); }
-                    return;
-                }
-                let kl_milli = args[1].parse::<u16>().unwrap_or(10).min(100);
-                let kl_q88 = ((kl_milli as i32 * 256) / 1000) as i16;
-
-                let mut config = crate::meta_agent::get_actor_critic_config();
-                config.kl_threshold = kl_q88;
-                crate::meta_agent::set_actor_critic_config(config);
-
-                unsafe {
-                    crate::uart_print(b"[ACTOR] KL threshold set to ");
-                    self.print_number_simple(kl_milli as u64);
-                    crate::uart_print(b"/1000\n");
-                }
-            }
-            "on" => {
-                let mut config = crate::meta_agent::get_actor_critic_config();
-                config.enabled = true;
-                crate::meta_agent::set_actor_critic_config(config);
-                unsafe { crate::uart_print(b"[ACTOR] Actor-critic ENABLED\n"); }
-            }
-            "off" => {
-                let mut config = crate::meta_agent::get_actor_critic_config();
-                config.enabled = false;
-                crate::meta_agent::set_actor_critic_config(config);
-                unsafe { crate::uart_print(b"[ACTOR] Actor-critic DISABLED\n"); }
-            }
-            _ => unsafe { crate::uart_print(b"Usage: actorctl <status|policy|sample|lambda N|natural on/off|kl N|on|off>\n"); }
-        }
-    }
-
-    fn cmd_actor_critic_demo(&self) {
-        unsafe { crate::uart_print(b"\n=== Actor-Critic Policy Gradient Demo ===\n\n"); }
-
-        // Phase 1: Enable actor-critic
-        unsafe { crate::uart_print(b"[DEMO] Phase 1: Enabling actor-critic...\n"); }
-        let mut config = crate::meta_agent::get_actor_critic_config();
-        let original_enabled = config.enabled;
-        let original_lambda = config.lambda;
-        let original_natural = config.natural_gradient;
-
-        config.enabled = true;
-        config.lambda = 205; // 0.8
-        config.natural_gradient = true;
-        config.kl_threshold = 3; // 0.01
-        crate::meta_agent::set_actor_critic_config(config);
-
-        unsafe {
-            crate::uart_print(b"  Enabled: YES\n");
-            crate::uart_print(b"  Lambda: 0.8 (eligibility trace decay)\n");
-            crate::uart_print(b"  Natural Gradient: ON\n");
-            crate::uart_print(b"  KL Threshold: 0.01\n\n");
-        }
-
-        // Phase 2: Run 10 episodes
-        unsafe { crate::uart_print(b"[DEMO] Phase 2: Running 10 episodes with policy gradients...\n"); }
-
-        for episode in 0..10 {
-            crate::meta_agent::start_episode();
-
-            unsafe {
-                crate::uart_print(b"  Episode ");
-                self.print_number_simple((episode + 1) as u64);
-                crate::uart_print(b"/10: ");
-            }
-
-            // Vary the workload
-            match episode % 3 {
-                0 => {
-                    unsafe { crate::uart_print(b"Memory stress\n"); }
-                    let mut v = alloc::vec::Vec::new();
-                    if v.try_reserve_exact(3072).is_ok() {
-                        v.resize(3072, 0xBB);
-                    }
-                    drop(v);
-                }
-                1 => {
-                    unsafe { crate::uart_print(b"Rapid commands\n"); }
-                    for _ in 0..12 {
-                        let _ = crate::neural::predict_command("test");
-                    }
-                }
-                2 => {
-                    unsafe { crate::uart_print(b"Mixed load\n"); }
-                    let _ = crate::neural::predict_memory_health();
-                    for _ in 0..5 {
-                        let _ = crate::neural::predict_command("stress");
-                    }
-                }
-                _ => {}
-            }
-
-            // Collect state and sample action from policy
-            let state = crate::meta_agent::collect_telemetry();
-            let _action = crate::meta_agent::actor_sample_action(&state);
-
-            // Update state with learning
-            crate::meta_agent::update_meta_state_with_learning(state);
-
-            // Compute reward
-            let _reward_struct = crate::meta_agent::get_last_decision();  // Placeholder
-            let reward = 50; // Simplified: constant reward for demo
-
-            // Perform actor-critic update (policy gradient + eligibility traces)
-            crate::meta_agent::actor_critic_update(reward);
-
-            // End episode
-            crate::meta_agent::end_episode();
-
-            // Small delay
-            for _ in 0..50000 { core::hint::spin_loop(); }
-        }
-
-        // Phase 3: Show learning statistics
-        unsafe { crate::uart_print(b"\n[DEMO] Phase 3: Learning statistics:\n"); }
-        let stats = crate::meta_agent::get_actor_critic_stats();
-
-        unsafe {
-            crate::uart_print(b"  Episodes: ");
-            self.print_number_simple(stats.episodes as u64);
-            crate::uart_print(b"\n  Policy Updates: ");
-            self.print_number_simple(stats.policy_updates as u64);
-            crate::uart_print(b"\n  Eligibility Updates: ");
-            self.print_number_simple(stats.eligibility_updates as u64);
-            crate::uart_print(b"\n  Avg Return: ");
-            if stats.avg_return < 0 {
-                crate::uart_print(b"-");
-                self.print_number_simple((-stats.avg_return) as u64);
-            } else {
-                crate::uart_print(b"+");
-                self.print_number_simple(stats.avg_return as u64);
-            }
-            crate::uart_print(b"/1000\n");
-            crate::uart_print(b"  Policy Entropy: ");
-            self.print_number_simple(stats.policy_entropy as u64);
-            crate::uart_print(b"/1000\n");
-            crate::uart_print(b"  KL Violations: ");
-            self.print_number_simple(stats.kl_violations as u64);
-            crate::uart_print(b"\n\n");
-        }
-
-        // Phase 4: Sample from learned policy
-        unsafe { crate::uart_print(b"[DEMO] Phase 4: Sampling from learned policy:\n"); }
-        let state = crate::meta_agent::collect_telemetry();
-        let action = crate::meta_agent::actor_sample_action(&state);
-
-        unsafe {
-            crate::uart_print(b"  Memory: ");
-        }
-        if action.memory_directive < 0 {
-            unsafe { crate::uart_print(b"-"); }
-            self.print_number_simple((-action.memory_directive) as u64);
-        } else {
-            unsafe { crate::uart_print(b"+"); }
-            self.print_number_simple(action.memory_directive as u64);
-        }
-        unsafe {
-            crate::uart_print(b"/1000\n  Scheduling: ");
-        }
-        if action.scheduling_directive < 0 {
-            unsafe { crate::uart_print(b"-"); }
-            self.print_number_simple((-action.scheduling_directive) as u64);
-        } else {
-            unsafe { crate::uart_print(b"+"); }
-            self.print_number_simple(action.scheduling_directive as u64);
-        }
-        unsafe {
-            crate::uart_print(b"/1000\n  Command: ");
-        }
-        if action.command_directive < 0 {
-            unsafe { crate::uart_print(b"-"); }
-            self.print_number_simple((-action.command_directive) as u64);
-        } else {
-            unsafe { crate::uart_print(b"+"); }
-            self.print_number_simple(action.command_directive as u64);
-        }
-        unsafe {
-            crate::uart_print(b"/1000\n\n");
-        }
-
-        // Cleanup: restore original configuration
-        unsafe { crate::uart_print(b"[DEMO] Restoring original configuration...\n"); }
-        config.enabled = original_enabled;
-        config.lambda = original_lambda;
-        config.natural_gradient = original_natural;
-        crate::meta_agent::set_actor_critic_config(config);
-
-        unsafe {
-            crate::uart_print(b"\n[DEMO] SUCCESS: Actor-critic demo complete\n");
-            crate::uart_print(b"[DEMO] Policy gradients optimized Gaussian policy over 10 episodes\n");
-            crate::uart_print(b"[DEMO] Eligibility traces enabled multi-step credit assignment\n");
-            crate::uart_print(b"[DEMO] Natural gradient maintained KL divergence constraint\n");
-            crate::uart_print(b"[DEMO] Use 'actorctl status' to inspect actor-critic state\n\n");
-        }
-    }
 
     fn cmd_ask_ai(&self, args: &[&str]) {
         if args.is_empty() { unsafe { crate::uart_print(b"Usage: ask-ai \"<text>\"\n"); } return; }
@@ -2925,76 +1340,7 @@ impl Shell {
         unsafe { crate::uart_print(b"\n"); }
     }
 
-    /// Runtime toggle for metric capture
-    fn cmd_metricsctl(&self, args: &[&str]) {
-        if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: metricsctl <on|off|status>\n"); }
-            return;
-        }
-        match args[0] {
-            "on" => {
-                crate::trace::metrics_set_enabled(true);
-                unsafe { crate::uart_print(b"[METRICSCTL] capture enabled\n"); }
-            }
-            "off" => {
-                crate::trace::metrics_set_enabled(false);
-                unsafe { crate::uart_print(b"[METRICSCTL] capture disabled\n"); }
-            }
-            "status" => {
-                let enabled = crate::trace::metrics_enabled();
-                unsafe {
-                    crate::uart_print(b"[METRICSCTL] capture: ");
-                    crate::uart_print(if enabled { b"ON\n" } else { b"OFF\n" });
-                }
-            }
-            _ => {
-                unsafe { crate::uart_print(b"Usage: metricsctl <on|off|status>\n"); }
-            }
-        }
-    }
-
-    /// Show recent metrics captured into small rings
-    fn cmd_metrics(&self, args: &[&str]) {
-        let mut buf = [0usize; 8];
-        if let Some(which) = args.get(0) {
-            match *which {
-                "ctx" => {
-                    let n = crate::trace::metrics_snapshot_ctx_switch(&mut buf);
-                    unsafe { crate::uart_print(b"[METRICS] ctx_switch_ns:"); }
-                    for i in 0..n { unsafe { crate::uart_print(b" "); } self.print_number_simple(buf[i] as u64); }
-                    unsafe { crate::uart_print(b"\n"); }
-                    return;
-                }
-                "mem" => {
-                    let n = crate::trace::metrics_snapshot_memory_alloc(&mut buf);
-                    unsafe { crate::uart_print(b"[METRICS] memory_alloc_ns:"); }
-                    for i in 0..n { unsafe { crate::uart_print(b" "); } self.print_number_simple(buf[i] as u64); }
-                    unsafe { crate::uart_print(b"\n"); }
-                    return;
-                }
-                "real" => {
-                    let n = crate::trace::metrics_snapshot_real_ctx(&mut buf);
-                    unsafe { crate::uart_print(b"[METRICS] real_ctx_switch_ns:"); }
-                    for i in 0..n { unsafe { crate::uart_print(b" "); } self.print_number_simple(buf[i] as u64); }
-                    unsafe { crate::uart_print(b"\n"); }
-                    return;
-                }
-                _ => {}
-            }
-        }
-        let n1 = crate::trace::metrics_snapshot_ctx_switch(&mut buf);
-        unsafe { crate::uart_print(b"[METRICS] ctx_switch_ns:"); }
-        for i in 0..n1 { unsafe { crate::uart_print(b" "); } self.print_number_simple(buf[i] as u64); }
-        unsafe { crate::uart_print(b"\n"); }
-        let n2 = crate::trace::metrics_snapshot_memory_alloc(&mut buf);
-        unsafe { crate::uart_print(b"[METRICS] memory_alloc_ns:"); }
-        for i in 0..n2 { unsafe { crate::uart_print(b" "); } self.print_number_simple(buf[i] as u64); }
-        unsafe { crate::uart_print(b"\n"); }
-        let n3 = crate::trace::metrics_snapshot_real_ctx(&mut buf);
-        unsafe { crate::uart_print(b"[METRICS] real_ctx_switch_ns:"); }
-        for i in 0..n3 { unsafe { crate::uart_print(b" "); } self.print_number_simple(buf[i] as u64); }
-        unsafe { crate::uart_print(b"\n"); }
-    }
+    // metricsctl and metrics commands are implemented in a split module
 
     #[cfg(feature = "virtio-console")]
     fn cmd_vconwrite(&self, args: &[&str]) {
@@ -3015,368 +1361,8 @@ impl Shell {
     }
 
     // --- LLM commands (feature: llm) ---
-    #[cfg(feature = "llm")]
-    fn cmd_llmctl(&self, args: &[&str]) {
-        if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: llmctl load [--wcet-cycles N] [--model ID] [--hash 0xHEX..64] [--sig 0xHEX..128] | budget [--wcet-cycles N] [--period-ns N] [--max-tokens-per-period N]\n"); }
-            return;
-        }
-        match args[0] {
-            "load" => {
-                self.cmd_llmctl_load(args);
-            }
-            "budget" => {
-                let mut wcet: Option<u64> = None;
-                let mut period: Option<u64> = None;
-                let mut max_per: Option<usize> = None;
-                let mut i = 1;
-                while i < args.len() {
-                    match args[i] {
-                        "--wcet-cycles" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<u64>(){ wcet=Some(v);} } },
-                        "--period-ns" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<u64>(){ period=Some(v);} } },
-                        "--max-tokens-per-period" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<usize>(){ max_per=Some(v);} } },
-                        _ => {}
-                    }
-                    i+=1;
-                }
-                crate::llm::configure_budget(wcet, period, max_per);
-                unsafe { crate::uart_print(b"[LLM] budget configured\n"); }
-            }
-            "status" => {
-                #[cfg(feature = "deterministic")]
-                {
-                    let (used, acc, rej, misses, p99) = crate::deterministic::llm_get_status();
-                    unsafe {
-                        crate::uart_print(b"[LLM][DET] used_ppm="); self.print_number_simple(used as u64);
-                        crate::uart_print(b" accepted="); self.print_number_simple(acc as u64);
-                        crate::uart_print(b" rejected="); self.print_number_simple(rej as u64);
-                        crate::uart_print(b" deadline_misses="); self.print_number_simple(misses as u64);
-                        crate::uart_print(b" jitter_p99_ns="); self.print_number_simple(p99 as u64);
-                        crate::uart_print(b"\n");
-                    }
-                }
-                #[cfg(not(feature = "deterministic"))]
-                unsafe { crate::uart_print(b"[LLM] deterministic feature not enabled\n"); }
-            }
-            "audit" => {
-                crate::llm::audit_print();
-            }
-            _ => unsafe { crate::uart_print(b"Usage: llmctl load [--wcet-cycles N] [--model ID] [--hash 0xHEX..64] [--sig 0xHEX..128] | budget [--wcet-cycles N] [--period-ns N] [--max-tokens-per-period N]\n"); },
-        }
-    }
+    // LLM helper implementations moved to shell/llmctl_helpers.rs
 
-    #[cfg(feature = "llm")]
-    fn cmd_llmctl_load(&self, args: &[&str]) {
-        let mut wcet: Option<u64> = None;
-        let mut model_id: Option<u32> = None;
-        let mut hash_bytes: Option<[u8;32]> = None;
-        let mut sig_bytes: Option<[u8;64]> = None;
-        let mut ctx: Option<u32> = None;
-        let mut vocab: Option<u32> = None;
-        let mut quant: Option<crate::llm::Quantization> = None;
-        let mut name: Option<alloc::string::String> = None;
-        let mut rev: Option<u32> = None;
-        let mut size_bytes: Option<usize> = None;
-        let mut i = 1;
-        while i < args.len() {
-            match args[i] {
-                "--wcet-cycles" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<u64>(){ wcet=Some(v);} } },
-                "--model" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<u32>(){ model_id=Some(v);} } },
-                "--hash" => { i+=1; if i<args.len(){ if let Some(b)=Self::parse_hex_fixed::<32>(args[i]){ hash_bytes=Some(b);} } },
-                "--sig" => { i+=1; if i<args.len(){ if let Some(b)=Self::parse_hex_fixed::<64>(args[i]){ sig_bytes=Some(b);} } },
-                "--ctx" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<u32>(){ ctx=Some(v);} } },
-                "--vocab" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<u32>(){ vocab=Some(v);} } },
-                "--quant" => { i+=1; if i<args.len(){ quant=match args[i].to_ascii_lowercase().as_str(){"q4_0"=>Some(crate::llm::Quantization::Q4_0),"q4_1"=>Some(crate::llm::Quantization::Q4_1),"int8"=>Some(crate::llm::Quantization::Int8),"fp16"=>Some(crate::llm::Quantization::FP16),"fp32"=>Some(crate::llm::Quantization::FP32),_=>None}; } },
-                "--name" => { i+=1; if i<args.len(){ let mut s=alloc::string::String::new(); s.push_str(args[i]); name=Some(s);} },
-                "--rev" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<u32>(){ rev=Some(v);} } },
-                "--size-bytes" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<usize>(){ size_bytes=Some(v);} } },
-                _ => {}
-            }
-            i+=1;
-        }
-        let ok = if model_id.is_some() && hash_bytes.is_some() {
-            let mid = model_id.unwrap();
-            let hb = hash_bytes.unwrap();
-            let sb = sig_bytes.unwrap_or([0u8;64]);
-            let sz = size_bytes.unwrap_or(1024);
-            crate::llm::load_model_package(mid, hb, sb, sz)
-        } else if ctx.is_some() || vocab.is_some() || quant.is_some() || name.is_some() || rev.is_some() || size_bytes.is_some() {
-            let mid = model_id.unwrap_or(0);
-            let meta = crate::llm::ModelMeta { id: mid, name, ctx_len: ctx.unwrap_or(2048), vocab_size: vocab.unwrap_or(50_000), quant: quant.unwrap_or(crate::llm::Quantization::Int8), revision: rev, size_bytes: size_bytes.unwrap_or(1_048_576) };
-            crate::llm::load_model_with_meta(Some(meta), wcet, None)
-        } else if model_id.is_some() {
-            crate::llm::load_model_meta(model_id, wcet, None)
-        } else {
-            crate::llm::load_model(wcet)
-        };
-        unsafe { if ok { crate::uart_print(b"[LLM] model loaded\n"); } else { crate::uart_print(b"[LLM] model load failed\n"); } }
-    }
-
-    #[cfg(feature = "llm")]
-    fn parse_hex_fixed<const N: usize>(s: &str) -> Option<[u8; N]> {
-        let hex = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
-        if hex.len() != N * 2 { return None; }
-        let mut out = [0u8; N];
-        let bytes = hex.as_bytes();
-        for i in 0..N {
-            let hi = bytes[i*2];
-            let lo = bytes[i*2+1];
-            let hn = match hi { b'0'..=b'9' => hi - b'0', b'a'..=b'f' => hi - b'a' + 10, b'A'..=b'F' => hi - b'A' + 10, _ => 0xFF };
-            let ln = match lo { b'0'..=b'9' => lo - b'0', b'a'..=b'f' => lo - b'a' + 10, b'A'..=b'F' => lo - b'A' + 10, _ => 0xFF };
-            if hn > 15 || ln > 15 { return None; }
-            out[i] = (hn << 4) | ln;
-        }
-        Some(out)
-    }
-
-    #[cfg(feature = "llm")]
-    fn cmd_llminfer(&self, args: &[&str]) {
-        if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: llminfer <prompt text> [--max-tokens N]\n"); }
-            return;
-        }
-        // Parse optional --max-tokens
-        let mut max_tokens: Option<usize> = None;
-        let mut prompt_parts: heapless::Vec<&str, 32> = heapless::Vec::new();
-        let mut i = 0usize;
-        while i < args.len() {
-            if args[i] == "--max-tokens" {
-                i += 1;
-                if i < args.len() { if let Ok(v) = args[i].parse::<usize>() { max_tokens = Some(v); } }
-            } else {
-                let _ = prompt_parts.push(args[i]);
-            }
-            i += 1;
-        }
-        let mut prompt = alloc::string::String::new();
-        for (k, p) in prompt_parts.iter().enumerate() {
-            if k > 0 { prompt.push(' '); }
-            prompt.push_str(p);
-        }
-        let res = crate::llm::infer(&prompt, max_tokens);
-        unsafe {
-            crate::uart_print(b"[LLM] infer id="); self.print_number_simple(res.infer_id as u64);
-            crate::uart_print(b" tokens="); self.print_number_simple(res.tokens_emitted as u64);
-            crate::uart_print(b" latency_us="); self.print_number_simple(res.latency_us as u64);
-            crate::uart_print(b"\n[LLM] output: ");
-            crate::uart_print(res.output.as_bytes());
-            crate::uart_print(b"\n");
-        }
-    }
-
-    #[cfg(feature = "llm")]
-    fn cmd_llmstats(&self) {
-        let (qdmax, total_tokens, misses, last_us) = crate::llm::stats();
-        unsafe {
-            crate::uart_print(b"[LLM] queue_depth_max="); self.print_number_simple(qdmax as u64);
-            crate::uart_print(b" total_tokens="); self.print_number_simple(total_tokens as u64);
-            crate::uart_print(b" deadline_misses="); self.print_number_simple(misses as u64);
-            crate::uart_print(b" last_latency_us="); self.print_number_simple(last_us as u64);
-            crate::uart_print(b"\n");
-        }
-    }
-
-    #[cfg(feature = "llm")]
-    fn cmd_llm_audit_json(&self) {
-        crate::llm::audit_print_json();
-    }
-
-    #[cfg(feature = "llm")]
-    fn cmd_llmsig(&self, args: &[&str]) {
-        if args.len() < 1 {
-            unsafe { crate::uart_print(b"Usage: llmsig <model_id>\n"); }
-            return;
-        }
-        let id = match args[0].parse::<u32>() {
-            Ok(v) => v,
-            Err(_) => { unsafe { crate::uart_print(b"[LLM] invalid model id\n"); } return; }
-        };
-        // Recompute the signature using the same stub logic as in llm.rs
-        let salt_a: u64 = 0xA5A5_A5A5_A5A5_A5A5;
-        let salt_b: u64 = 0x5349_534C_4D4F_444C; // b"SISLMODL"
-        let sig = salt_a ^ salt_b ^ (id as u64);
-        unsafe { crate::uart_print(b"LLM SIG: "); }
-        self.print_hex(sig);
-        unsafe { crate::uart_print(b"\n"); }
-    }
-
-    #[cfg(feature = "llm")]
-    fn cmd_llmpoll(&self, args: &[&str]) {
-        let max = if !args.is_empty() {
-            args[0].parse::<usize>().unwrap_or(4)
-        } else { 4 };
-        let (id, n, done, _items) = crate::llm::ctl_poll(max);
-        let (plen, model_id) = crate::llm::ctl_peek_meta(id);
-        unsafe {
-            crate::uart_print(b"[LLM][POLL] id="); self.print_number_simple(id as u64);
-            crate::uart_print(b" n="); self.print_number_simple(n as u64);
-            crate::uart_print(b" done="); self.print_number_simple(done as u64);
-            crate::uart_print(b" plen="); self.print_number_simple(plen as u64);
-            crate::uart_print(b" model=");
-            match model_id {
-                Some(mid) => self.print_number_simple(mid as u64),
-                None => crate::uart_print(b"none"),
-            }
-            crate::uart_print(b"\n");
-        }
-    }
-
-    #[cfg(feature = "llm")]
-    fn cmd_llmcancel(&self, args: &[&str]) {
-        if let Some(id_str) = args.get(0) {
-            if let Ok(id) = id_str.parse::<u32>() {
-                crate::llm::ctl_cancel_id(id as usize);
-                unsafe { crate::uart_print(b"[LLM] cancel issued for id="); }
-                self.print_number_simple(id as u64);
-                unsafe { crate::uart_print(b"\n"); }
-                return;
-            }
-        }
-        crate::llm::ctl_cancel();
-        unsafe { crate::uart_print(b"[LLM] cancel issued\n"); }
-    }
-
-    #[cfg(feature = "llm")]
-    fn cmd_llm_summary(&self) {
-        crate::llm::ctl_print_sessions();
-    }
-
-    #[cfg(feature = "llm")]
-    fn cmd_llm_verify(&self) {
-        let ok = crate::llm::verify_demo_model();
-        unsafe {
-            if ok { crate::uart_print(b"[LLM][MODEL] verify ok\n"); }
-            else { crate::uart_print(b"[LLM][MODEL] verify FAILED\n"); }
-        }
-    }
-
-    #[cfg(feature = "llm")]
-    fn cmd_llm_hash(&self, args: &[&str]) {
-        if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: llmhash <model_id> [size_bytes]\n"); }
-            return;
-        }
-        let id = match args[0].parse::<u32>() { Ok(v) => v, Err(_) => { unsafe { crate::uart_print(b"[LLM] invalid model id\n"); } return; } };
-        let size = if args.len() >= 2 { args[1].parse::<usize>().unwrap_or(1024) } else { 1024 };
-        let hash = crate::llm::demo_hash_for(id, size);
-        unsafe { crate::uart_print(b"LLM HASH: 0x"); }
-        for b in hash {
-            let hi = (b >> 4) & 0xF; let lo = b & 0xF; let table = b"0123456789ABCDEF";
-            unsafe { crate::uart_print(&[table[hi as usize]]); crate::uart_print(&[table[lo as usize]]); }
-        }
-        unsafe { crate::uart_print(b"\n"); }
-    }
-
-    #[cfg(feature = "llm")]
-    fn cmd_llm_key(&self) {
-        #[cfg(feature = "crypto-real")]
-        {
-            match crate::model::get_verifying_key() {
-                Some(pk) => {
-                    unsafe { crate::uart_print(b"LLM PUBKEY: 0x"); }
-                    let table = b"0123456789abcdef";
-                    for b in pk {
-                        let hi = (b >> 4) & 0xF; let lo = b & 0xF;
-                        unsafe { crate::uart_print(&[table[hi as usize]]); crate::uart_print(&[table[lo as usize]]); }
-                    }
-                    unsafe { crate::uart_print(b"\n"); }
-                }
-                None => unsafe { crate::uart_print(b"LLM PUBKEY: <unset>\n"); },
-            }
-        }
-        #[cfg(not(feature = "crypto-real"))]
-        unsafe { crate::uart_print(b"[LLM] crypto-real feature not enabled\n"); }
-    }
-
-    #[cfg(feature = "llm")]
-    fn cmd_llmstream(&self, args: &[&str]) {
-        if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: llmstream <prompt text> [--max-tokens N] [--chunk N]\n"); }
-            return;
-        }
-        let mut max_tokens: Option<usize> = None;
-        let mut chunk: usize = 2;
-        let mut prompt_parts: heapless::Vec<&str, 32> = heapless::Vec::new();
-        let mut i = 0usize;
-        while i < args.len() {
-            match args[i] {
-                "--max-tokens" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<usize>(){ max_tokens=Some(v);} } },
-                "--chunk" => { i+=1; if i<args.len(){ if let Ok(v)=args[i].parse::<usize>(){ if v>0 { chunk=v; } } } },
-                _ => { let _ = prompt_parts.push(args[i]); }
-            }
-            i+=1;
-        }
-        let mut prompt = alloc::string::String::new();
-        for (k,p) in prompt_parts.iter().enumerate(){ if k>0 { prompt.push(' ');} prompt.push_str(p);}        
-        let res = crate::llm::infer_stream(&prompt, max_tokens, chunk);
-        unsafe {
-            crate::uart_print(b"[LLM][STREAM] infer id="); self.print_number_simple(res.infer_id as u64);
-            crate::uart_print(b" tokens="); self.print_number_simple(res.tokens_emitted as u64);
-            crate::uart_print(b" latency_us="); self.print_number_simple(res.latency_us as u64);
-            crate::uart_print(b"\n");
-        }
-    }
-
-    #[cfg(feature = "llm")]
-    fn cmd_llmgraph(&self, args: &[&str]) {
-        if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: llmgraph <prompt text>\n"); }
-            return;
-        }
-        // Build prompt string
-        let mut prompt = alloc::string::String::new();
-        for (k,p) in args.iter().enumerate(){ if k>0 { prompt.push(' ');} prompt.push_str(p);}        
-        // Create a tiny graph with one operator reading TEXT and printing tokens
-        let mut g = crate::graph::GraphApi::create();
-        let in_ch = g.add_channel(crate::graph::ChannelSpec{capacity:64});
-        let out_ch = g.add_channel(crate::graph::ChannelSpec{capacity:64});
-        let _op = g.add_operator(crate::graph::OperatorSpec{
-            id: 42,
-            func: crate::graph::op_llm_run,
-            in_ch: Some(in_ch),
-            out_ch: Some(out_ch),
-            priority: 10,
-            stage: None,
-            in_schema: None,
-            out_schema: None,
-        });
-        // Allocate a TEXT tensor and enqueue to input channel
-        unsafe {
-            use crate::tensor::{TensorHeader, TensorAlloc};
-            let text_bytes = prompt.as_bytes();
-            let total = core::mem::size_of::<TensorHeader>() + text_bytes.len();
-            if let Some(h) = TensorAlloc::alloc_uninit(total, 64) {
-                if let Some(hdr) = h.header_mut() {
-                    hdr.version = 1; hdr.dtype = 0; hdr.dims = [0;4]; hdr.strides=[0;4];
-                    hdr.data_offset = core::mem::size_of::<TensorHeader>() as u64;
-                    hdr.schema_id = 1001; // SCHEMA_TEXT
-                    hdr.records = 1; hdr.quality=100; hdr._pad=0; hdr.lineage=0;
-                }
-                let dst = (h.ptr as usize + core::mem::size_of::<TensorHeader>()) as *mut u8;
-                core::ptr::copy_nonoverlapping(text_bytes.as_ptr(), dst, text_bytes.len());
-                let _ = g.channel(in_ch).try_enqueue(h);
-            }
-        }
-        // Run a few steps to give operator time to process
-        g.run_steps(4);
-        // Drain produced channel and print chunk tensors
-        let out = g.channel(out_ch);
-        let mut _drained = 0usize;
-        loop {
-            if let Some(h) = out.try_dequeue() {
-                unsafe {
-                    let (data_ptr, data_len) = if let Some(hdr)=h.header(){ ((h.ptr as usize + hdr.data_offset as usize) as *const u8, (h.len.saturating_sub(hdr.data_offset as usize))) } else { (h.ptr as *const u8, h.len) };
-                    let sl = core::slice::from_raw_parts(data_ptr, data_len);
-                    crate::uart_print(b"[LLM][GRAPH-OUT] chunk: ");
-                    crate::uart_print(sl);
-                    crate::uart_print(b"\n");
-                    crate::tensor::TensorAlloc::dealloc(h, 64);
-                }
-                _drained += 1;
-            } else { break; }
-        }
-        unsafe { crate::uart_print(b"[LLM][GRAPH] done\n"); }
-    }
 
     /// Echo command
     fn cmd_echo(&self, args: &[&str]) {
@@ -3448,75 +1434,13 @@ impl Shell {
     }
 
     /// Graph demo command
-    fn cmd_graph_demo(&self) {
-        unsafe { crate::uart_print(b"[GRAPH] Running demo (64 items)\n"); }
-        let mut demo = crate::graph::GraphDemo::new(64);
-        demo.run();
-        unsafe { crate::uart_print(b"[GRAPH] Demo complete\n"); }
-    }
+
 
     /// Simple Image -> Top-5 Labels demo (simulated pipeline)
-    fn cmd_image_demo(&self) {
-        // Simulate an image buffer (e.g., 256x256 grayscale)
-        const N: usize = 256 * 256;
-        let mut img_sum: u64 = 0;
-        let t0 = crate::graph::now_cycles();
-        // Fake acquire/normalize: fill and compute simple stats
-        let mut px: u8 = 0;
-        for _ in 0..N {
-            px = px.wrapping_add(73);
-            img_sum = img_sum.wrapping_add(px as u64);
-        }
-        let t1 = crate::graph::now_cycles();
-        // Fake model step: compute 5 scores deterministically
-        let labels: [&str; 5] = [
-            "cat", "dog", "car", "tree", "person",
-        ];
-        let mut scores = [0u32; 5];
-        for (i, s) in scores.iter_mut().enumerate() {
-            // Derive a pseudo score from img_sum and label index
-            let base = img_sum.wrapping_add((i as u64) * 0x9E37_79B9u64);
-            *s = ((base ^ (base >> 13)) as u32) % 100;
-        }
-        // Sort indices by score descending (tiny 5-element selection)
-        let mut idx = [0usize, 1, 2, 3, 4];
-        idx.sort_by(|&a, &b| scores[b].cmp(&scores[a]));
-        let t2 = crate::graph::now_cycles();
 
-        // Emit results
-        unsafe {
-            crate::uart_print(b"[RESULT] Top-5 Labels:\n");
-            for rank in 0..5 {
-                crate::uart_print(b"[RESULT] ");
-                let i = idx[rank];
-                crate::uart_print(labels[i].as_bytes());
-                crate::uart_print(b" score=");
-                self.print_number_simple(scores[i] as u64);
-                crate::uart_print(b"\n");
-            }
-        }
-        // Emit timing metrics (us)
-        let norm_us = crate::graph::cycles_to_ns(t1.saturating_sub(t0)) / 1000;
-        let model_us = crate::graph::cycles_to_ns(t2.saturating_sub(t1)) / 1000;
-        let total_us = crate::graph::cycles_to_ns(t2.saturating_sub(t0)) / 1000;
-        crate::trace::metric_kv("imagedemo_normalize_us", norm_us as usize);
-        crate::trace::metric_kv("imagedemo_model_us", model_us as usize);
-        crate::trace::metric_kv("imagedemo_total_us", total_us as usize);
-    }
 
     /// Phase 2 deterministic scheduler demo command
-    fn cmd_deterministic_demo(&self) {
-        #[cfg(feature = "deterministic")]
-        {
-            unsafe { crate::uart_print(b"[DETERMINISTIC] Running Phase 2 comprehensive demo\n"); }
-            crate::graph::deterministic_demo();
-            unsafe { crate::uart_print(b"[DETERMINISTIC] Demo complete\n"); }
-        }
-        #[cfg(not(feature = "deterministic"))]
-        {
-            unsafe { crate::uart_print(b"[DETERMINISTIC] Requires 'deterministic' feature\n"); }
-        }
-    }
+
 
     /// Show or rotate the control-plane key
     fn cmd_ctlkey(&self, args: &[&str]) {
@@ -3661,134 +1585,22 @@ impl Shell {
         }
     }
 
-    fn cmd_ml_demo(&self) {
-        unsafe { crate::uart_print(b"[ML] Running Phase 3 TinyML demonstration\n"); }
-        crate::ml::ml_demo();
-        unsafe { crate::uart_print(b"[ML] Phase 3 demonstration complete\n"); }
-    }
 
-    fn cmd_inference_demo(&self) {
-        unsafe { crate::uart_print(b"[INFERENCE] Running deterministic inference demonstration\n"); }
-        crate::inference::deterministic_inference_demo();
-        unsafe { crate::uart_print(b"[INFERENCE] Deterministic inference demonstration complete\n"); }
-    }
 
-    fn cmd_npu_demo(&self) {
-        unsafe { crate::uart_print(b"[NPU] Running NPU device emulation demonstration\n"); }
-        crate::npu::npu_demo();
-        unsafe { crate::uart_print(b"[NPU] NPU device emulation demonstration complete\n"); }
-    }
+
+
+
 
     /// NPU driver demo command (MMIO interface and interrupt handling)
-    fn cmd_npu_driver_demo(&self) {
-        unsafe { crate::uart_print(b"[NPU DRIVER] Running NPU driver demonstration with interrupt handling\n"); }
-        npu_driver_demo();
-        unsafe { crate::uart_print(b"[NPU DRIVER] NPU driver demonstration complete\n"); }
-    }
+
 
     /// AI-enhanced scheduler demo command
-    fn cmd_ai_scheduler_demo(&self) {
-        #[cfg(feature = "deterministic")]
-        {
-            unsafe { crate::uart_print(b"[AI SCHEDULER] Running AI-enhanced deterministic scheduler demonstration\n"); }
-            crate::deterministic::ai_scheduler_demo();
-            unsafe { crate::uart_print(b"[AI SCHEDULER] AI-enhanced scheduler demonstration complete\n"); }
-        }
-        #[cfg(not(feature = "deterministic"))]
-        {
-            unsafe { crate::uart_print(b"[AI SCHEDULER] AI scheduler demo requires 'deterministic' feature\n"); }
-        }
-    }
+
 
     /// CBS budget management demo command
-    fn cmd_cbs_budget_demo(&self) {
-        #[cfg(feature = "deterministic")]
-        {
-            unsafe { crate::uart_print(b"[CBS BUDGET] Running CBS+EDF AI inference budget management demonstration\n"); }
-            crate::deterministic::cbs_ai_budget_demo();
-            unsafe { crate::uart_print(b"[CBS BUDGET] CBS+EDF budget management demonstration complete\n"); }
-        }
-        #[cfg(not(feature = "deterministic"))]
-        {
-            unsafe { crate::uart_print(b"[CBS BUDGET] CBS budget demo requires 'deterministic' feature\n"); }
-        }
-    }
 
-    /// PMU demo command (cycles, instructions, L1D refills)
-    fn cmd_pmu_demo(&self) {
-        #[cfg(feature = "perf-verbose")]
-        {
-            unsafe { crate::uart_print(b"[PMU] Demo: setup events and run busy loop\n"); }
-            unsafe { crate::pmu::aarch64::setup_events(); }
-            let s0 = unsafe { crate::pmu::aarch64::read_snapshot() };
 
-            // Busy loop: arithmetic + memory touches
-            let mut acc: u64 = 0;
-            let mut buf: [u64; 128] = [0; 128];
-            for i in 0..8192 {
-                acc = acc.wrapping_mul(6364136223846793005).wrapping_add(1);
-                let idx = (i & 127) as usize;
-                buf[idx] = buf[idx].wrapping_add(acc ^ (i as u64));
-            }
-            unsafe { core::ptr::read_volatile(&acc); }
-
-            let s1 = unsafe { crate::pmu::aarch64::read_snapshot() };
-            let d_cycles = s1.cycles.saturating_sub(s0.cycles);
-            let d_inst = s1.inst.saturating_sub(s0.inst);
-            let d_l1d = s1.l1d_refill.saturating_sub(s0.l1d_refill);
-            unsafe {
-                crate::uart_print(b"METRIC pmu_cycles="); self.print_number_simple(d_cycles);
-                crate::uart_print(b"\nMETRIC pmu_inst="); self.print_number_simple(d_inst);
-                crate::uart_print(b"\nMETRIC pmu_l1d_refill="); self.print_number_simple(d_l1d);
-                crate::uart_print(b"\n");
-            }
-            if d_inst == 0 {
-                unsafe { crate::uart_print(b"[PMU] Note: instructions counter may be unsupported in this QEMU build\n"); }
-            }
-        }
-        #[cfg(not(feature = "perf-verbose"))]
-        unsafe {
-            crate::uart_print(b"[PMU] perf-verbose feature not enabled\n");
-        }
-    }
-
-    /// Inject a control-plane frame as hex (V0 framing: 'C', ver, cmd, flags, len, payload)
-    fn cmd_ctlhex(&self, args: &[&str]) {
-        if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: ctlhex <hex>\n"); }
-            return;
-        }
-        let s = args[0].trim();
-        let bytes = s.as_bytes();
-        let mut buf = [0u8; 256];
-        let mut bi = 0usize;
-        let mut i = 0usize;
-        while i + 1 < bytes.len() && bi < buf.len() {
-            let hn = match bytes[i] {
-                b'0'..=b'9' => bytes[i] - b'0',
-                b'a'..=b'f' => bytes[i] - b'a' + 10,
-                b'A'..=b'F' => bytes[i] - b'A' + 10,
-                _ => 0xFF,
-            };
-            let ln = match bytes[i + 1] {
-                b'0'..=b'9' => bytes[i + 1] - b'0',
-                b'a'..=b'f' => bytes[i + 1] - b'a' + 10,
-                b'A'..=b'F' => bytes[i + 1] - b'A' + 10,
-                _ => 0xFF,
-            };
-            if hn > 15 || ln > 15 {
-                unsafe { crate::uart_print(b"[CTL] invalid hex\n"); }
-                return;
-            }
-            buf[bi] = ((hn as u8) << 4) | (ln as u8);
-            bi += 1;
-            i += 2;
-        }
-        match crate::control::handle_frame(&buf[..bi]) {
-            Ok(()) => unsafe { crate::uart_print(b"[CTL] ok\n"); }
-            Err(_) => unsafe { crate::uart_print(b"[CTL] error\n"); }
-        }
-    }
+    
 
     /// Graph control convenience command
     fn cmd_graphctl(&self, args: &[&str]) {
@@ -3797,220 +1609,17 @@ impl Shell {
             return;
         }
 
-        // Helper to send a framed control message
-        fn send_frame(cmd: u8, payload: &[u8]) -> bool {
-            // Prepend 64-bit capability token to payload
-            const TOKEN: u64 = 0x53535F4354524C21; // must match kernel CONTROL_TOKEN
-            let token = TOKEN.to_le_bytes();
-            let mut buf = [0u8; 96];
-            let total = 8 + 8 + payload.len();
-            if total > buf.len() { unsafe { crate::uart_print(b"[CTL] payload too large\n"); } return false; }
-            buf[0] = 0x43; // 'C'
-            buf[1] = 0;    // ver
-            buf[2] = cmd;  // cmd
-            buf[3] = 0;    // flags
-            let len = (8 + payload.len()) as u32; // include token in payload length
-            let le = len.to_le_bytes();
-            buf[4] = le[0]; buf[5] = le[1]; buf[6] = le[2]; buf[7] = le[3];
-            // write token then payload
-            let mut off = 8;
-            for i in 0..8 { buf[off + i] = token[i]; }
-            off += 8;
-            for i in 0..payload.len() { buf[off + i] = payload[i]; }
-            match crate::control::handle_frame(&buf[..total]) {
-                Ok(()) => unsafe { crate::uart_print(b"[CTL] ok\n"); true },
-                Err(_) => unsafe { crate::uart_print(b"[CTL] error\n"); false },
-            }
-        }
-
         match args[0] {
-            "create" => {
-                let _ = send_frame(0x01, &[]);
-            }
-            "add-channel" => {
-                if args.len() < 2 { unsafe { crate::uart_print(b"Usage: graphctl add-channel <capacity>\n"); } return; }
-                if let Ok(cap) = args[1].parse::<u32>() {
-                    if cap == 0 || cap > 65535 { unsafe { crate::uart_print(b"[CTL] capacity must be 1..65535\n"); } return; }
-                    // Prefer direct path to avoid frame-path issues
-                    match crate::control::add_channel_direct(cap as u16) {
-                        Ok(()) => unsafe { crate::uart_print(b"[CTL] ok\n"); },
-                        Err(_) => unsafe { crate::uart_print(b"[CTL] error\n"); },
-                    }
-                } else {
-                    unsafe { crate::uart_print(b"[CTL] invalid capacity\n"); }
-                }
-            }
-            "add-operator" => {
-                if args.len() < 2 { unsafe { crate::uart_print(b"Usage: graphctl add-operator <op_id> [--in N|none] [--out N|none] [--prio P] [--stage acquire|clean|explore|model|explain] [--in-schema S] [--out-schema S]\n"); } return; }
-                let op_id = match args[1].parse::<u32>() { Ok(v) => v, Err(_) => { unsafe { crate::uart_print(b"[CTL] invalid op_id\n"); } return; } };
-                let mut in_ch: Option<u16> = None;
-                let mut out_ch: Option<u16> = None;
-                let mut prio: u8 = 10;
-                let mut stage: u8 = 0; // acquire
-                let mut _in_schema: Option<u32> = None;
-                let mut _out_schema: Option<u32> = None;
-
-                let mut i = 2;
-                while i < args.len() {
-                    match args[i] {
-                        "--in" => {
-                            i += 1; if i >= args.len() { unsafe { crate::uart_print(b"[CTL] --in requires a value\n"); } return; }
-                            let v = args[i];
-                            if v.eq_ignore_ascii_case("none") { in_ch = None; } else if let Ok(n) = v.parse::<u32>() { if n <= 0xFFFF { in_ch = Some(n as u16); } else { unsafe { crate::uart_print(b"[CTL] --in out of range\n"); } return; } } else { unsafe { crate::uart_print(b"[CTL] invalid --in\n"); } return; }
-                        }
-                        "--out" => {
-                            i += 1; if i >= args.len() { unsafe { crate::uart_print(b"[CTL] --out requires a value\n"); } return; }
-                            let v = args[i];
-                            if v.eq_ignore_ascii_case("none") { out_ch = None; } else if let Ok(n) = v.parse::<u32>() { if n <= 0xFFFF { out_ch = Some(n as u16); } else { unsafe { crate::uart_print(b"[CTL] --out out of range\n"); } return; } } else { unsafe { crate::uart_print(b"[CTL] invalid --out\n"); } return; }
-                        }
-                        "--prio" | "--priority" => {
-                            i += 1; if i >= args.len() { unsafe { crate::uart_print(b"[CTL] --prio requires a value\n"); } return; }
-                            match args[i].parse::<u32>() { Ok(n) if n <= 255 => prio = n as u8, _ => { unsafe { crate::uart_print(b"[CTL] invalid --prio\n"); } return; } }
-                        }
-                        "--stage" => {
-                            i += 1; if i >= args.len() { unsafe { crate::uart_print(b"[CTL] --stage requires a value\n"); } return; }
-                            stage = match args[i] {
-                                "acquire" => 0,
-                                "clean" => 1,
-                                "explore" => 2,
-                                "model" => 3,
-                                "explain" => 4,
-                                _ => { unsafe { crate::uart_print(b"[CTL] invalid stage (use acquire|clean|explore|model|explain)\n"); } return; }
-                            };
-                        }
-                        "--in-schema" => {
-                            i += 1; if i >= args.len() { unsafe { crate::uart_print(b"[CTL] --in-schema requires a value\n"); } return; }
-                            match args[i].parse::<u32>() { Ok(s) => _in_schema = Some(s), Err(_) => { unsafe { crate::uart_print(b"[CTL] invalid --in-schema\n"); } return; } }
-                        }
-                        "--out-schema" => {
-                            i += 1; if i >= args.len() { unsafe { crate::uart_print(b"[CTL] --out-schema requires a value\n"); } return; }
-                            match args[i].parse::<u32>() { Ok(s) => _out_schema = Some(s), Err(_) => { unsafe { crate::uart_print(b"[CTL] invalid --out-schema\n"); } return; } }
-                        }
-                        _ => { unsafe { crate::uart_print(b"[CTL] unknown option\n"); } return; }
-                    }
-                    i += 1;
-                }
-                // Prefer direct path to avoid rare stalls in frame path for certain options
-                // Pass optional schemas for strict enforcement when provided
-                let _ = crate::control::add_operator_direct(op_id, in_ch, out_ch, prio, stage, _in_schema, _out_schema);
-            }
-            "start" => {
-                if args.len() < 2 { unsafe { crate::uart_print(b"Usage: graphctl start <steps>\n"); } return; }
-                if let Ok(steps) = args[1].parse::<u32>() {
-                    let le = steps.to_le_bytes();
-                    let payload = [le[0], le[1], le[2], le[3]];
-                    let _ = send_frame(0x04, &payload);
-                } else {
-                    unsafe { crate::uart_print(b"[CTL] invalid steps\n"); }
-                }
-            }
-            "det" | "deterministic" => {
-                if args.len() < 4 { unsafe { crate::uart_print(b"Usage: graphctl det <wcet_ns> <period_ns> <deadline_ns>\n"); } return; }
-                let wcet = match args[1].parse::<u64>() { Ok(v) => v, Err(_) => { unsafe { crate::uart_print(b"[CTL] invalid wcet\n"); } return; } };
-                let period = match args[2].parse::<u64>() { Ok(v) => v, Err(_) => { unsafe { crate::uart_print(b"[CTL] invalid period\n"); } return; } };
-                let deadline = match args[3].parse::<u64>() { Ok(v) => v, Err(_) => { unsafe { crate::uart_print(b"[CTL] invalid deadline\n"); } return; } };
-                let mut buf = [0u8; 24];
-                let w = wcet.to_le_bytes(); buf[0..8].copy_from_slice(&w);
-                let p = period.to_le_bytes(); buf[8..16].copy_from_slice(&p);
-                let d = deadline.to_le_bytes(); buf[16..24].copy_from_slice(&d);
-                let _ = send_frame(0x06, &buf);
-            }
-            "stats" => {
-                // Print a concise summary and METRICs for graph structure
-                if let Some((ops, chans)) = crate::control::current_graph_counts() {
-                    unsafe {
-                        crate::uart_print(b"GRAPH: counts ops="); self.print_number_simple(ops as u64); crate::uart_print(b" channels="); self.print_number_simple(chans as u64); crate::uart_print(b"\n");
-                        crate::uart_print(b"METRIC graph_stats_ops="); self.print_number_simple(ops as u64); crate::uart_print(b"\n");
-                        crate::uart_print(b"METRIC graph_stats_channels="); self.print_number_simple(chans as u64); crate::uart_print(b"\n");
-                    }
-                } else {
-                    unsafe { crate::uart_print(b"GRAPH: no active graph\n"); }
-                }
-            }
-            "show" | "export" => {
-                match crate::control::export_graph_text() {
-                    Ok(()) => unsafe { crate::uart_print(b"[GRAPH] export complete\n"); },
-                    Err(_) => unsafe { crate::uart_print(b"[GRAPH] no active graph\n"); },
-                }
-            }
-            "export-json" => {
-                match crate::control::export_graph_json() {
-                    Ok(()) => {},
-                    Err(_) => unsafe { crate::uart_print(b"[GRAPH] no active graph\n"); },
-                }
-            }
-            "predict" => {
-                if args.len() < 4 {
-                    unsafe { crate::uart_print(b"Usage: graphctl predict <op_id> <recent_latency_us> <channel_depth> <priority>\n"); }
-                    return;
-                }
-                let op_id = match args[1].parse::<u32>() {
-                    Ok(v) => v,
-                    Err(_) => { unsafe { crate::uart_print(b"[GRAPH] invalid op_id\n"); } return; }
-                };
-                let latency_us = match args[2].parse::<u32>() {
-                    Ok(v) => v,
-                    Err(_) => { unsafe { crate::uart_print(b"[GRAPH] invalid latency\n"); } return; }
-                };
-                let depth = match args[3].parse::<usize>() {
-                    Ok(v) => v,
-                    Err(_) => { unsafe { crate::uart_print(b"[GRAPH] invalid depth\n"); } return; }
-                };
-                let priority = if args.len() > 4 {
-                    match args[4].parse::<u8>() {
-                        Ok(v) => v,
-                        Err(_) => 10u8
-                    }
-                } else {
-                    10u8
-                };
-
-                let (confidence, will_meet_deadline) = crate::neural::predict_operator_health(op_id, latency_us, depth, priority);
-                unsafe {
-                    crate::uart_print(b"[GRAPH] Operator ");
-                }
-                self.print_number_simple(op_id as u64);
-                unsafe {
-                    crate::uart_print(b" prediction: ");
-                    if will_meet_deadline {
-                        crate::uart_print(b"HEALTHY (will meet deadline)");
-                    } else {
-                        crate::uart_print(b"UNHEALTHY (may miss deadline)");
-                    }
-                    crate::uart_print(b"\n[GRAPH] Confidence: ");
-                }
-                self.print_number_simple(confidence as u64);
-                unsafe { crate::uart_print(b"/1000\n"); }
-            }
-            "feedback" => {
-                if args.len() < 3 {
-                    unsafe { crate::uart_print(b"Usage: graphctl feedback <op_id> <helpful|not_helpful|expected>\n"); }
-                    return;
-                }
-                let op_id = match args[1].parse::<u32>() {
-                    Ok(v) => v,
-                    Err(_) => { unsafe { crate::uart_print(b"[GRAPH] invalid op_id\n"); } return; }
-                };
-                let feedback_code = match args[2] {
-                    "helpful" => 1u8,
-                    "not_helpful" | "not-helpful" => 2u8,
-                    "expected" => 3u8,
-                    _ => {
-                        unsafe { crate::uart_print(b"[GRAPH] Invalid feedback. Use: helpful, not_helpful, or expected\n"); }
-                        return;
-                    }
-                };
-                crate::neural::record_operator_feedback(op_id, feedback_code);
-                unsafe {
-                    crate::uart_print(b"[GRAPH] Feedback recorded for operator ");
-                }
-                self.print_number_simple(op_id as u64);
-                unsafe {
-                    crate::uart_print(b": ");
-                    crate::uart_print(args[2].as_bytes());
-                    crate::uart_print(b"\n[GRAPH] Use 'neuralctl retrain 10' to apply feedback to network\n");
-                }
-            }
+            "create" => { self.graphctl_create(); }
+            "add-channel" => { self.graphctl_add_channel(&args[1..]); }
+            "add-operator" => { self.graphctl_add_operator(&args[1..]); }
+            "start" => { self.graphctl_start(&args[1..]); }
+            "det" | "deterministic" => { self.graphctl_det(&args[1..]); }
+            "stats" => { self.graphctl_stats(); }
+            "show" | "export" => { self.graphctl_show_export(); }
+            "export-json" => { self.graphctl_export_json(); }
+            "predict" => { self.graphctl_predict(&args[1..]); }
+            "feedback" => { self.graphctl_feedback(&args[1..]); }
             _ => unsafe { crate::uart_print(b"Usage: graphctl <create|add-channel|add-operator|start|det|stats|show|export-json|predict|feedback> ...\n"); }
         }
     }
@@ -4053,7 +1662,10 @@ impl Shell {
             crate::uart_print(b"  Address Space Layout:\n");
             crate::uart_print(b"    0x00000000-0x3FFFFFFF: Device Memory\n");
             crate::uart_print(b"    0x40000000-0x7FFFFFFF: Normal Memory\n");
-            crate::uart_print(b"    UART Base: 0x09000000\n");
+            crate::uart_print(b"    UART Base: ");
+            let base = crate::platform::active().uart().base as u64;
+            self.print_hex(base);
+            crate::uart_print(b"\n");
         }
     }
 
@@ -4483,6 +2095,17 @@ pub fn print_number_simple(mut num: u64) {
 
 }
 
+/// Simple i64 printing function (for signed numbers)
+#[cfg(target_arch = "riscv64")]
+pub fn print_number_signed(num: i64) {
+    if num < 0 {
+        unsafe { crate::uart_print(b"-"); }
+        print_number_simple((-num) as u64);
+    } else {
+        print_number_simple(num as u64);
+    }
+}
+
 // reserved: control-plane injection helpers (to be added later as needed)
 
     /// Clear screen command
@@ -4494,354 +2117,44 @@ pub fn print_number_simple(mut num: u64) {
     }
 
     /// Comprehensive real-time AI inference validation demo
-    fn cmd_realtime_ai_validation(&self) {
-        #[cfg(feature = "deterministic")]
-        {
-            unsafe { crate::uart_print(b"\n[RT-AI VALIDATION] ========== Real-Time AI Inference Validation ==========\n"); }
-            unsafe { crate::uart_print(b"[RT-AI VALIDATION] Testing <10us inference latency with deterministic guarantees\n"); }
-            
-            // Test deterministic timing with ARM PMU
-            self.test_cycle_accurate_inference();
-            
-            // Test temporal isolation
-            self.test_temporal_isolation();
-            
-            // Test priority-based inference
-            self.test_priority_inference_scheduling();
-            
-            // Test budget management
-            self.test_inference_budget_compliance();
-            
-            // Emit structured metrics for external test suite parsing
-            unsafe { crate::uart_print(b"METRIC ai_inference_latency_us=3.25\n"); }
-            unsafe { crate::uart_print(b"METRIC ai_deadline_misses=0\n"); }
-            unsafe { crate::uart_print(b"METRIC neural_engine_utilization=85.5\n"); }
-            unsafe { crate::uart_print(b"METRIC deterministic_scheduler_active=1\n"); }
-            
-            unsafe { crate::uart_print(b"[RT-AI VALIDATION] Real-time AI validation complete\n\n"); }
-        }
-        #[cfg(not(feature = "deterministic"))]
-        {
-            unsafe { crate::uart_print(b"[RT-AI VALIDATION] Real-time AI validation requires 'deterministic' feature\n"); }
-        }
-    }
+
 
     /// Comprehensive temporal isolation demonstration
-    fn cmd_temporal_isolation_demo(&self) {
-        #[cfg(feature = "deterministic")]
-        {
-            unsafe { crate::uart_print(b"\n[TEMPORAL ISOLATION] ========== AI Temporal Isolation Demo ==========\n"); }
-            unsafe { crate::uart_print(b"[TEMPORAL ISOLATION] Demonstrating AI and traditional task isolation\n"); }
-            
-            self.demonstrate_workload_isolation();
-            self.measure_interference_bounds();
-            self.validate_deterministic_behavior();
-            
-            // Emit structured metrics for external test suite parsing  
-            unsafe { crate::uart_print(b"METRIC ai_workload_latency_us=12.5\n"); }
-            unsafe { crate::uart_print(b"METRIC traditional_workload_latency_us=8.2\n"); }
-            unsafe { crate::uart_print(b"METRIC concurrent_workload_latency_us=15.8\n"); }
-            unsafe { crate::uart_print(b"METRIC interference_overhead_percent=2.1\n"); }
-            unsafe { crate::uart_print(b"METRIC temporal_isolation_verified=1\n"); }
-            
-            unsafe { crate::uart_print(b"[TEMPORAL ISOLATION] Temporal isolation validation complete\n\n"); }
-        }
-        #[cfg(not(feature = "deterministic"))]
-        {
-            unsafe { crate::uart_print(b"[TEMPORAL ISOLATION] Temporal isolation demo requires 'deterministic' feature\n"); }
-        }
-    }
+
 
     /// End-to-end Phase 3 AI inference system validation
-    fn cmd_phase3_validation(&self) {
-        unsafe { crate::uart_print(b"\n[PHASE 3 VALIDATION] ========== Phase 3 AI-Native Kernel Validation ==========\n"); }
-        unsafe { crate::uart_print(b"[PHASE 3 VALIDATION] Comprehensive Phase 3 AI inference system validation\n"); }
-        
-        // Validate ML runtime
-        self.validate_ml_runtime_integration();
-        
-        // Validate NPU driver
-        self.validate_npu_driver_performance();
-        
-        // Validate scheduler integration
-        #[cfg(feature = "deterministic")]
-        self.validate_scheduler_ai_integration();
-        
-        // Validate end-to-end performance
-        self.validate_end_to_end_performance();
-        
-        unsafe { crate::uart_print(b"[PHASE 3 VALIDATION] Phase 3 validation complete - AI-native kernel operational\n"); }
-        
-        // Emit structured completion marker for external test suite
-        unsafe { crate::uart_print(b"METRIC phase3_validation_complete=1\n"); }
-        unsafe { crate::uart_print(b"METRIC phase3_overall_score=100.0\n"); }
-        unsafe { crate::uart_print(b"METRIC phase3_tests_passed=10\n"); }
-        unsafe { crate::uart_print(b"METRIC phase3_tests_total=10\n"); }
-        
-        // Final completion marker
-        unsafe { crate::uart_print(b"[PHASE 3 VALIDATION] Phase 3 validation complete\n\n"); }
-    }
+
 
     // Validation helper methods for comprehensive AI inference testing
     
     #[allow(dead_code)]
-    fn test_cycle_accurate_inference(&self) {
-        unsafe { crate::uart_print(b"[RT-AI] Testing cycle-accurate inference with ARM PMU\n"); }
-        
-        #[cfg(target_arch = "aarch64")]
-        {
-            // Test deterministic inference timing
-            let cycles_before = self.read_pmu_cycles();
-            
-            // Simulate AI inference with known timing
-            self.simulate_deterministic_inference();
-            
-            let cycles_after = self.read_pmu_cycles();
-            let inference_cycles = cycles_after.wrapping_sub(cycles_before);
-            
-            unsafe { 
-                crate::uart_print(b"[RT-AI] Inference completed in ");
-                self.print_number_simple(inference_cycles);
-                crate::uart_print(b" cycles\n");
-                
-                if inference_cycles < 25000 { // ~10us at 2.4GHz
-                    crate::uart_print(b"[RT-AI] OK <10us inference latency target met\n");
-                } else {
-                    crate::uart_print(b"[RT-AI] FAIL Inference latency exceeds 10us target\n");
-                }
-            }
-        }
-        
-        #[cfg(not(target_arch = "aarch64"))]
-        {
-            unsafe { crate::uart_print(b"[RT-AI] ARM PMU cycle counting not available on this architecture\n"); }
-        }
-    }
+
     
     #[allow(dead_code)]
-    fn test_temporal_isolation(&self) {
-        unsafe { crate::uart_print(b"[RT-AI] Testing temporal isolation between AI and traditional tasks\n"); }
-        
-        // Simulate concurrent workloads
-        #[cfg(feature = "deterministic")]
-        {
-            crate::deterministic::test_ai_traditional_isolation();
-            unsafe { crate::uart_print(b"[RT-AI] OK Temporal isolation validated - no interference detected\n"); }
-        }
-        
-        #[cfg(not(feature = "deterministic"))]
-        {
-            unsafe { crate::uart_print(b"[RT-AI] Temporal isolation testing requires deterministic scheduler\n"); }
-        }
-    }
+
     
     #[allow(dead_code)]
-    fn test_priority_inference_scheduling(&self) {
-        unsafe { crate::uart_print(b"[RT-AI] Testing priority-based AI inference scheduling\n"); }
-        
-        #[cfg(feature = "deterministic")]
-        {
-            crate::deterministic::test_priority_ai_scheduling();
-            unsafe { crate::uart_print(b"[RT-AI] OK Priority-based inference scheduling validated\n"); }
-        }
-        
-        #[cfg(not(feature = "deterministic"))]
-        {
-            unsafe { crate::uart_print(b"[RT-AI] Priority scheduling testing requires deterministic scheduler\n"); }
-        }
-    }
+
     
     #[allow(dead_code)]
-    fn test_inference_budget_compliance(&self) {
-        unsafe { crate::uart_print(b"[RT-AI] Testing AI inference budget compliance\n"); }
-        
-        #[cfg(feature = "deterministic")]
-        {
-            crate::deterministic::test_ai_budget_compliance();
-            unsafe { crate::uart_print(b"[RT-AI] OK Budget compliance validated - no overruns detected\n"); }
-        }
-        
-        #[cfg(not(feature = "deterministic"))]
-        {
-            unsafe { crate::uart_print(b"[RT-AI] Budget compliance testing requires deterministic scheduler\n"); }
-        }
-    }
+
     
     #[allow(dead_code)]
-    fn demonstrate_workload_isolation(&self) {
-        unsafe { crate::uart_print(b"[TEMPORAL ISO] Demonstrating AI and traditional workload isolation\n"); }
-        
-        // Run concurrent AI and traditional tasks
-        let ai_start_time = self.get_timestamp_ns();
-        self.simulate_ai_workload();
-        let ai_end_time = self.get_timestamp_ns();
-        
-        let traditional_start_time = self.get_timestamp_ns();
-        self.simulate_traditional_workload(); 
-        let traditional_end_time = self.get_timestamp_ns();
-        
-        let concurrent_start_time = self.get_timestamp_ns();
-        self.simulate_concurrent_workloads();
-        let concurrent_end_time = self.get_timestamp_ns();
-        
-        unsafe {
-            crate::uart_print(b"[TEMPORAL ISO] AI workload: ");
-            self.print_number_simple(ai_end_time - ai_start_time);
-            crate::uart_print(b"ns\n");
-            
-            crate::uart_print(b"[TEMPORAL ISO] Traditional workload: ");
-            self.print_number_simple(traditional_end_time - traditional_start_time);
-            crate::uart_print(b"ns\n");
-            
-            crate::uart_print(b"[TEMPORAL ISO] Concurrent workloads: ");
-            self.print_number_simple(concurrent_end_time - concurrent_start_time);
-            crate::uart_print(b"ns\n");
-            
-            crate::uart_print(b"[TEMPORAL ISO] OK Workload isolation demonstrated\n");
-        }
-    }
+
     
     #[allow(dead_code)]
-    fn measure_interference_bounds(&self) {
-        unsafe { crate::uart_print(b"[TEMPORAL ISO] Measuring cross-workload interference bounds\n"); }
-        
-        // Test interference between AI and traditional tasks
-        let baseline_ai_latency = 8500; // ns
-        let measured_ai_latency = 8650; // ns with interference
-        let interference_overhead = measured_ai_latency - baseline_ai_latency;
-        
-        unsafe {
-            crate::uart_print(b"[TEMPORAL ISO] Baseline AI latency: ");
-            self.print_number_simple(baseline_ai_latency);
-            crate::uart_print(b"ns\n");
-            
-            crate::uart_print(b"[TEMPORAL ISO] AI latency with interference: ");
-            self.print_number_simple(measured_ai_latency);
-            crate::uart_print(b"ns\n");
-            
-            crate::uart_print(b"[TEMPORAL ISO] Interference overhead: ");
-            self.print_number_simple(interference_overhead);
-            crate::uart_print(b"ns (");
-            self.print_number_simple((interference_overhead * 100) / baseline_ai_latency);
-            crate::uart_print(b"%)\n");
-            
-            if interference_overhead < 500 { // <500ns acceptable
-                crate::uart_print(b"[TEMPORAL ISO] OK Interference bounds within acceptable limits\n");
-            } else {
-                crate::uart_print(b"[TEMPORAL ISO] FAIL Interference exceeds acceptable bounds\n");
-            }
-        }
-    }
+
     
     #[allow(dead_code)]
-    fn validate_deterministic_behavior(&self) {
-        unsafe { crate::uart_print(b"[TEMPORAL ISO] Validating deterministic timing behavior\n"); }
-        
-        // Run multiple inference iterations and measure consistency
-        let mut measurements = [0u64; 10];
-        for i in 0..10 {
-            let start = self.get_timestamp_ns();
-            self.simulate_deterministic_inference();
-            let end = self.get_timestamp_ns();
-            measurements[i] = end - start;
-        }
-        
-        // Calculate variance
-        let mut sum = 0u64;
-        for &measurement in &measurements {
-            sum += measurement;
-        }
-        let mean = sum / 10;
-        
-        let mut variance_sum = 0u64;
-        for &measurement in &measurements {
-            let diff = if measurement > mean { measurement - mean } else { mean - measurement };
-            variance_sum += diff * diff;
-        }
-        let variance = variance_sum / 10;
-        let std_dev = self.sqrt_approximation(variance);
-        
-        unsafe {
-            crate::uart_print(b"[TEMPORAL ISO] Mean inference time: ");
-            self.print_number_simple(mean);
-            crate::uart_print(b"ns\n");
-            
-            crate::uart_print(b"[TEMPORAL ISO] Standard deviation: ");
-            self.print_number_simple(std_dev);
-            crate::uart_print(b"ns\n");
-            
-            let coefficient_of_variation = (std_dev * 100) / mean;
-            crate::uart_print(b"[TEMPORAL ISO] Coefficient of variation: ");
-            self.print_number_simple(coefficient_of_variation);
-            crate::uart_print(b"%\n");
-            
-            if coefficient_of_variation < 5 { // <5% acceptable
-                crate::uart_print(b"[TEMPORAL ISO] OK Deterministic behavior validated\n");
-            } else {
-                crate::uart_print(b"[TEMPORAL ISO] FAIL High timing variance detected\n");
-            }
-        }
-    }
+
     
-    fn validate_ml_runtime_integration(&self) {
-        unsafe { crate::uart_print(b"[PHASE 3] Validating ML runtime integration\n"); }
-        
-        // Test ML runtime functionality
-        ml_runtime_validation_demo();
-        
-        unsafe { crate::uart_print(b"[PHASE 3] OK ML runtime integration validated\n"); }
-    }
+
     
-    fn validate_npu_driver_performance(&self) {
-        unsafe { crate::uart_print(b"[PHASE 3] Validating NPU driver performance\n"); }
-        
-        // Test NPU driver performance
-        npu_driver_performance_validation();
-        
-        unsafe { crate::uart_print(b"[PHASE 3] OK NPU driver performance validated\n"); }
-    }
+
     
-    #[cfg(feature = "deterministic")]
-    fn validate_scheduler_ai_integration(&self) {
-        unsafe { crate::uart_print(b"[PHASE 3] Validating CBS+EDF AI scheduler integration\n"); }
-        
-        crate::deterministic::validate_ai_scheduler_integration();
-        
-        unsafe { crate::uart_print(b"[PHASE 3] OK AI scheduler integration validated\n"); }
-    }
+
     
-    fn validate_end_to_end_performance(&self) {
-        unsafe { crate::uart_print(b"[PHASE 3] Validating end-to-end AI inference performance\n"); }
-        
-        // Test complete AI inference pipeline
-        let pipeline_start = self.get_timestamp_ns();
-        
-        // 1. Load model
-        self.simulate_model_loading();
-        
-        // 2. Submit inference job
-        #[cfg(feature = "deterministic")]
-        crate::deterministic::submit_test_ai_inference();
-        
-        // 3. Process via NPU
-        npu_process_test_inference();
-        
-        // 4. Retrieve results
-        let pipeline_end = self.get_timestamp_ns();
-        let total_latency = pipeline_end - pipeline_start;
-        
-        unsafe {
-            crate::uart_print(b"[PHASE 3] End-to-end AI inference latency: ");
-            self.print_number_simple(total_latency);
-            crate::uart_print(b"ns\n");
-            
-            if total_latency < 15000 { // <15us target for full pipeline
-                crate::uart_print(b"[PHASE 3] OK End-to-end performance target met\n");
-            } else {
-                crate::uart_print(b"[PHASE 3] FAIL End-to-end latency exceeds target\n");
-            }
-        }
-    }
+
     
     // Helper methods for testing
     
@@ -4905,48 +2218,11 @@ pub fn print_number_simple(mut num: u64) {
         }
     }
     
-    fn simulate_model_loading(&self) {
-        // Simulate model loading delay
-        for _ in 0..25000 {
-            unsafe {
-                core::arch::asm!("nop", options(nostack, nomem));
-            }
-        }
-    }
+
     
-    fn get_timestamp_ns(&self) -> u64 {
-        #[cfg(target_arch = "aarch64")]
-        {
-            let mut cycles: u64;
-            unsafe {
-                core::arch::asm!(
-                    "mrs {}, cntvct_el0",
-                    out(reg) cycles,
-                    options(nostack, nomem)
-                );
-            }
-            
-            // Convert cycles to nanoseconds (assuming 2.4GHz)
-            (cycles * 1000) / 2400000
-        }
-        
-        #[cfg(not(target_arch = "aarch64"))]
-        {
-            0 // Fallback for non-ARM architectures
-        }
-    }
+
     
-    #[allow(dead_code)]
-    fn sqrt_approximation(&self, n: u64) -> u64 {
-        if n == 0 { return 0; }
-        let mut x = n;
-        let mut y = (x + 1) / 2;
-        while y < x {
-            x = y;
-            y = (x + n / x) / 2;
-        }
-        x
-    }
+
 
     /// Unknown command handler
     fn cmd_unknown(&self, cmd: &str) {
@@ -5071,10 +2347,10 @@ pub fn print_number_simple(mut num: u64) {
 /// Initialize and run the shell
 pub fn run_shell() {
     unsafe {
-        // Minimal MMIO marker to confirm entry
-        const UART0_DR: *mut u32 = 0x0900_0000 as *mut u32;
-        core::ptr::write_volatile(UART0_DR, 'S' as u32);
-        core::ptr::write_volatile(UART0_DR, '\n' as u32);
+        // Minimal marker to confirm entry using platform UART base
+        let dr = crate::platform::active().uart().base as *mut u32;
+        core::ptr::write_volatile(dr, 'S' as u32);
+        core::ptr::write_volatile(dr, '\n' as u32);
     }
     let mut shell = Shell::new();
     shell.run();
@@ -5084,9 +2360,9 @@ pub fn run_shell() {
 #[inline(never)]
 pub extern "C" fn shell_probe_trampoline() {
     unsafe {
-        const UART0_DR: *mut u32 = 0x0900_0000 as *mut u32;
-        core::ptr::write_volatile(UART0_DR, 't' as u32);
-        core::ptr::write_volatile(UART0_DR, '\n' as u32);
+        let dr = crate::platform::active().uart().base as *mut u32;
+        core::ptr::write_volatile(dr, 't' as u32);
+        core::ptr::write_volatile(dr, '\n' as u32);
     }
 }
 
@@ -5094,14 +2370,15 @@ pub extern "C" fn shell_probe_trampoline() {
 #[inline(never)]
 pub extern "C" fn run_shell_c() {
     unsafe {
-        const UART0_DR: *mut u32 = 0x0900_0000 as *mut u32;
-        core::ptr::write_volatile(UART0_DR, 's' as u32);
-        core::ptr::write_volatile(UART0_DR, '\n' as u32);
+        let dr = crate::platform::active().uart().base as *mut u32;
+        core::ptr::write_volatile(dr, 's' as u32);
+        core::ptr::write_volatile(dr, '\n' as u32);
     }
     run_shell();
 }
 
 /// NPU driver demonstration function
+#[cfg(feature = "demos")]
 pub fn npu_driver_demo() {
     use crate::npu_driver::{initialize_npu_driver, submit_ai_inference, get_npu_stats, NPU_DRIVER};
     use crate::ml::{VerifiedMLModel, ModelMetadata, ModelId, ArenaPtr, DataType};
@@ -5226,50 +2503,30 @@ pub fn print_number_simple(mut num: u64) {
     }
 }
 
+/// Simple i64 printing function (for signed numbers)
+pub fn print_number_signed(num: i64) {
+    if num < 0 {
+        unsafe { crate::uart_print(b"-"); }
+        print_number_simple((-num) as u64);
+    } else {
+        print_number_simple(num as u64);
+    }
+}
+
 // Comprehensive AI inference validation functions
 
 /// ML runtime validation demonstration
-pub fn ml_runtime_validation_demo() {
-    unsafe { crate::uart_print(b"[ML RUNTIME] Validating TinyML runtime with static arenas\n"); }
-    
-    // Test model loading
-    crate::ml::test_model_loading();
-    
-    // Test inference execution
-    crate::inference::test_bounded_inference();
-    
-    unsafe { crate::uart_print(b"[ML RUNTIME] ML runtime validation complete\n"); }
-}
+
 
 /// NPU driver performance validation
-pub fn npu_driver_performance_validation() {
-    unsafe { crate::uart_print(b"[NPU PERF] Validating NPU driver performance metrics\n"); }
-    
-    // Test job submission and completion
-    test_npu_job_lifecycle();
-    
-    // Test interrupt handling performance
-    test_npu_interrupt_latency();
-    
-    // Test queue utilization
-    test_npu_queue_efficiency();
-    
-    unsafe { crate::uart_print(b"[NPU PERF] NPU driver performance validation complete\n"); }
-}
+
 
 /// NPU test inference processing with simulation fallback.
 ///
 /// For QEMU/development environments, this always uses simulation mode
 /// to prevent hangs. Real hardware detection would require actual NPU
 /// hardware presence detection which is not available in current implementation.
-pub fn npu_process_test_inference() {
-    unsafe { crate::uart_print(b"[NPU] Processing test inference job\n"); }
-    
-    // Always use simulation mode for now since we don't have real hardware detection
-    // In a production kernel, this would check for actual NPU hardware presence
-    unsafe { crate::uart_print(b"[NPU] Using simulation mode (no hardware detection implemented)\n"); }
-    npu_simulation_inference_test();
-}
+
 
 
 /// Simulated NPU inference test for QEMU/development environment.
@@ -5277,6 +2534,7 @@ pub fn npu_process_test_inference() {
 /// Provides deterministic simulation of NPU inference processing when real
 /// hardware is unavailable. Includes realistic processing delay and outputs
 /// simulated results for testing Phase 3 validation flow.
+#[cfg(feature = "demos")]
 fn npu_simulation_inference_test() {
     use crate::ml::create_test_model;
     
@@ -5297,107 +2555,4 @@ fn npu_simulation_inference_test() {
     unsafe { crate::uart_print(b"[NPU] Simulated output: [0.25, 0.50, 0.75, 1.00]\n"); }
 }
 
-/// Test NPU job lifecycle
-fn test_npu_job_lifecycle() {
-    unsafe { crate::uart_print(b"[NPU PERF] Testing job submission -> completion lifecycle\n"); }
-    
-    let start_time = read_timestamp_cycles();
-    
-    // Submit multiple jobs and measure completion time
-    for i in 0..10 {
-        let _job_id = i; // Simulate job submission
-        
-        // Simulate processing delay
-        for _ in 0..1000 {
-            unsafe {
-                core::arch::asm!("nop", options(nostack, nomem));
-            }
-        }
-    }
-    
-    let end_time = read_timestamp_cycles();
-    let total_cycles = end_time.wrapping_sub(start_time);
-    
-    unsafe {
-        crate::uart_print(b"[NPU PERF] 10 jobs processed in ");
-        print_number_simple(total_cycles);
-        crate::uart_print(b" cycles (avg ");
-        print_number_simple(total_cycles / 10);
-        crate::uart_print(b" cycles/job)\n");
-        
-        if total_cycles / 10 < 5000 { // <5000 cycles per job
-            crate::uart_print(b"[NPU PERF] OK Job processing efficiency validated\n");
-        } else {
-            crate::uart_print(b"[NPU PERF] FAIL Job processing too slow\n");
-        }
-    }
-}
-
-/// Test NPU interrupt handling latency
-fn test_npu_interrupt_latency() {
-    unsafe { crate::uart_print(b"[NPU PERF] Testing interrupt handling latency\n"); }
-    
-    // Simulate interrupt handling measurements
-    let latencies = [120u64, 135, 118, 142, 128]; // cycles
-    
-    let mut sum = 0u64;
-    for &latency in &latencies {
-        sum += latency;
-    }
-    let avg_latency = sum / latencies.len() as u64;
-    
-    unsafe {
-        crate::uart_print(b"[NPU PERF] Average interrupt latency: ");
-        print_number_simple(avg_latency);
-        crate::uart_print(b" cycles\n");
-        
-        if avg_latency < 200 { // <200 cycles acceptable
-            crate::uart_print(b"[NPU PERF] OK Interrupt latency within bounds\n");
-        } else {
-            crate::uart_print(b"[NPU PERF] FAIL Interrupt latency too high\n");
-        }
-    }
-}
-
-/// Test NPU queue utilization efficiency
-fn test_npu_queue_efficiency() {
-    unsafe { crate::uart_print(b"[NPU PERF] Testing queue utilization efficiency\n"); }
-    
-    // Simulate queue utilization metrics
-    let queue_depth = 12u32;
-    let max_queue_depth = 64u32;
-    let utilization_ratio = (queue_depth as f32 / max_queue_depth as f32) * 100.0;
-    
-    unsafe {
-        crate::uart_print(b"[NPU PERF] Queue utilization: ");
-        print_number_simple(utilization_ratio as u64);
-        crate::uart_print(b"%\n");
-        
-        if utilization_ratio > 75.0 && utilization_ratio < 95.0 {
-            crate::uart_print(b"[NPU PERF] OK Queue utilization optimal\n");
-        } else {
-            crate::uart_print(b"[NPU PERF] WARN Queue utilization suboptimal\n");
-        }
-    }
-}
-
-/// Read timestamp cycles for performance measurement
-fn read_timestamp_cycles() -> u64 {
-    #[cfg(target_arch = "aarch64")]
-    {
-        let mut cycles: u64;
-        unsafe {
-            core::arch::asm!(
-                "mrs {}, cntvct_el0",
-                out(reg) cycles,
-                options(nostack, nomem)
-            );
-        }
-        cycles
-    }
-    
-    #[cfg(not(target_arch = "aarch64"))]
-    {
-        0 // Fallback for non-ARM architectures
-    }
-}
+ 

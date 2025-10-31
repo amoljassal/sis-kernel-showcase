@@ -8,6 +8,10 @@
 // Required for heap allocation
 extern crate alloc;
 
+// Optional DTB pointer provided by loader (UEFI); used to override platform descriptors
+#[no_mangle]
+pub static mut DTB_PTR: *const u8 = core::ptr::null();
+
 // System call interface module
 pub mod syscall;
 // Userspace test module
@@ -44,8 +48,11 @@ pub mod autonomy;
 pub mod time;
 pub mod prediction_tracker;
 pub mod stress_test;
+pub mod predictive_memory;
 // PMU helpers (feature-gated usage)
 pub mod pmu;
+// Platform layer abstraction (UART/GIC/Timer/MMU descriptors)
+pub mod platform;
 // Deterministic scheduler scaffolding (feature-gated)
 #[cfg(feature = "deterministic")]
 pub mod deterministic;
@@ -102,9 +109,10 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 
 #[inline(always)]
 unsafe fn uart_print(msg: &[u8]) {
-    const UART0_DR: *mut u32 = 0x0900_0000 as *mut u32;
+    // Early boot UART writes using platform-provided base; avoids hardcoded MMIO
+    let base = crate::platform::active().uart().base as *mut u32;
     for &b in msg {
-        core::ptr::write_volatile(UART0_DR, b as u32);
+        core::ptr::write_volatile(base, b as u32);
     }
 }
 
@@ -147,6 +155,17 @@ mod bringup {
         let sp_top = stack_ptr.cast::<u8>().add((*stack_ptr).len()) as u64;
         asm!("mov sp, {sp}", sp = in(reg) sp_top, options(nostack, preserves_flags));
         super::uart_print(b"STACK OK\n");
+
+        // 1.5) If a DTB pointer was provided by the loader, override platform descriptors
+        #[cfg(feature = "dt-override")]
+        {
+            let mut dt_active = false;
+            if !super::DTB_PTR.is_null() {
+                dt_active = crate::platform::override_with_dtb(super::DTB_PTR);
+            }
+            if dt_active { super::uart_print(b"PLATFORM: dt override active\n"); }
+            else { super::uart_print(b"PLATFORM: qemu_virt\n"); }
+        }
 
         // 2) Install exception vectors
         install_vectors();
@@ -459,19 +478,35 @@ mod bringup {
 
         // Descriptor helpers
         const DESC_BLOCK: u64 = 1; // bits[1:0]=01 for block
-
         const SH_INNER: u64 = 0b11 << 8;
         const AF: u64 = 1 << 10;
         const ATTRIDX_NORMAL: u64 = 1 << 2; // AttrIndx=1
         const ATTRIDX_DEVICE: u64 = 0 << 2; // AttrIndx=0
 
-        // L1[1] = 1GB block for 0x40000000..0x7FFFFFFF as Normal WBWA, InnerShareable
-        let l1_idx_kernel = 0x4000_0000u64 >> 30; // 1
-        L1_TABLE.0[l1_idx_kernel as usize] =
-            ((0x4000_0000u64 >> 30) << 30) | DESC_BLOCK | AF | SH_INNER | ATTRIDX_NORMAL;
+        // Map RAM ranges as Normal WBWA, InnerShareable using 1GiB blocks
+        let plat = crate::platform::active();
+        for r in plat.ram_ranges() {
+            let mut base = (r.start as u64) & !((1u64 << 30) - 1);
+            let end = (r.start as u64).saturating_add(r.size as u64);
+            while base < end {
+                let idx = (base >> 30) as usize;
+                L1_TABLE.0[idx] = (base) | DESC_BLOCK | AF | SH_INNER | ATTRIDX_NORMAL;
+                base = base.saturating_add(1u64 << 30);
+            }
+        }
 
-        // L1[0] = 1GB block for 0x00000000..0x3FFFFFFF as Device-nGnRE (covers UART 0x0900_0000)
-        L1_TABLE.0[0] = (0x0000_0000u64) | DESC_BLOCK | AF | ATTRIDX_DEVICE; // Non-shareable default
+        // Map MMIO ranges as Device-nGnRE using 1GiB blocks if not already RAM
+        for m in plat.mmio_ranges() {
+            let mut base = (m.start as u64) & !((1u64 << 30) - 1);
+            let end = (m.start as u64).saturating_add(m.size as u64);
+            while base < end {
+                let idx = (base >> 30) as usize;
+                if L1_TABLE.0[idx] == 0 {
+                    L1_TABLE.0[idx] = (base) | DESC_BLOCK | AF | ATTRIDX_DEVICE; // Non-shareable default
+                }
+                base = base.saturating_add(1u64 << 30);
+            }
+        }
     }
 
     core::arch::global_asm!(
@@ -565,35 +600,11 @@ mod bringup {
         eret
 
     fiq_el1h:
-        // FIQ handler - output FIQ debug message
-        stp x0, x1, [sp, #-16]!      // Save x0, x1 temporarily
-        mov x0, #0x09000000          // UART base
-        mov w1, #0x46                // 'F'
-        str w1, [x0]
-        mov w1, #0x49                // 'I'
-        str w1, [x0]
-        mov w1, #0x51                // 'Q'
-        str w1, [x0]
-        mov w1, #0x0A                // '\n'
-        str w1, [x0]
-        ldp x0, x1, [sp], #16        // Restore x0, x1
+        // FIQ handler - reserved for debug; avoid MMIO prints in ISR
         b .                          // Hang for debugging
 
     serr_el1h:
-        // System error handler - output SERR debug message  
-        stp x0, x1, [sp, #-16]!      // Save x0, x1 temporarily
-        mov x0, #0x09000000          // UART base
-        mov w1, #0x53                // 'S'
-        str w1, [x0]
-        mov w1, #0x45                // 'E'
-        str w1, [x0]
-        mov w1, #0x52                // 'R'
-        str w1, [x0]
-        mov w1, #0x52                // 'R'
-        str w1, [x0]
-        mov w1, #0x0A                // '\n'
-        str w1, [x0]
-        ldp x0, x1, [sp], #16        // Restore x0, x1
+        // System error handler - reserved; avoid MMIO prints in ISR
         b .                          // Hang for debugging
 
     sync_el1h:
@@ -664,18 +675,7 @@ mod bringup {
 
     sync_el0_64:
         // Handle synchronous exceptions from EL0 (userspace syscalls)
-        // First, output debug message to see if we get here
-        stp x0, x1, [sp, #-16]!      // Save x0, x1 temporarily
-        mov x0, #0x09000000          // UART base
-        mov w1, #0x45                // 'E'
-        str w1, [x0]
-        mov w1, #0x4C                // 'L'
-        str w1, [x0]
-        mov w1, #0x30                // '0'
-        str w1, [x0]
-        mov w1, #0x0A                // '\n'
-        str w1, [x0]
-        ldp x0, x1, [sp], #16        // Restore x0, x1
+        // Avoid MMIO prints here; proceed to save state
         
         // Save all registers for system call
         sub sp, sp, #(34 * 8)        // Allocate SyscallFrame
@@ -812,7 +812,10 @@ mod bringup {
                         .clamp(100, 60_000);
                     let cycles = if frq > 0 {
                         (frq / 1000).saturating_mul(interval_ms)
-                    } else { (62_500u64).saturating_mul(interval_ms) };
+                    } else {
+                        let pf = crate::platform::active().timer().freq_hz;
+                        ((pf / 1000).max(1)).saturating_mul(interval_ms)
+                    };
                     core::arch::asm!("msr cntv_tval_el0, {x}", x = in(reg) cycles);
                     // Ensure virtual timer remains enabled and unmasked
                     let ctl: u64 = 1; // ENABLE=1, IMASK=0
@@ -861,6 +864,9 @@ mod bringup {
     unsafe fn timer_init_1hz() {
         let mut frq: u64;
         asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
+        if frq == 0 {
+            frq = crate::platform::active().timer().freq_hz;
+        }
         // Set initial interval ~1s
         asm!("msr cntv_tval_el0, {x}", x = in(reg) frq);
         // Enable virtual timer, unmask
@@ -870,9 +876,10 @@ mod bringup {
 
     unsafe fn gicv3_init_qemu() {
         super::uart_print(b"GIC:A\n");
-        // QEMU ARM64 virt machine GICv3 addresses
-        const GICD_BASE: u64 = 0x08000000; // GIC Distributor
-        const GICR_BASE: u64 = 0x080A0000; // GIC Redistributor
+        // Obtain GIC base addresses from platform descriptor
+        let g = crate::platform::active().gic();
+        let gicd_base: u64 = g.gicd as u64; // GIC Distributor
+        let gicr_base: u64 = g.gicr as u64; // GIC Redistributor
 
         // GIC Distributor registers
         const GICD_CTLR: u64 = 0x0000;
@@ -893,7 +900,7 @@ mod bringup {
 
         // 1) Initialize GIC Distributor
         super::uart_print(b"GIC:B\n");
-        let gicd_ctlr = (GICD_BASE + GICD_CTLR) as *mut u32;
+        let gicd_ctlr = (gicd_base + GICD_CTLR) as *mut u32;
 
         // Check if already enabled
         super::uart_print(b"GIC:C\n");
@@ -910,7 +917,7 @@ mod bringup {
 
         // 2) Wake up redistributor for CPU0
         super::uart_print(b"GIC:G\n");
-        let waker = (GICR_BASE + GICR_WAKER) as *mut u32;
+        let waker = (gicr_base + GICR_WAKER) as *mut u32;
         super::uart_print(b"GIC:H\n");
 
         // Clear ProcessorSleep bit [1]
@@ -942,14 +949,14 @@ mod bringup {
 
         // 3) Configure PPI 27 (virtual timer) as Group 1 (non-secure)
         super::uart_print(b"GIC:N\n");
-        let igroupr0 = (GICR_BASE + GICR_IGROUPR0) as *mut u32;
+        let igroupr0 = (gicr_base + GICR_IGROUPR0) as *mut u32;
         let mut grp = core::ptr::read_volatile(igroupr0);
         grp |= 1 << 27;
         core::ptr::write_volatile(igroupr0, grp);
         core::arch::asm!("dsb sy", "isb", options(nostack, preserves_flags));
 
         // 4) Set priority for PPI 27
-        let iprio = (GICR_BASE + GICR_IPRIORITYR) as *mut u32;
+        let iprio = (gicr_base + GICR_IPRIORITYR) as *mut u32;
         let prio_reg = iprio.add(27 / 4); // 4 priorities per 32-bit register
         let shift = (27 % 4) * 8;
         super::uart_print(b"GIC:O\n");
@@ -961,7 +968,7 @@ mod bringup {
 
         // 5) Enable PPI 27
         super::uart_print(b"GIC: ENABLE PPI27\n");
-        let isenabler0 = (GICR_BASE + GICR_ISENABLER0) as *mut u32;
+        let isenabler0 = (gicr_base + GICR_ISENABLER0) as *mut u32;
         core::ptr::write_volatile(isenabler0, 1 << 27);
         core::arch::asm!("dsb sy", "isb", options(nostack, preserves_flags));
 
