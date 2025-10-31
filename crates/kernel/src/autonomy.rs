@@ -1664,6 +1664,9 @@ fn compute_health_score(state: &crate::meta_agent::MetaState) -> i16 {
 /// Safety is enforced at EVERY step - this function will abort early
 /// if any safety condition is violated.
 pub fn autonomous_decision_tick() {
+    // Static counter to track total autonomous ticks for debug output control
+    static mut AUTO_TICK_COUNT: u32 = 0;
+
     let timestamp = crate::time::get_timestamp_us();
 
     // Check if autonomous mode is enabled
@@ -1688,10 +1691,20 @@ pub fn autonomous_decision_tick() {
         return; // Too soon since last decision
     }
 
+    // Increment tick counter and control verbosity
     unsafe {
-        crate::uart_print(b"[AUTONOMY] Starting decision tick at timestamp ");
-        uart_print_num(timestamp);
-        crate::uart_print(b"\n");
+        AUTO_TICK_COUNT += 1;
+
+        // Only print verbose output for first 5 ticks
+        if AUTO_TICK_COUNT <= 5 {
+            crate::uart_print(b"[AUTONOMY] Starting decision tick at timestamp ");
+            uart_print_num(timestamp);
+            crate::uart_print(b"\n");
+        } else if AUTO_TICK_COUNT == 6 {
+            crate::uart_print(b"[AUTONOMY] Running silently (use 'autoctl status' to check)\n");
+            // Disable metrics after first 5 ticks to avoid console spam
+            crate::trace::metrics_set_enabled(false);
+        }
     }
 
     // Acquire locks on all safety infrastructure
@@ -1719,11 +1732,14 @@ pub fn autonomous_decision_tick() {
     let curr_state = collect_telemetry();
 
     unsafe {
-        crate::uart_print(b"[AUTONOMY] Telemetry: mem_pressure=");
-        uart_print_num(curr_state.memory_pressure as u64);
-        crate::uart_print(b" deadline_misses=");
-        uart_print_num(curr_state.deadline_misses as u64);
-        crate::uart_print(b"\n");
+        // Only print telemetry for first 5 ticks
+        if AUTO_TICK_COUNT <= 5 {
+            crate::uart_print(b"[AUTONOMY] Telemetry: mem_pressure=");
+            uart_print_num(curr_state.memory_pressure as u64);
+            crate::uart_print(b" deadline_misses=");
+            uart_print_num(curr_state.deadline_misses as u64);
+            crate::uart_print(b"\n");
+        }
     }
 
     // ========================================================================
@@ -1758,15 +1774,18 @@ pub fn autonomous_decision_tick() {
     let confidence = decision.confidence as i16;
 
     unsafe {
-        crate::uart_print(b"[AUTONOMY] Meta-agent directives: [");
-        uart_print_num(directives[0] as u64);
-        crate::uart_print(b", ");
-        uart_print_num(directives[1] as u64);
-        crate::uart_print(b", ");
-        uart_print_num(directives[2] as u64);
-        crate::uart_print(b"] confidence=");
-        uart_print_num(confidence as u64);
-        crate::uart_print(b"\n");
+        // Only print meta-agent output for first 5 ticks
+        if AUTO_TICK_COUNT <= 5 {
+            crate::uart_print(b"[AUTONOMY] Meta-agent directives: [");
+            uart_print_num(directives[0] as u64);
+            crate::uart_print(b", ");
+            uart_print_num(directives[1] as u64);
+            crate::uart_print(b", ");
+            uart_print_num(directives[2] as u64);
+            crate::uart_print(b"] confidence=");
+            uart_print_num(confidence as u64);
+            crate::uart_print(b"\n");
+        }
     }
 
     // ========================================================================
@@ -1777,7 +1796,9 @@ pub fn autonomous_decision_tick() {
     let _strategy_changed = crate::predictive_memory::update_allocation_strategy(directives[0]);
 
     // Execute predictive compaction check (5-second lookahead)
-    let _compaction_triggered = crate::predictive_memory::execute_predictive_compaction();
+    // Only print verbose output for first 5 ticks
+    let verbose = unsafe { AUTO_TICK_COUNT <= 5 };
+    let _compaction_triggered = crate::predictive_memory::execute_predictive_compaction_verbose(verbose);
 
     // ========================================================================
     // Step 4: Confidence-Based Action Gating
@@ -1785,11 +1806,14 @@ pub fn autonomous_decision_tick() {
 
     if confidence < MIN_CONFIDENCE_FOR_ACTION {
         unsafe {
-            crate::uart_print(b"[AUTONOMY] Low confidence (");
-            uart_print_i64(confidence as i64);
-            crate::uart_print(b" < ");
-            uart_print_i64(MIN_CONFIDENCE_FOR_ACTION as i64);
-            crate::uart_print(b"), deferring action\n");
+            // Only print low confidence message for first 5 ticks
+            if AUTO_TICK_COUNT <= 5 {
+                crate::uart_print(b"[AUTONOMY] Low confidence (");
+                uart_print_i64(confidence as i64);
+                crate::uart_print(b" < ");
+                uart_print_i64(MIN_CONFIDENCE_FOR_ACTION as i64);
+                crate::uart_print(b"), deferring action\n");
+            }
         }
 
         // Log decision with no actions taken
