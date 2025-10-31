@@ -67,7 +67,7 @@ These standards are enforced by review and advisory CI checks (see `docs/real-ha
 - Shell (`crates/kernel/src/shell.rs`)
   - Purpose: Operator control, inspection, demos, and stress scenarios.
   - Enable/disable: Always built; command groups gated by features (`llm`, `deterministic`, `virtio-console`, `arm64-ai`).
-  - Interfaces: `help`, `metricsctl`, `metrics`, `stresstest …`, `autoctl …`, `neuralctl …`, `memctl …`, `agentctl …`, `coordctl …`, `metaclassctl …`, `mlctl …`, `actorctl …`, `graphctl …`, `det …`, `pmu`, `mem`, `regs`, plus LLM commands when `llm` is on.
+  - Interfaces: `help`, `metricsctl`, `metrics`, `stresstest …`, `autoctl …`, `neuralctl …`, `memctl …`, `schedctl …`, `agentctl …`, `coordctl …`, `metaclassctl …`, `mlctl …`, `actorctl …`, `graphctl …`, `det …`, `pmu`, `mem`, `regs`, plus LLM commands when `llm` is on.
   - Decoupling: Calls stable module APIs; no shared globals beyond module-owned Mutex/Atomics.
   - Modularization (Phase 6): Thin helpers in `crates/kernel/src/shell/`:
     `neuralctl_helpers.rs`, `graphctl_helpers.rs`, `shell_metricsctl.rs`, `autoctl_helpers.rs`, `memctl_helpers.rs`,
@@ -95,6 +95,18 @@ These standards are enforced by review and advisory CI checks (see `docs/real-ha
   - Enable/disable: Always built; invoked from `memctl`.
   - Interfaces: `memctl status|predict|stress|strategy <status|test>|learn stats`.
   - Decoupling: Internal state under `Mutex`; interacts with heap/telemetry via getters.
+
+- Predictive Scheduling (`crates/kernel/src/predictive_scheduling.rs`)
+  - Purpose: AI-driven scheduling with neural operator prioritization, workload classification (LatencySensitive/Throughput/Interactive/Mixed), operator affinity learning, shadow mode A/B testing, and feature flags for granular control.
+  - Enable/disable: Always built; runtime control via `schedctl feature enable|disable <NAME>`.
+  - Interfaces: `schedctl workload|priorities|affinity|shadow <on|off|compare> [version]|feature <enable|disable|list> [NAME]`.
+  - Components:
+    - 8→8→4 neural network workload classifier (Q8.8 fixed-point)
+    - Dynamic priority adjustment with deadline miss tracking
+    - Operator affinity learning via co-occurrence matrix
+    - Shadow mode for A/B testing scheduling decisions
+    - Feature flags: autonomous-scheduling, workload-classification, affinity-learning, shadow-mode
+  - Decoupling: Internal state under `Mutex`; integrates with autonomy system via `execute_scheduling_directive()`.
 
 - Meta‑Agent (`crates/kernel/src/meta_agent.rs`) and Agent Bus (`crates/kernel/src/agent_bus.rs`)
   - Purpose: Fuse telemetry across subsystems; issue coordinated directives; publish messages on a lightweight bus.
@@ -152,15 +164,30 @@ These thin helpers live under `crates/kernel/src/shell/` and keep `shell.rs` sma
 | `actorctl_helpers.rs`        | `actorctl`                       | –                  |
 | `demos/`                     | demo commands (e.g., `graphdemo`, `aidemo`, validations) | `demos` |
 
-### Phase 4 / Week 8 Refactor Highlights (Implemented)
+### Phase 4 / Week 8-9 Implementation Highlights
 
+**Week 8: AI-Driven Memory Management (Implemented)**
+- Predictive compaction with 5-second lookahead (fragmentation prediction)
+- Neural heap allocation strategies (Conservative/Balanced/Aggressive)
+- Allocation size prediction per command type
+- Learning-based outcome tracking and experience replay
+
+**Week 9: AI-Driven Scheduling (Implemented)**
+- Neural operator prioritization with dynamic priority adjustment
+- Workload classification: 8→8→4 network classifies workload into LatencySensitive, Throughput, Interactive, or Mixed
+- Operator affinity learning via co-occurrence matrix (groups operators with >70% affinity)
+- Shadow mode A/B testing framework for scheduling decisions
+- Feature flags for granular control: autonomous-scheduling, workload-classification, affinity-learning, shadow-mode
+- Integration with autonomy system via scheduling directives from meta-agent
+
+**Week 8 Refactor (Implemented)**
 - Platformization (AArch64 bring-up): `crates/kernel/src/platform/` provides `Platform` trait and default `qemu_virt` descriptors. Bring-up (UART/GIC/Timer/MMU) now uses platform getters; MMU tables are built from `ram_ranges()` and `mmio_ranges()`.
 - Optional DT override (`dt-override`): UEFI loader scans config tables for FDT and patches `DTB_PTR`; kernel attempts a platform from DTB with safe fallbacks and prints a platform banner when enabled.
 - Timer/GIC/UART parameterization: Timer frequency from `cntfrq_el0` with platform fallback; GIC init driven by `GicDesc`; UART IBRD/FBRD computed from `UartDesc.clock_hz`.
 - Shell modularization: Command groups extracted into helpers under `shell/` (see Core Runtime). Legacy inline implementations removed; behavior unchanged.
 - Framed control in dev: `scripts/uefi_run.sh` enables `graphctl-framed` by default so framed add-channel/add-operator are continuously exercised; direct helpers remain for demos/tests.
 - Safety/quieting: `[SYSCALL]` logs gated under `syscall-verbose` (off by default). Build remains warning-free for common dev feature sets.
-- HW-first CI guard: `scripts/ci_guard_hwfirst.sh` enforces “no hardcoded MMIO outside platform/”, with expanded patterns to catch common literal variants and support for extra patterns (`HWFIRST_EXTRA_PATTERNS`) and whitelist (`scripts/hwfirst_whitelist.txt`, `HWFIRST_WHITELIST`).
+- HW-first CI guard: `scripts/ci_guard_hwfirst.sh` enforces "no hardcoded MMIO outside platform/", with expanded patterns to catch common literal variants and support for extra patterns (`HWFIRST_EXTRA_PATTERNS`) and whitelist (`scripts/hwfirst_whitelist.txt`, `HWFIRST_WHITELIST`).
 - VirtIO platformization: VirtIO discovery and fallback use a platform `virtio_mmio_hint()` (base/slot size/irq), removing hardcoded VirtIO MMIO constants from non‑platform code.
 - Self-check improvements: `scripts/self_check.sh` supports streaming (`-s`), timeout (`--timeout N`), and quiet mode (`-q`); markers include `MMU: SCTLR` and `GIC: INIT`.
 - Demo relocation: Demo commands/validations physically moved to `crates/kernel/src/shell/demos/` to keep `shell.rs` lean (no behavior change).
@@ -336,6 +363,18 @@ Notes:
   - Run: `actorcriticdemo` to see policy gradients and eligibility traces
   - Commands: `actorctl status`, `actorctl policy`, `actorctl sample`
   - Gaussian policies, continuous actions, natural gradients
+- Predictive memory demo (Week 8):
+  - Commands: `memctl strategy status`, `memctl predict compaction`, `memctl learn stats`
+  - 5-second lookahead fragmentation prediction
+  - Neural allocation strategies (Conservative/Balanced/Aggressive)
+  - Per-command allocation size prediction
+- Predictive scheduling demo (Week 9):
+  - Commands: `schedctl feature enable autonomous-scheduling`, `schedctl workload`, `schedctl priorities`, `schedctl affinity`
+  - 8→8→4 workload classifier (LatencySensitive/Throughput/Interactive/Mixed)
+  - Dynamic priority adjustment based on deadline misses
+  - Operator affinity learning (groups with >70% co-occurrence)
+  - Shadow mode: `schedctl shadow on 2`, `schedctl shadow compare`
+  - Feature flags: `schedctl feature list`, `schedctl feature enable <NAME>`
 
 ## LLM Service (feature: `llm`)
 

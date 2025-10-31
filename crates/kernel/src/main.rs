@@ -49,6 +49,7 @@ pub mod time;
 pub mod prediction_tracker;
 pub mod stress_test;
 pub mod predictive_memory;
+pub mod predictive_scheduling;
 // PMU helpers (feature-gated usage)
 pub mod pmu;
 // Platform layer abstraction (UART/GIC/Timer/MMU descriptors)
