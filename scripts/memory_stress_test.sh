@@ -48,15 +48,7 @@ main() {
     log_info "Output: $output_file"
     echo ""
 
-    # Build kernel
-    log_info "Building kernel with memory stress features..."
-    cd "$PROJECT_ROOT"
-    cargo build --release --target x86_64-unknown-uefi || {
-        log_error "Kernel build failed"
-        exit 1
-    }
-
-    log_info "Starting QEMU with memory stress configuration..."
+    log_info "Starting QEMU with memory stress configuration (kernel will be built automatically)..."
 
     # Start QEMU with limited memory to induce pressure
     # Redirect output to log file

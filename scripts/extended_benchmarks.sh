@@ -117,15 +117,7 @@ main() {
     log_info "Results Directory: $RESULTS_DIR"
     echo ""
 
-    # Build the kernel first
-    log_info "Building kernel..."
-    cd "$PROJECT_ROOT"
-    cargo build --release --target x86_64-unknown-uefi || {
-        log_error "Kernel build failed"
-        exit 1
-    }
-
-    # Run benchmarks
+    # Run benchmarks (uefi_run.sh will build the kernel automatically for each run)
     log_info "Starting benchmark sequence..."
     echo ""
 

@@ -52,16 +52,8 @@ main() {
     log_info "Output: $output_file"
     echo ""
 
-    # Build kernel
-    log_info "Building kernel with AI features..."
-    cd "$PROJECT_ROOT"
-    cargo build --release --target x86_64-unknown-uefi || {
-        log_error "Kernel build failed"
-        exit 1
-    }
-
-    # Start QEMU
-    log_info "Starting QEMU for AI verification..."
+    # Start QEMU (uefi_run.sh will build the kernel)
+    log_info "Starting QEMU for AI verification (kernel will be built automatically)..."
     SIS_FEATURES="llm,crypto-real" BRINGUP=1 "$SCRIPT_DIR/uefi_run.sh" build > "$output_file" 2>&1 &
     local qemu_pid=$!
 
