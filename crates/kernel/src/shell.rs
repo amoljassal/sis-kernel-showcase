@@ -63,6 +63,7 @@ mod autoctl_helpers;
 mod memctl_helpers;
 mod schedctl_helpers;
 mod cmdctl_helpers;
+mod netctl_helpers;
 mod neuralctl_helpers;
 mod graphctl_helpers;
 mod agentctl_helpers;
@@ -222,6 +223,7 @@ impl Shell {
                 "memctl" => { self.cmd_memctl(&parts[1..]); true },
                 "schedctl" => { self.cmd_schedctl(&parts[1..]); true },
                 "cmdctl" => { self.cmd_cmdctl(&parts[1..]); true },
+                "netctl" => { self.cmd_netctl(&parts[1..]); true },
                 "ask-ai" => { self.cmd_ask_ai(&parts[1..]); true },
                 "nnjson" => { self.cmd_nn_json(); true },
                 "nnact" => { self.cmd_nn_act(&parts[1..]); true },
@@ -702,6 +704,21 @@ impl Shell {
             "batch" => self.cmdctl_batch(&args[1..]),
             "learn" => self.cmdctl_learn(&args[1..]),
             _ => unsafe { crate::uart_print(b"Usage: cmdctl <predict|batch|learn> ...\n"); }
+        }
+    }
+
+    fn cmd_netctl(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: netctl <predict|buffers|flows|add-conn|simulate> ...\n"); }
+            return;
+        }
+        match args[0] {
+            "predict" => self.netctl_predict(&args[1..]),
+            "buffers" => self.netctl_buffers(&args[1..]),
+            "flows" => self.netctl_flows(&args[1..]),
+            "add-conn" => self.netctl_add_conn(&args[1..]),
+            "simulate" => self.netctl_simulate(&args[1..]),
+            _ => unsafe { crate::uart_print(b"Usage: netctl <predict|buffers|flows|add-conn|simulate> ...\n"); }
         }
     }
 
