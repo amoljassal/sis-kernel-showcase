@@ -4323,6 +4323,41 @@ Long-duration performance and stability validation (5 minutes to 24 hours).
 
 See `docs/guides/EXTENDED-TESTING.md` for detailed documentation.
 
+## Documentation
+
+Comprehensive guides for all aspects of the SIS Kernel:
+
+**Testing & Validation:**
+- `docs/guides/AUTOMATED-TESTING-EXPECT.md` - Automated testing with expect scripts
+- `docs/guides/EXTENDED-TESTING.md` - Extended duration testing (5min to 24hr)
+- `docs/guides/MANUAL-TESTING-CHECKLIST.md` - Manual testing procedures
+- `docs/guides/PHASE4-TESTING-GUIDE.md` - Phase 4 testing comprehensive guide
+
+**Hardware & Deployment:**
+- `docs/guides/HARDWARE-DEPLOYMENT-READINESS.md` - Hardware deployment guide
+  - Target platforms: Raspberry Pi 4/5, NVIDIA Jetson, 96Boards HiKey
+  - UEFI firmware setup and EFI system partition creation
+  - Device tree considerations and hardware-specific optimizations
+  - Bring-up procedures and validation criteria
+  - Performance baselines: QEMU vs hardware
+  - Production deployment checklist and monitoring
+
+**API & Integration:**
+- `docs/guides/API-REFERENCE.md` - Complete API documentation
+  - Shell command API (benchmarks, compliance, autonomous control, stress testing)
+  - Control plane protocol specification
+  - Metrics API with extraction patterns
+  - EU AI Act compliance API with scoring formulas
+  - Neural network API and autonomous control lifecycle
+  - Integration examples: Python, CI/CD, Prometheus
+
+**Project Planning:**
+- `docs/plans/PHASE4-SOLIDIFICATION-PLAN.md` - Phase 4 solidification roadmap
+- `docs/AI-ML-KERNEL-IMPLEMENTATION-PLAN.md` - 20-week ML integration plan
+
+**Results & Reports:**
+- `docs/results/` - Test results and validation reports (coming soon)
+
 ## Validation (Optional)
 
 You can generate a validation report and open a small HTML dashboard.
