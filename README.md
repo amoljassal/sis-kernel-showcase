@@ -159,6 +159,7 @@ These thin helpers live under `crates/kernel/src/shell/` and keep `shell.rs` sma
 | `memctl_helpers.rs`          | `memctl`                         | –                  |
 | `schedctl_helpers.rs`        | `schedctl`                       | –                  |
 | `cmdctl_helpers.rs`          | `cmdctl`                         | –                  |
+| `netctl_helpers.rs`          | `netctl`                         | –                  |
 | `agentctl_helpers.rs`        | `agentctl`                       | –                  |
 | `coordctl_helpers.rs`        | `coordctl`                       | –                  |
 | `metaclassctl_helpers.rs`    | `metaclassctl`                   | –                  |
@@ -182,6 +183,15 @@ These thin helpers live under `crates/kernel/src/shell/` and keep `shell.rs` sma
 - **Canary rollout**: Gradual autonomy deployment (0%→1%→5%→10%→50%→100%) with hash-based decision selection
 - **Circuit breaker**: Auto-disable autonomy after N consecutive failures (CLOSED/OPEN/HALF-OPEN states)
 - Commands: `cmdctl predict/batch/learn`, `autoctl rollout/circuit-breaker`
+
+**Week 11: Simple Networking (AI-Enhanced) (Implemented)**
+- Flow control prediction: 6→8→1 neural network predicts network congestion probability (0-100%) before sending data
+- Adaptive buffering: Dynamic buffer size prediction (4KB-64KB) based on RTT, congestion window, loss rate, and memory pressure
+- Connection priority learning: Identifies latency-sensitive flows (low RTT variance + small bursts) and adjusts priorities (-100 to +100)
+- Training on actual outcomes: Network learns from real congestion events with backpropagation (~0.2 learning rate)
+- Confidence-based throttling: Throttle only when congestion probability > 60% AND confidence > 60% to avoid false positives
+- Commands: `netctl predict/buffers/flows/add-conn/simulate` for testing and visualization
+- **Simulated network stack**: Supports up to 32 concurrent connections with RTT, cwnd, loss_rate, bytes_sent/received tracking
 
 **Week 9: AI-Driven Scheduling (Implemented)**
 - Neural operator prioritization with dynamic priority adjustment
@@ -4369,9 +4379,9 @@ Structured graphs section
     - ✅ Week 7: Stress testing and quantified performance validation (1,180 lines, 6 stress tests, 2,700+ neural inferences, 100% pass rate)
   - **Part 2: AI-Powered OS Features (Weeks 8-12)**
     - ✅ Week 8: Predictive memory management with neural allocation strategies (650 lines, autonomy integration, 5-second lookahead compaction)
-    - Week 9: AI-driven scheduling with learned operator prioritization
-    - Week 10: Command execution prediction and resource pre-allocation
-    - Week 11: Simple networking stack with AI-enhanced flow control
+    - ✅ Week 9: AI-driven scheduling with learned operator prioritization
+    - ✅ Week 10: Command execution prediction and resource pre-allocation
+    - ✅ Week 11: Simple networking (AI-enhanced flow control, adaptive buffering, 6→8→1 congestion predictor, 469 lines)
     - Week 12: Integration, documentation, and comprehensive showcase
 - **Phase 2 Completion**: Validate Phase 2 deterministic scheduler and model security on real hardware.
 - Separate real process/thread context switch measurement from syscall proxy.
