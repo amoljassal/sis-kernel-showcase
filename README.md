@@ -221,32 +221,42 @@ sis-kernel/
 │           └── SIS/
 │               └── KERNEL.ELF          # Kernel ELF binary
 │
-├── docs/                               # Documentation
-│   ├── ARCHITECTURE.md                 # Architecture overview
-│   ├── NEURAL-PHASE-4-INTEGRATION-PLAN.md      # Phase 4 plan
-│   ├── NEURAL-PHASE-4-WEEK-12-RESULTS.md       # Week 12 results
-│   ├── NEURAL-PHASE3-PLAN.md           # Phase 3 plan
-│   ├── PHASE5-AI-NATIVE-INTELLIGENCE.md        # Phase 5 vision
-│   ├── WEEK1-IMPLEMENTATION-SUMMARY.md # Week 1 summary
-│   ├── week-7-shell-results.md         # Week 7 results
-│   ├── week-8-test-guide.md            # Week 8 testing
-│   ├── AI-ML-KERNEL-IMPLEMENTATION-PLAN.md     # AI/ML plan
-│   ├── LLM-KERNEL-INTEGRATION.md       # LLM integration
-│   ├── real-hardware-bringup-advisory.md       # Hardware guide
-│   ├── refactoring-during-phase4-week-8.md     # Refactoring plan
-│   ├── phase-4-add-ons-from-modular-OS-project.md
-│   ├── DEV_HANDOFF.md                  # Developer handoff
-│   ├── kernel-neural-net.md            # Neural network design
-│   ├── MODULAR_OS_EXTRACTIONS.md       # Modular OS notes
-│   ├── PRODUCTION_MODES.md             # Production modes
+├── docs/                               # Documentation (organized by category)
+│   ├── README.md                       # Documentation index and navigation
+│   │
+│   ├── plans/                          # Planning documents and roadmaps
+│   │   ├── AI-ML-KERNEL-IMPLEMENTATION-PLAN.md
+│   │   ├── NEURAL-PHASE3-PLAN.md
+│   │   ├── NEURAL-PHASE-4-INTEGRATION-PLAN.md
+│   │   └── PHASE5-AI-NATIVE-INTELLIGENCE.md
+│   │
+│   ├── results/                        # Week-by-week implementation results
+│   │   ├── WEEK1-IMPLEMENTATION-SUMMARY.md
+│   │   ├── week-7-shell-results.md
+│   │   ├── week-8-test-guide.md
+│   │   └── NEURAL-PHASE-4-WEEK-12-RESULTS.md
+│   │
+│   ├── architecture/                   # Architecture and design docs
+│   │   ├── ARCHITECTURE.md
+│   │   ├── kernel-neural-net.md
+│   │   └── MODULAR_OS_EXTRACTIONS.md
+│   │
+│   ├── guides/                         # How-to guides and operational docs
+│   │   ├── DEV_HANDOFF.md
+│   │   ├── LLM-KERNEL-INTEGRATION.md
+│   │   ├── real-hardware-bringup-advisory.md
+│   │   ├── refactoring-during-phase4-week-8.md
+│   │   ├── phase-4-add-ons-from-modular-OS-project.md
+│   │   └── PRODUCTION_MODES.md
+│   │
+│   ├── dev-logs/                       # Development conversation logs
+│   │   ├── chatgpt-kernel-till-last-bits-of-llm-integration.md
+│   │   └── claude-phase-4-week-6.txt
 │   │
 │   ├── schemas/                        # JSON schemas
-│   │   └── sis-metrics-v1.schema.json  # Metrics schema
+│   │   └── sis-metrics-v1.schema.json
 │   │
-│   ├── one-pager/                      # Project summaries
-│   │
-│   └── claude-phase-4-week-6.txt       # Development logs
-│       chatgpt-kernel-till-last-bits-of-llm-integration.md
+│   └── one-pager/                      # Project summaries
 │
 └── tools/                              # Python utilities
     ├── sis_datactl.py                  # Data control tool
@@ -280,12 +290,14 @@ sis-kernel/
 - `ci_guard_hwfirst.sh`: Enforces hardware-first design rules
 - Week 8 autonomous testing scripts
 
-**`docs/`** - Comprehensive documentation
-- Phase-by-phase implementation plans and results
-- Architecture documentation
-- Hardware bring-up guides
-- Week-by-week progress tracking
-- 831-line Week 12 results document
+**`docs/`** - Comprehensive documentation (organized by category)
+- **plans/**: Phase roadmaps and implementation plans (Phases 3-5)
+- **results/**: Week-by-week implementation results and test guides
+- **architecture/**: System design, neural network specs, modular OS patterns
+- **guides/**: Hardware porting, LLM integration, refactoring, production modes
+- **dev-logs/**: Development session transcripts
+- **schemas/**: JSON schemas for metrics
+- See docs/README.md for complete navigation guide
 
 **`tools/`** - Python utilities
 - Model signing for cryptographic verification
