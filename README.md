@@ -37,6 +37,260 @@ Crypto notes:
 - Shell first-level subcommands: 94
 - Shell total commands including subcommands: 165
 
+## Project Structure
+
+```
+sis-kernel/
+├── Cargo.toml                          # Workspace configuration
+├── README.md                           # This file
+│
+├── crates/
+│   ├── uefi-boot/                      # UEFI bootloader (36KB EFI binary)
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       └── main.rs                 # ELF loader, boot services exit
+│   │
+│   ├── kernel/                         # Main kernel crate (8.4MB ELF)
+│   │   ├── Cargo.toml                  # Feature flags, dependencies
+│   │   └── src/
+│   │       ├── main.rs                 # Boot sequence, initialization
+│   │       ├── shell.rs                # Interactive shell (2000+ lines)
+│   │       │
+│   │       ├── shell/                  # Shell command helpers (modular)
+│   │       │   ├── agentctl_helpers.rs         # Agent network management
+│   │       │   ├── actorctl_helpers.rs         # Actor-critic control
+│   │       │   ├── autoctl_helpers.rs          # Autonomous control
+│   │       │   ├── benchmark_helpers.rs        # Comparative benchmarks
+│   │       │   ├── cmdctl_helpers.rs           # Command prediction
+│   │       │   ├── compliance_helpers.rs       # EU AI Act compliance
+│   │       │   ├── coordctl_helpers.rs         # Coordinator control
+│   │       │   ├── ctlhex_helpers.rs           # Hex dump utilities
+│   │       │   ├── fullautodemo_helpers.rs     # 7-phase autonomous demo
+│   │       │   ├── graphctl_helpers.rs         # Dataflow graph control
+│   │       │   ├── learnctl_helpers.rs         # Learning control
+│   │       │   ├── llmctl_helpers.rs           # LLM service control
+│   │       │   ├── memctl_helpers.rs           # Memory AI control
+│   │       │   ├── metaclassctl_helpers.rs     # Meta-learning control
+│   │       │   ├── mlctl_helpers.rs            # ML control
+│   │       │   ├── netctl_helpers.rs           # Network AI control
+│   │       │   ├── neuralctl_helpers.rs        # Neural network control
+│   │       │   ├── pmu_helpers.rs              # PMU commands
+│   │       │   ├── schedctl_helpers.rs         # Scheduling AI control
+│   │       │   ├── shell_metricsctl.rs         # Metrics control
+│   │       │   ├── stresstest_helpers.rs       # Stress testing
+│   │       │   └── demos/                      # Demo commands (feature-gated)
+│   │       │       └── mod.rs
+│   │       │
+│   │       ├── platform/               # Hardware abstraction
+│   │       │   ├── mod.rs              # Platform trait
+│   │       │   ├── qemu_virt.rs        # QEMU virt platform
+│   │       │   └── dt.rs               # Device tree parsing
+│   │       │
+│   │       ├── arch/                   # Architecture-specific code
+│   │       │   └── riscv64/            # RISC-V support (experimental)
+│   │       │       ├── boot.rs
+│   │       │       └── dtb.rs
+│   │       │
+│   │       ├── channel/                # Lock-free channels
+│   │       │   ├── mod.rs
+│   │       │   └── spsc.rs             # Single-producer single-consumer
+│   │       │
+│   │       ├── Neural Phase 3 (Weeks 1-7): Cross-Agent Communication & ML
+│   │       ├── neural.rs               # 512→64→256→64 coordinator (584 lines)
+│   │       ├── meta_agent.rs           # Meta-agent with multi-objective RL (800+ lines)
+│   │       ├── autonomy.rs             # Autonomous control (700+ lines)
+│   │       ├── prediction_tracker.rs   # Prediction tracking
+│   │       ├── predictive_scheduling.rs # AI-driven scheduling (Week 9)
+│   │       │
+│   │       ├── Neural Phase 4 (Weeks 8-12): AI-Powered OS Features
+│   │       ├── heap.rs                 # Memory management with AI prediction
+│   │       ├── command_predictor.rs    # Command execution prediction (Week 10)
+│   │       ├── network_predictor.rs    # Network flow control AI (Week 11)
+│   │       ├── benchmark.rs            # Comparative benchmarks (Week 12)
+│   │       ├── compliance.rs           # EU AI Act compliance (Week 12)
+│   │       │
+│   │       ├── Core Kernel Services
+│   │       ├── interrupts.rs           # IRQ handling, timer
+│   │       ├── time.rs                 # Timekeeping
+│   │       ├── trace.rs                # Tracing infrastructure
+│   │       ├── aarch64_context.rs      # Context switching
+│   │       │
+│   │       ├── Phase 1: Dataflow Observability
+│   │       ├── graph.rs                # Dataflow graph (3000+ lines)
+│   │       ├── control.rs              # Control plane
+│   │       ├── cap.rs                  # Capabilities
+│   │       │
+│   │       ├── Phase 2: Deterministic Scheduling & Model Security
+│   │       ├── deterministic.rs        # CBS+EDF scheduler (1200+ lines)
+│   │       ├── llm.rs                  # LLM service & model security (2000+ lines)
+│   │       │
+│   │       ├── Phase 3: AI-Native Real-Time Scheduling
+│   │       ├── npu.rs                  # NPU emulation (800+ lines)
+│   │       ├── ai_benchmark.rs         # AI benchmarking
+│   │       │
+│   │       └── VirtIO Drivers
+│   │           ├── virtio.rs           # VirtIO MMIO framework
+│   │           └── virtio_console.rs   # Console driver
+│   │
+│   └── testing/                        # Comprehensive testing framework
+│       ├── Cargo.toml
+│       ├── rust-toolchain.toml
+│       ├── PRODUCTION_READINESS_ASSESSMENT.md
+│       │
+│       ├── src/
+│       │   ├── lib.rs                  # Testing library
+│       │   ├── kernel_interface.rs     # Kernel integration
+│       │   ├── qemu_runtime.rs         # QEMU orchestration
+│       │   │
+│       │   ├── bin/                    # Test runners
+│       │   │   ├── main.rs             # Main test harness
+│       │   │   ├── ai_benchmark_runner.rs
+│       │   │   └── formal_verification_runner.rs
+│       │   │
+│       │   ├── ai/                     # AI-specific tests
+│       │   │   ├── mod.rs
+│       │   │   ├── benchmark_suite.rs
+│       │   │   └── benchmark_report.rs
+│       │   │
+│       │   ├── performance/            # Performance testing
+│       │   │   └── mod.rs
+│       │   │
+│       │   ├── correctness/            # Correctness validation
+│       │   │   └── mod.rs
+│       │   │
+│       │   ├── formal/                 # Formal verification
+│       │   │   ├── mod.rs
+│       │   │   ├── kani_integration.rs
+│       │   │   ├── prusti_integration.rs
+│       │   │   └── property_verification.rs
+│       │   │
+│       │   ├── security/               # Security testing
+│       │   │   ├── mod.rs
+│       │   │   ├── crypto_validation.rs
+│       │   │   ├── fuzzing.rs
+│       │   │   ├── memory_safety.rs
+│       │   │   └── vulnerability_scanner.rs
+│       │   │
+│       │   ├── distributed/            # Multi-node testing
+│       │   │   └── mod.rs
+│       │   │
+│       │   ├── byzantine/              # Byzantine fault testing
+│       │   │   ├── mod.rs
+│       │   │   ├── consensus_testing.rs
+│       │   │   ├── fault_injection.rs
+│       │   │   └── network_partition.rs
+│       │   │
+│       │   ├── property_based/         # Property-based testing
+│       │   │   ├── mod.rs
+│       │   │   ├── generators.rs
+│       │   │   ├── invariants.rs
+│       │   │   └── strategies.rs
+│       │   │
+│       │   └── reporting/              # Test reporting
+│       │       ├── mod.rs
+│       │       ├── analytics.rs
+│       │       └── visualization.rs
+│       │
+│       ├── scripts/                    # Test automation
+│       │   ├── README.md
+│       │   ├── qemu_automation.sh
+│       │   ├── test_orchestrator.py
+│       │   └── validate_results.py
+│       │
+│       └── monitoring/                 # Monitoring documentation
+│           └── README.md
+│
+├── scripts/                            # Build and run scripts
+│   ├── uefi_run.sh                     # Main QEMU runner (build + boot)
+│   ├── hw_build.sh                     # Hardware build script
+│   ├── self_check.sh                   # Boot validation script
+│   ├── ci_check.sh                     # CI validation
+│   ├── ci_guard_hwfirst.sh             # HW-first compliance check
+│   ├── hwfirst_whitelist.txt           # HW-first exemptions
+│   ├── test_week8_autonomous.sh        # Week 8 test script
+│   ├── neural_demo.sh                  # Neural network demo
+│   ├── neural_learning_demo.sh         # Learning demo
+│   ├── neural_training.txt             # Training data
+│   ├── llm_demo.sh                     # LLM demo
+│   ├── llm_audit_demo.sh               # LLM audit demo
+│   │
+│   └── esp/                            # UEFI ESP directory
+│       └── EFI/
+│           ├── BOOT/
+│           │   └── BOOTAA64.EFI        # UEFI bootloader binary
+│           └── SIS/
+│               └── KERNEL.ELF          # Kernel ELF binary
+│
+├── docs/                               # Documentation
+│   ├── ARCHITECTURE.md                 # Architecture overview
+│   ├── NEURAL-PHASE-4-INTEGRATION-PLAN.md      # Phase 4 plan
+│   ├── NEURAL-PHASE-4-WEEK-12-RESULTS.md       # Week 12 results
+│   ├── NEURAL-PHASE3-PLAN.md           # Phase 3 plan
+│   ├── PHASE5-AI-NATIVE-INTELLIGENCE.md        # Phase 5 vision
+│   ├── WEEK1-IMPLEMENTATION-SUMMARY.md # Week 1 summary
+│   ├── week-7-shell-results.md         # Week 7 results
+│   ├── week-8-test-guide.md            # Week 8 testing
+│   ├── AI-ML-KERNEL-IMPLEMENTATION-PLAN.md     # AI/ML plan
+│   ├── LLM-KERNEL-INTEGRATION.md       # LLM integration
+│   ├── real-hardware-bringup-advisory.md       # Hardware guide
+│   ├── refactoring-during-phase4-week-8.md     # Refactoring plan
+│   ├── phase-4-add-ons-from-modular-OS-project.md
+│   ├── DEV_HANDOFF.md                  # Developer handoff
+│   ├── kernel-neural-net.md            # Neural network design
+│   ├── MODULAR_OS_EXTRACTIONS.md       # Modular OS notes
+│   ├── PRODUCTION_MODES.md             # Production modes
+│   │
+│   ├── schemas/                        # JSON schemas
+│   │   └── sis-metrics-v1.schema.json  # Metrics schema
+│   │
+│   ├── one-pager/                      # Project summaries
+│   │
+│   └── claude-phase-4-week-6.txt       # Development logs
+│       chatgpt-kernel-till-last-bits-of-llm-integration.md
+│
+└── tools/                              # Python utilities
+    ├── sis_datactl.py                  # Data control tool
+    └── sis_sign_model.py               # Model signing tool
+```
+
+### Key Directories Explained
+
+**`crates/kernel/src/`** - Core kernel implementation
+- **Neural Phase 3 modules:** Cross-agent communication, meta-learning, autonomous control
+- **Neural Phase 4 modules:** AI-powered memory management, command prediction, network AI, benchmarking, compliance
+- **Core services:** Interrupts, timekeeping, context switching, heap allocator
+- **Platform abstraction:** Hardware-agnostic platform layer with QEMU and device tree support
+- **Phase 1-3 features:** Dataflow observability, deterministic scheduling, NPU emulation
+
+**`crates/kernel/src/shell/`** - Modular shell command implementations (20+ helper files)
+- Each `*_helpers.rs` file contains commands for a specific subsystem
+- Clean separation: thin dispatch in `shell.rs`, implementation in helpers
+- Week 12 additions: `benchmark_helpers.rs`, `fullautodemo_helpers.rs`, `compliance_helpers.rs`
+
+**`crates/testing/`** - Industrial-grade testing framework
+- AI benchmarking, formal verification (Kani, Prusti)
+- Security testing (fuzzing, crypto validation, vulnerability scanning)
+- Distributed and Byzantine fault testing
+- Property-based testing with QuickCheck
+- Multi-node QEMU orchestration
+
+**`scripts/`** - Build and test automation
+- `uefi_run.sh`: Main entry point (build kernel, run QEMU)
+- `hw_build.sh`: Hardware-optimized builds
+- `ci_guard_hwfirst.sh`: Enforces hardware-first design rules
+- Week 8 autonomous testing scripts
+
+**`docs/`** - Comprehensive documentation
+- Phase-by-phase implementation plans and results
+- Architecture documentation
+- Hardware bring-up guides
+- Week-by-week progress tracking
+- 831-line Week 12 results document
+
+**`tools/`** - Python utilities
+- Model signing for cryptographic verification
+- Data control plane tools
+
 ## Architecture Overview
 
 This kernel is structured as a set of small, decoupled modules with narrow APIs. Most can be compiled out via feature flags or toggled at runtime from the shell.
