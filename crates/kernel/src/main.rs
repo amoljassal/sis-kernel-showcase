@@ -53,6 +53,7 @@ pub mod predictive_scheduling;
 pub mod command_predictor;
 pub mod network_predictor;
 pub mod benchmark;
+pub mod compliance;
 // PMU helpers (feature-gated usage)
 pub mod pmu;
 // Platform layer abstraction (UART/GIC/Timer/MMU descriptors)

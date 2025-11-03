@@ -145,11 +145,11 @@ impl super::Shell {
             crate::uart_print(b"========================================\n\n");
 
             crate::uart_print(b"Key Takeaways:\n");
-            crate::uart_print(b"  ✓ Autonomous AI agents running in kernel space\n");
-            crate::uart_print(b"  ✓ Real-time adaptations to system conditions\n");
-            crate::uart_print(b"  ✓ Multi-subsystem coordination and learning\n");
-            crate::uart_print(b"  ✓ Quantifiable performance improvements\n");
-            crate::uart_print(b"  ✓ Industry-grade safety and monitoring\n\n");
+            crate::uart_print(b"  [OK] Autonomous AI agents running in kernel space\n");
+            crate::uart_print(b"  [OK] Real-time adaptations to system conditions\n");
+            crate::uart_print(b"  [OK] Multi-subsystem coordination and learning\n");
+            crate::uart_print(b"  [OK] Quantifiable performance improvements\n");
+            crate::uart_print(b"  [OK] Industry-grade safety and monitoring\n\n");
 
             crate::uart_print(b"For detailed analysis:\n");
             crate::uart_print(b"  - autoctl stats  (autonomy statistics)\n");
@@ -173,7 +173,7 @@ impl super::Shell {
             self.print_number_simple(heap_stats.current_allocated() as u64);
             crate::uart_print(b" bytes\n");
             crate::uart_print(b"  Heap Allocations: ");
-            self.print_number_simple(heap_stats.allocation_count() as u64);
+            self.print_number_simple(heap_stats.total_allocations() as u64);
             crate::uart_print(b"\n");
             crate::uart_print(b"  Network Connections: ");
             self.print_number_simple(net_state.connections.len() as u64);
@@ -312,10 +312,10 @@ impl super::Shell {
 
             // Overall summary
             crate::uart_print(b"KEY ACHIEVEMENTS:\n");
-            crate::uart_print(b"  ✓ Zero-downtime autonomous operation\n");
-            crate::uart_print(b"  ✓ Multi-subsystem AI coordination\n");
-            crate::uart_print(b"  ✓ Real-time learning and adaptation\n");
-            crate::uart_print(b"  ✓ Continuous monitoring and safety\n");
+            crate::uart_print(b"  [OK] Zero-downtime autonomous operation\n");
+            crate::uart_print(b"  [OK] Multi-subsystem AI coordination\n");
+            crate::uart_print(b"  [OK] Real-time learning and adaptation\n");
+            crate::uart_print(b"  [OK] Continuous monitoring and safety\n");
         }
     }
 }
