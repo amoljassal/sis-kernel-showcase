@@ -160,6 +160,8 @@ These thin helpers live under `crates/kernel/src/shell/` and keep `shell.rs` sma
 | `schedctl_helpers.rs`        | `schedctl`                       | –                  |
 | `cmdctl_helpers.rs`          | `cmdctl`                         | –                  |
 | `netctl_helpers.rs`          | `netctl`                         | –                  |
+| `benchmark_helpers.rs`       | `benchmark`                      | –                  |
+| `fullautodemo_helpers.rs`    | `fullautodemo`                   | –                  |
 | `agentctl_helpers.rs`        | `agentctl`                       | –                  |
 | `coordctl_helpers.rs`        | `coordctl`                       | –                  |
 | `metaclassctl_helpers.rs`    | `metaclassctl`                   | –                  |
@@ -192,6 +194,14 @@ These thin helpers live under `crates/kernel/src/shell/` and keep `shell.rs` sma
 - Confidence-based throttling: Throttle only when congestion probability > 60% AND confidence > 60% to avoid false positives
 - Commands: `netctl predict/buffers/flows/add-conn/simulate` for testing and visualization
 - **Simulated network stack**: Supports up to 32 concurrent connections with RTT, cwnd, loss_rate, bytes_sent/received tracking
+
+**Week 12: Integration, Documentation & Showcase (In Progress)**
+- **Benchmark suite**: Comparative performance testing (AI vs non-AI) for memory, commands, network, and full system integration
+- Commands: `benchmark memory/commands/network/full/report` - Quantifies AI improvements with side-by-side metrics
+- **Full autonomous demo**: `fullautodemo` command orchestrates 7-phase demonstration showcasing autonomous operation, real-time adaptations, learning metrics, and quantified improvements
+- **Comparative reporting**: Automatic calculation of OOM reduction %, deadline miss reduction %, latency reduction %, accuracy gains, packet loss reduction
+- **Multi-subsystem stress testing**: Validates all AI features (memory + scheduling + commands + network) working together under load
+- Benchmark infrastructure: Dual-run system (baseline then AI-enabled), metric collection, statistical analysis
 
 **Week 9: AI-Driven Scheduling (Implemented)**
 - Neural operator prioritization with dynamic priority adjustment
@@ -4382,7 +4392,7 @@ Structured graphs section
     - ✅ Week 9: AI-driven scheduling with learned operator prioritization
     - ✅ Week 10: Command execution prediction and resource pre-allocation
     - ✅ Week 11: Simple networking (AI-enhanced flow control, adaptive buffering, 6→8→1 congestion predictor, 469 lines)
-    - Week 12: Integration, documentation, and comprehensive showcase
+    - 🚧 Week 12: Integration, documentation, showcase (benchmark suite ✅, fullautodemo ✅, compliance logging pending)
 - **Phase 2 Completion**: Validate Phase 2 deterministic scheduler and model security on real hardware.
 - Separate real process/thread context switch measurement from syscall proxy.
 - Improve device support (complete VirtIO console path, add more drivers).
