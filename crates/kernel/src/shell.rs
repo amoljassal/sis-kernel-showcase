@@ -71,6 +71,8 @@ mod coordctl_helpers;
 mod learnctl_helpers;
 mod pmu_helpers;
 mod stresstest_helpers;
+mod benchmark_helpers;
+mod fullautodemo_helpers;
 mod ctlhex_helpers;
 mod metaclassctl_helpers;
 mod mlctl_helpers;
@@ -230,6 +232,8 @@ impl Shell {
                 "metricsctl" => { self.cmd_metricsctl(&parts[1..]); true },
                 "metrics" => { self.cmd_metrics(&parts[1..]); true },
                 "stresstest" => { self.stresstest_cmd(&parts[1..]); true },
+                "benchmark" => { self.cmd_benchmark(&parts[1..]); true },
+                "fullautodemo" => { self.cmd_fullautodemo(&parts[1..]); true },
                 #[cfg(feature = "demos")]
                 "temporaliso" => { self.cmd_temporal_isolation_demo(); true },
                 #[cfg(feature = "demos")]
@@ -719,6 +723,21 @@ impl Shell {
             "add-conn" => self.netctl_add_conn(&args[1..]),
             "simulate" => self.netctl_simulate(&args[1..]),
             _ => unsafe { crate::uart_print(b"Usage: netctl <predict|buffers|flows|add-conn|simulate> ...\n"); }
+        }
+    }
+
+    fn cmd_benchmark(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: benchmark <memory|commands|network|full|report> [duration_sec] [rate]\n"); }
+            return;
+        }
+        match args[0] {
+            "memory" => self.benchmark_memory(&args[1..]),
+            "commands" => self.benchmark_commands(&args[1..]),
+            "network" => self.benchmark_network(&args[1..]),
+            "full" => self.benchmark_full(&args[1..]),
+            "report" => self.benchmark_report(&args[1..]),
+            _ => unsafe { crate::uart_print(b"Usage: benchmark <memory|commands|network|full|report> [duration_sec] [rate]\n"); }
         }
     }
 
