@@ -16,6 +16,43 @@ static mut CMD_BUFFER: [u8; MAX_CMD_LEN] = [0; MAX_CMD_LEN];
 /// Shell prompt
 const SHELL_PROMPT: &[u8] = b"sis> ";
 
+/// Command prediction tracking (for Week 10 features)
+pub struct CommandPredictionState {
+    pub current_queue_depth: u32,
+    pub recent_command_rate: u32,
+    last_command_timestamp: u64,
+    command_count_window: u32,
+    window_start_timestamp: u64,
+}
+
+impl CommandPredictionState {
+    pub const fn new() -> Self {
+        Self {
+            current_queue_depth: 0,
+            recent_command_rate: 0,
+            last_command_timestamp: 0,
+            command_count_window: 0,
+            window_start_timestamp: 0,
+        }
+    }
+
+    pub fn record_command(&mut self) {
+        let now = crate::time::get_timestamp_us();
+        self.last_command_timestamp = now;
+
+        // Update rate (commands per second over 1-second window)
+        if now - self.window_start_timestamp > 1_000_000 {
+            self.recent_command_rate = self.command_count_window;
+            self.command_count_window = 0;
+            self.window_start_timestamp = now;
+        }
+        self.command_count_window += 1;
+    }
+}
+
+pub static COMMAND_PREDICTION: spin::Mutex<CommandPredictionState> =
+    spin::Mutex::new(CommandPredictionState::new());
+
 /// Simple shell implementation
 pub struct Shell {
     running: bool,
@@ -25,6 +62,7 @@ mod shell_metricsctl;
 mod autoctl_helpers;
 mod memctl_helpers;
 mod schedctl_helpers;
+mod cmdctl_helpers;
 mod neuralctl_helpers;
 mod graphctl_helpers;
 mod agentctl_helpers;
@@ -183,6 +221,7 @@ impl Shell {
                 "learnctl" => { self.learnctl_cmd(&parts[1..]); true },
                 "memctl" => { self.cmd_memctl(&parts[1..]); true },
                 "schedctl" => { self.cmd_schedctl(&parts[1..]); true },
+                "cmdctl" => { self.cmd_cmdctl(&parts[1..]); true },
                 "ask-ai" => { self.cmd_ask_ai(&parts[1..]); true },
                 "nnjson" => { self.cmd_nn_json(); true },
                 "nnact" => { self.cmd_nn_act(&parts[1..]); true },
@@ -650,6 +689,19 @@ impl Shell {
             "shadow" => self.schedctl_shadow(&args[1..]),
             "feature" => self.schedctl_feature(&args[1..]),
             _ => unsafe { crate::uart_print(b"Usage: schedctl <workload|priorities|affinity|shadow|feature> ...\n"); }
+        }
+    }
+
+    fn cmd_cmdctl(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: cmdctl <predict|batch|learn> ...\n"); }
+            return;
+        }
+        match args[0] {
+            "predict" => self.cmdctl_predict(&args[1..]),
+            "batch" => self.cmdctl_batch(&args[1..]),
+            "learn" => self.cmdctl_learn(&args[1..]),
+            _ => unsafe { crate::uart_print(b"Usage: cmdctl <predict|batch|learn> ...\n"); }
         }
     }
 
@@ -1323,7 +1375,25 @@ impl Shell {
                 // Record this snapshot for history
                 crate::prediction_tracker::record_distribution_snapshot(current_stats);
             }
-            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|limits|audit last N|rewards --breakdown|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck>\n"); }
+            "rollout" => {
+                if args.len() < 2 {
+                    self.autoctl_rollout_status();
+                } else if args[1] == "status" {
+                    self.autoctl_rollout_status();
+                } else {
+                    self.autoctl_rollout_set(args[1]);
+                }
+            }
+            "circuit-breaker" => {
+                if args.len() < 2 || args[1] == "status" {
+                    self.autoctl_circuit_breaker_status();
+                } else if args[1] == "reset" {
+                    self.autoctl_circuit_breaker_reset();
+                } else {
+                    unsafe { crate::uart_print(b"Usage: autoctl circuit-breaker [status|reset]\n"); }
+                }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|limits|audit last N|rewards --breakdown|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck|rollout|circuit-breaker>\n"); }
         }
     }
 
