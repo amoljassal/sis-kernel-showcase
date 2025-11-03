@@ -157,6 +157,7 @@ These thin helpers live under `crates/kernel/src/shell/` and keep `shell.rs` sma
 | `pmu_helpers.rs`             | `pmu`                            | optional `perf-verbose` details |
 | `ctlhex_helpers.rs`          | `ctlhex`                         | –                  |
 | `memctl_helpers.rs`          | `memctl`                         | –                  |
+| `schedctl_helpers.rs`        | `schedctl`                       | –                  |
 | `agentctl_helpers.rs`        | `agentctl`                       | –                  |
 | `coordctl_helpers.rs`        | `coordctl`                       | –                  |
 | `metaclassctl_helpers.rs`    | `metaclassctl`                   | –                  |
