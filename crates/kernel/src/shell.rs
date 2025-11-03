@@ -73,6 +73,7 @@ mod pmu_helpers;
 mod stresstest_helpers;
 mod benchmark_helpers;
 mod fullautodemo_helpers;
+mod compliance_helpers;
 mod ctlhex_helpers;
 mod metaclassctl_helpers;
 mod mlctl_helpers;
@@ -234,6 +235,7 @@ impl Shell {
                 "stresstest" => { self.stresstest_cmd(&parts[1..]); true },
                 "benchmark" => { self.cmd_benchmark(&parts[1..]); true },
                 "fullautodemo" => { self.cmd_fullautodemo(&parts[1..]); true },
+                "compliance" => { self.cmd_compliance(&parts[1..]); true },
                 #[cfg(feature = "demos")]
                 "temporaliso" => { self.cmd_temporal_isolation_demo(); true },
                 #[cfg(feature = "demos")]
@@ -738,6 +740,21 @@ impl Shell {
             "full" => self.benchmark_full(&args[1..]),
             "report" => self.benchmark_report(&args[1..]),
             _ => unsafe { crate::uart_print(b"Usage: benchmark <memory|commands|network|full|report> [duration_sec] [rate]\n"); }
+        }
+    }
+
+    fn cmd_compliance(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: compliance <eu-ai-act|audit|transparency|checklist|incidents> ...\n"); }
+            return;
+        }
+        match args[0] {
+            "eu-ai-act" => self.compliance_eu_ai_act(&args[1..]),
+            "audit" => self.compliance_audit(&args[1..]),
+            "transparency" => self.compliance_transparency(&args[1..]),
+            "checklist" => self.compliance_checklist(&args[1..]),
+            "incidents" => self.compliance_incidents(&args[1..]),
+            _ => unsafe { crate::uart_print(b"Usage: compliance <eu-ai-act|audit|transparency|checklist|incidents> ...\n"); }
         }
     }
 
