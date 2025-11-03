@@ -4219,6 +4219,59 @@ Quick, copy-paste steps to record a short demo video or try locally.
   - `llminfer "why was op B slower than op A?" --max-tokens 8`
 - Expected scheduler METRICs: `det_admission_*`, `deterministic_deadline_miss_count`, `deterministic_jitter_p99_ns`
 
+## Automated Testing
+
+Fully automated expect-based testing infrastructure for CI/CD and regression testing.
+
+**Prerequisites:**
+```bash
+brew install expect
+```
+
+**Quick Validation (~3 min):**
+```bash
+./scripts/run_phase4_tests_expect.sh quick
+```
+
+**Standard Testing (~8 min):**
+```bash
+./scripts/run_phase4_tests_expect.sh standard
+```
+
+**Full Validation (~12 min):**
+```bash
+./scripts/run_phase4_tests_expect.sh full
+```
+
+**Custom Duration Benchmarks:**
+```bash
+./scripts/run_phase4_tests_expect.sh -d 300 full   # 5-minute benchmarks
+```
+
+**What Gets Validated:**
+- AI Neural Network Activity: Verifies >0 inferences, demo completion, shell interaction
+- Benchmark Suite: 5 tests (memory, commands, network, full, report), 50K+ commands, 1.7M+ packets, 0 crashes
+- Compliance Suite: 92% EU AI Act compliance, 100/100 safety score, Articles 13-16 validation
+
+**Expected Results:**
+- AI Verification: PASS (2+ inferences, demo complete)
+- Benchmarks: PASS (5/5 tests, neural network active, high throughput, stable)
+- Compliance: PASS (92% score, 100/100 safety, production ready)
+
+**Individual Test Scripts:**
+```bash
+./scripts/verify_ai_active_expect.sh        # AI verification only (~2 min)
+./scripts/benchmark_suite_expect.sh 60      # Benchmarks with 60s duration
+./scripts/compliance_suite_expect.sh        # Compliance tests only (~2 min)
+```
+
+**Result Logs:**
+- AI verification: `ai_verification_results/ai_verification_<timestamp>.log`
+- Benchmarks: `benchmark_results/benchmark_suite_<timestamp>.log`
+- Compliance: `compliance_results/compliance_suite_<timestamp>.log`
+
+See `docs/guides/AUTOMATED-TESTING-EXPECT.md` for detailed documentation.
+
 ## Validation (Optional)
 
 You can generate a validation report and open a small HTML dashboard.
