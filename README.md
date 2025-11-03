@@ -4272,6 +4272,57 @@ brew install expect
 
 See `docs/guides/AUTOMATED-TESTING-EXPECT.md` for detailed documentation.
 
+## Extended Duration Testing
+
+Long-duration performance and stability validation (5 minutes to 24 hours).
+
+**5-Minute Benchmarks (~8 min):**
+```bash
+./scripts/run_extended_tests.sh benchmark-5min
+```
+
+**15-Minute Benchmarks (~18 min):**
+```bash
+./scripts/run_extended_tests.sh benchmark-15min
+```
+
+**1-Hour Benchmarks (~65 min):**
+```bash
+./scripts/run_extended_tests.sh benchmark-1hr
+```
+
+**Memory Stress Testing (10min at 95% pressure):**
+```bash
+./scripts/run_extended_tests.sh memory-stress
+```
+
+**Autonomous Control Validation (1hr, 4hr, 24hr):**
+```bash
+./scripts/run_extended_tests.sh autonomous-1hr
+./scripts/run_extended_tests.sh autonomous-4hr
+./scripts/run_extended_tests.sh autonomous-24hr
+```
+
+**24-Hour Stability Test (~27 hours):**
+```bash
+./scripts/run_extended_tests.sh stability-24hr
+```
+
+**Custom Duration Tests:**
+```bash
+./scripts/benchmark_suite_expect.sh 900           # 15-min benchmarks
+./scripts/memory_stress_expect.sh 1800000 95      # 30-min at 95% pressure
+./scripts/autonomous_validation_expect.sh 14400   # 4-hour autonomous
+```
+
+**Expected Results:**
+- Benchmarks: 50K-600K+ commands, 1M-12M+ packets, neural network active
+- Memory Stress: 90-100% pressure achieved, <10 OOM events, 0 crashes
+- Autonomous: 100-2400+ decisions, neural network active, <1% watchdog triggers
+- Stability: All tests pass, 0 crashes throughout
+
+See `docs/guides/EXTENDED-TESTING.md` for detailed documentation.
+
 ## Validation (Optional)
 
 You can generate a validation report and open a small HTML dashboard.
