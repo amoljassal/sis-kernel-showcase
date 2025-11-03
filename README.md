@@ -158,6 +158,7 @@ These thin helpers live under `crates/kernel/src/shell/` and keep `shell.rs` sma
 | `ctlhex_helpers.rs`          | `ctlhex`                         | –                  |
 | `memctl_helpers.rs`          | `memctl`                         | –                  |
 | `schedctl_helpers.rs`        | `schedctl`                       | –                  |
+| `cmdctl_helpers.rs`          | `cmdctl`                         | –                  |
 | `agentctl_helpers.rs`        | `agentctl`                       | –                  |
 | `coordctl_helpers.rs`        | `coordctl`                       | –                  |
 | `metaclassctl_helpers.rs`    | `metaclassctl`                   | –                  |
@@ -172,6 +173,15 @@ These thin helpers live under `crates/kernel/src/shell/` and keep `shell.rs` sma
 - Neural heap allocation strategies (Conservative/Balanced/Aggressive)
 - Allocation size prediction per command type
 - Learning-based outcome tracking and experience replay
+
+**Week 10: AI-Predicted Command Execution (Implemented)**
+- Command execution time prediction: 8→12→1 neural network predicts command execution time before starting
+- Prediction ledger: Tracks predictions vs actual outcomes for accuracy measurement
+- Resource pre-allocation: Predict memory and scheduling resource needs
+- Command batching: Learn optimal batch sizes (1-10 commands) for throughput
+- **Canary rollout**: Gradual autonomy deployment (0%→1%→5%→10%→50%→100%) with hash-based decision selection
+- **Circuit breaker**: Auto-disable autonomy after N consecutive failures (CLOSED/OPEN/HALF-OPEN states)
+- Commands: `cmdctl predict/batch/learn`, `autoctl rollout/circuit-breaker`
 
 **Week 9: AI-Driven Scheduling (Implemented)**
 - Neural operator prioritization with dynamic priority adjustment
