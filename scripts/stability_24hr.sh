@@ -175,16 +175,8 @@ main() {
     # Initialize metrics tracking
     init_metrics_csv
 
-    # Build kernel
-    log_info "Building kernel..."
-    cd "$PROJECT_ROOT"
-    cargo build --release --target x86_64-unknown-uefi || {
-        log_error "Kernel build failed"
-        exit 1
-    }
-
-    # Start QEMU
-    log_info "Starting QEMU for 24-hour stability test..."
+    # Start QEMU (uefi_run.sh will build the kernel)
+    log_info "Starting QEMU for 24-hour stability test (kernel will be built automatically)..."
     SIS_FEATURES="llm,crypto-real" BRINGUP=1 "$SCRIPT_DIR/uefi_run.sh" build > "$OUTPUT_FILE" 2>&1 &
     local qemu_pid=$!
 

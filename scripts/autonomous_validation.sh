@@ -49,15 +49,7 @@ run_autonomous_test() {
     log_info "Output: $output_file"
     echo ""
 
-    # Build kernel
-    log_info "Building kernel..."
-    cd "$PROJECT_ROOT"
-    cargo build --release --target x86_64-unknown-uefi || {
-        log_error "Kernel build failed"
-        return 1
-    }
-
-    log_info "Starting QEMU for autonomous validation..."
+    log_info "Starting QEMU for autonomous validation (kernel will be built automatically)..."
     SIS_FEATURES="llm,crypto-real" BRINGUP=1 "$SCRIPT_DIR/uefi_run.sh" build > "$output_file" 2>&1 &
     local qemu_pid=$!
 
