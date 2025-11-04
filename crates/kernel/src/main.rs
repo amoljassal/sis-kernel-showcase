@@ -54,6 +54,9 @@ pub mod command_predictor;
 pub mod network_predictor;
 pub mod benchmark;
 pub mod compliance;
+// Test utilities (only compiled for testing)
+#[cfg(test)]
+pub mod test_utils;
 // PMU helpers (feature-gated usage)
 pub mod pmu;
 // Platform layer abstraction (UART/GIC/Timer/MMU descriptors)
