@@ -1246,6 +1246,48 @@ pub fn force_meta_decision() -> MetaDecision {
     decision
 }
 
+/// Simulate a decision with hypothetical state (Phase 6: Whatif Analysis)
+///
+/// This performs inference with a hypothetical state WITHOUT modifying
+/// the agent's actual state or statistics. Used for "what-if" scenario analysis.
+pub fn simulate_decision_with_state(hypothetical_state: MetaState) -> MetaDecision {
+    let current_time = crate::agent_bus::get_timestamp_us();
+    let mut agent = META_AGENT.lock();
+
+    // Save original state
+    let original_state = agent.get_state();
+
+    // Temporarily set hypothetical state
+    agent.update_state(hypothetical_state);
+
+    // Run inference WITHOUT updating stats
+    let inputs = hypothetical_state.to_q88_inputs();
+    let _ = agent.network.infer(&inputs);
+
+    // Extract outputs (same logic as decide())
+    let out0_q88 = agent.network.last_out[0];
+    let out1_q88 = agent.network.last_out[1];
+    let out2_q88 = agent.network.last_out[2];
+
+    let memory_milli = ((out0_q88 as i32) * 1000 / 256).clamp(-1000, 1000) as i16;
+    let scheduling_milli = ((out1_q88 as i32) * 1000 / 256).clamp(-1000, 1000) as i16;
+    let command_milli = ((out2_q88 as i32) * 1000 / 256).clamp(-1000, 1000) as i16;
+
+    let confidence = ((memory_milli.abs() + scheduling_milli.abs() + command_milli.abs()) / 3)
+        .min(1000) as u16;
+
+    // Restore original state (no side effects!)
+    agent.update_state(original_state);
+
+    MetaDecision {
+        memory_directive: memory_milli,
+        scheduling_directive: scheduling_milli,
+        command_directive: command_milli,
+        confidence,
+        timestamp_us: current_time,
+    }
+}
+
 /// Helper function to print signed milli-units
 unsafe fn print_signed_milli(value: i16) {
     if value < 0 {
