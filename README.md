@@ -531,7 +531,7 @@ These standards are enforced by review and advisory CI checks (see `docs/real-ha
 - `autoctl checkpoints|saveckpt|restoreckpt N|restorebest`: Model checkpoint management.
 - `autoctl preview [N]`: Preview upcoming autonomous decisions without executing (multi-step supported).
 - `autoctl phase [status|A|B|C|D]`: Phase management (Learning/Validation/Production/Emergency) with recommended intervals.
-- `autoctl attention`: View feature importance for the last autonomous decision (explainability - shows which inputs influenced the decision).
+- `autoctl attention`: View feature importance for the last autonomous decision (explainability - shows which inputs influenced the decision and confidence reasoning). Confidence reasons also appear in deferral logs when actions are deferred due to low confidence.
 - `autoctl rollout <0|1|5|10|50|100|advance|rollback|status>`: Canary rollout stages.
 - `autoctl circuit-breaker <status|reset>`: Circuit breaker state and reset.
 

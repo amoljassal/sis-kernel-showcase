@@ -2048,6 +2048,14 @@ pub fn autonomous_decision_tick() {
     // Step 4: Confidence-Based Action Gating
     // ========================================================================
 
+    // Compute confidence reason early so we can include it in deferral logs
+    let confidence_reason = DecisionRationale::compute_confidence_reason(
+        confidence,
+        &directives,
+        audit_log.count,
+        &curr_state,
+    );
+
     if confidence < MIN_CONFIDENCE_FOR_ACTION {
         unsafe {
             // Only print low confidence message for first 5 ticks
@@ -2056,20 +2064,17 @@ pub fn autonomous_decision_tick() {
                 uart_print_i64(confidence as i64);
                 crate::uart_print(b" < ");
                 uart_print_i64(MIN_CONFIDENCE_FOR_ACTION as i64);
-                crate::uart_print(b"), deferring action\n");
+                crate::uart_print(b"), deferring action: ");
+                crate::uart_print(confidence_reason.as_str().as_bytes());
+                crate::uart_print(b"\n");
             }
         }
 
         // Log decision with no actions taken
         let mut rationale = DecisionRationale::new(ExplanationCode::LowConfidenceDeferredAction);
         rationale.confidence = confidence;
-        // Phase 6: Compute confidence reason and feature importance for explainability
-        rationale.confidence_reason = DecisionRationale::compute_confidence_reason(
-            confidence,
-            &directives,
-            audit_log.count,
-            &curr_state,
-        );
+        // Phase 6: Use pre-computed confidence reason and compute feature importance
+        rationale.confidence_reason = confidence_reason;
         rationale = rationale.with_feature_importance(&curr_state, &directives);
 
         audit_log.log_decision(
@@ -2253,13 +2258,8 @@ pub fn autonomous_decision_tick() {
 
     let mut rationale = DecisionRationale::new(explanation_code);
     rationale.confidence = confidence;
-    // Phase 6: Compute confidence reason and feature importance for explainability
-    rationale.confidence_reason = DecisionRationale::compute_confidence_reason(
-        confidence,
-        &directives,
-        audit_log.count,
-        &curr_state,
-    );
+    // Phase 6: Use pre-computed confidence reason and compute feature importance for explainability
+    rationale.confidence_reason = confidence_reason;
     rationale = rationale.with_feature_importance(&curr_state, &directives);
 
     audit_log.log_decision(
