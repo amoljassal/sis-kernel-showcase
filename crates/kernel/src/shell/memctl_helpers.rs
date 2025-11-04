@@ -63,8 +63,8 @@ impl super::Shell {
             "on" => {
                 crate::predictive_memory::MEMORY_APPROVAL_MODE.store(true, Ordering::Release);
                 unsafe { crate::uart_print(b"[MEMCTL] Approval mode: ENABLED\n"); }
-                unsafe { crate::uart_print(b"  Memory operations will require explicit confirmation.\n"); }
-                unsafe { crate::uart_print(b"  Use 'memctl approve' to confirm pending operations.\n"); }
+                unsafe { crate::uart_print(b"  Note: Approval flag is set. Full approve/deny workflow (pending ops queue)\n"); }
+                unsafe { crate::uart_print(b"        is planned for future enhancement.\n"); }
             }
             "off" => {
                 crate::predictive_memory::MEMORY_APPROVAL_MODE.store(false, Ordering::Release);
