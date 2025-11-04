@@ -51,7 +51,7 @@ Gated verbose logging behind existing `perf-verbose` feature flag for cleaner pr
 **Files Modified:**
 - `crates/kernel/src/main.rs` - Wrapped verbose logs in feature guards
 
-**Commit:** (pending)
+**Commit:** 3f65fbc - "feat: Gate verbose timer/IRQ logs behind perf-verbose feature"
 
 **Impact:** Medium-High - Production logs are now clean and readable, with detailed debugging available via feature flag when needed
 
