@@ -4350,6 +4350,19 @@ Comprehensive guides for all aspects of the SIS Kernel:
   - EU AI Act compliance API with scoring formulas
   - Neural network API and autonomous control lifecycle
   - Integration examples: Python, CI/CD, Prometheus
+- `docs/guides/INTEGRATION-GUIDE.md` - System integration guide
+  - Integration patterns (standalone, QEMU, API-driven, hybrid)
+  - Embedding SIS kernel in larger systems
+  - API integration examples (Python, Prometheus, Grafana)
+  - Monitoring and observability setup
+  - Security considerations and performance tuning
+  - Example integrations: CI/CD, edge AI gateway
+- `docs/guides/TROUBLESHOOTING-GUIDE.md` - Comprehensive troubleshooting
+  - Build, boot, and runtime issues with solutions
+  - Testing and performance troubleshooting
+  - Integration and hardware-specific problems
+  - Debugging tools and techniques
+  - Common log patterns and diagnostic procedures
 
 **Project Planning:**
 - `docs/plans/PHASE4-SOLIDIFICATION-PLAN.md` - Phase 4 solidification roadmap
