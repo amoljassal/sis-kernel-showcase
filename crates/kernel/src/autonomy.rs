@@ -2453,3 +2453,33 @@ pub fn get_last_decision_rationale() -> Option<DecisionRecord> {
     let audit_log = AUDIT_LOG.lock();
     audit_log.get_last().copied()
 }
+
+/// Phase 6 Part 2: Whatif Analysis - Simulate decision with hypothetical state
+///
+/// This function allows users to explore "what-if" scenarios by simulating
+/// autonomous decisions under hypothetical system conditions. It supports
+/// EU AI Act Article 14 (human oversight) by enabling scenario analysis
+/// before deployment.
+///
+/// Returns DecisionPreview showing what directives would be issued given
+/// the hypothetical state, without modifying any system state.
+pub fn simulate_whatif_decision(hypothetical_state: MetaState) -> DecisionPreview {
+    let timestamp = crate::time::get_timestamp_us();
+
+    // Call meta_agent to simulate decision with hypothetical state
+    let decision = crate::meta_agent::simulate_decision_with_state(hypothetical_state);
+
+    DecisionPreview {
+        timestamp,
+        memory_directive: decision.memory_directive,
+        scheduling_directive: decision.scheduling_directive,
+        command_directive: decision.command_directive,
+        confidence: decision.confidence as i16,
+        memory_pressure: hypothetical_state.memory_pressure,
+        memory_fragmentation: hypothetical_state.memory_fragmentation,
+        deadline_misses: hypothetical_state.deadline_misses,
+        command_rate: hypothetical_state.command_rate,
+        enabled: AUTONOMOUS_CONTROL.is_enabled(),
+        safe_mode: AUTONOMOUS_CONTROL.is_safe_mode(),
+    }
+}

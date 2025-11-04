@@ -518,6 +518,184 @@ impl super::Shell {
         unsafe { crate::uart_print(b"]"); }
     }
 
+    /// Phase 6 Part 2: Whatif scenario analysis (EU AI Act Article 14: human oversight)
+    pub(crate) fn autoctl_whatif(&self, args: &[&str]) {
+        unsafe { crate::uart_print(b"\n=== What-If Scenario Analysis ===\n\n"); }
+
+        // Start with current state as baseline
+        let mut hypothetical_state = crate::meta_agent::collect_telemetry();
+        let baseline_state = hypothetical_state;
+
+        // Parse user-specified overrides (mem=80, frag=70, etc.)
+        let mut overrides = heapless::Vec::<(&str, u8), 8>::new();
+
+        for arg in args {
+            if let Some(eq_pos) = arg.find('=') {
+                let (key, value_str) = arg.split_at(eq_pos);
+                let value_str = &value_str[1..]; // Skip '='
+
+                if let Ok(value) = value_str.parse::<u8>() {
+                    let value_clamped = value.min(100); // Clamp to 0-100
+
+                    match key {
+                        "mem" => {
+                            hypothetical_state.memory_pressure = value_clamped;
+                            let _ = overrides.push((key, value_clamped));
+                        }
+                        "frag" => {
+                            hypothetical_state.memory_fragmentation = value_clamped;
+                            let _ = overrides.push((key, value_clamped));
+                        }
+                        "misses" => {
+                            hypothetical_state.deadline_misses = value_clamped;
+                            let _ = overrides.push((key, value_clamped));
+                        }
+                        "rate" => {
+                            hypothetical_state.command_rate = value_clamped;
+                            let _ = overrides.push((key, value_clamped));
+                        }
+                        _ => {
+                            unsafe {
+                                crate::uart_print(b"[WARNING] Unknown parameter: ");
+                                crate::uart_print(key.as_bytes());
+                                crate::uart_print(b" (use mem, frag, misses, or rate)\n");
+                            }
+                        }
+                    }
+                } else {
+                    unsafe {
+                        crate::uart_print(b"[ERROR] Invalid value for ");
+                        crate::uart_print(arg.as_bytes());
+                        crate::uart_print(b"\n");
+                    }
+                }
+            } else if !arg.is_empty() {
+                unsafe {
+                    crate::uart_print(b"[ERROR] Invalid argument: ");
+                    crate::uart_print(arg.as_bytes());
+                    crate::uart_print(b" (use key=value format)\n");
+                }
+            }
+        }
+
+        // Display scenario configuration
+        if overrides.is_empty() {
+            unsafe { crate::uart_print(b"Scenario: CURRENT STATE (no overrides)\n"); }
+        } else {
+            unsafe { crate::uart_print(b"Scenario: HYPOTHETICAL STATE with overrides:\n"); }
+            for (key, value) in &overrides {
+                unsafe {
+                    crate::uart_print(b"  ");
+                    crate::uart_print(key.as_bytes());
+                    crate::uart_print(b"=");
+                    self.print_number_simple(*value as u64);
+                    crate::uart_print(b"%\n");
+                }
+            }
+        }
+
+        // Run whatif simulation
+        let whatif_result = crate::autonomy::simulate_whatif_decision(hypothetical_state);
+
+        // Display hypothetical state vs current state
+        unsafe { crate::uart_print(b"\n--- System State Comparison ---\n"); }
+
+        unsafe { crate::uart_print(b"                      Current   ->  Hypothetical\n"); }
+        unsafe { crate::uart_print(b"Memory Pressure:        "); }
+        self.print_number_simple(baseline_state.memory_pressure as u64);
+        unsafe { crate::uart_print(b"%     ->  "); }
+        self.print_number_simple(whatif_result.memory_pressure as u64);
+        unsafe { crate::uart_print(b"%\n"); }
+
+        unsafe { crate::uart_print(b"Memory Fragmentation:   "); }
+        self.print_number_simple(baseline_state.memory_fragmentation as u64);
+        unsafe { crate::uart_print(b"%     ->  "); }
+        self.print_number_simple(whatif_result.memory_fragmentation as u64);
+        unsafe { crate::uart_print(b"%\n"); }
+
+        unsafe { crate::uart_print(b"Deadline Misses:        "); }
+        self.print_number_simple(baseline_state.deadline_misses as u64);
+        unsafe { crate::uart_print(b"%     ->  "); }
+        self.print_number_simple(whatif_result.deadline_misses as u64);
+        unsafe { crate::uart_print(b"%\n"); }
+
+        unsafe { crate::uart_print(b"Command Rate:           "); }
+        self.print_number_simple(baseline_state.command_rate as u64);
+        unsafe { crate::uart_print(b"%     ->  "); }
+        self.print_number_simple(whatif_result.command_rate as u64);
+        unsafe { crate::uart_print(b"%\n"); }
+
+        // Display predicted directives
+        unsafe { crate::uart_print(b"\n--- Predicted AI Directives (Q8.8 fixed-point) ---\n"); }
+
+        unsafe { crate::uart_print(b"Memory Directive:       "); }
+        super::print_number_signed(whatif_result.memory_directive as i64);
+        unsafe { crate::uart_print(b" "); }
+        if whatif_result.memory_directive > 256 {
+            unsafe { crate::uart_print(b"(increase allocation)\n"); }
+        } else if whatif_result.memory_directive < -256 {
+            unsafe { crate::uart_print(b"(trigger compaction)\n"); }
+        } else {
+            unsafe { crate::uart_print(b"(maintain current)\n"); }
+        }
+
+        unsafe { crate::uart_print(b"Scheduling Directive:   "); }
+        super::print_number_signed(whatif_result.scheduling_directive as i64);
+        unsafe { crate::uart_print(b" "); }
+        if whatif_result.scheduling_directive > 256 {
+            unsafe { crate::uart_print(b"(increase priority)\n"); }
+        } else if whatif_result.scheduling_directive < -256 {
+            unsafe { crate::uart_print(b"(decrease priority)\n"); }
+        } else {
+            unsafe { crate::uart_print(b"(maintain current)\n"); }
+        }
+
+        unsafe { crate::uart_print(b"Command Directive:      "); }
+        super::print_number_signed(whatif_result.command_directive as i64);
+        unsafe { crate::uart_print(b" "); }
+        if whatif_result.command_directive > 256 {
+            unsafe { crate::uart_print(b"(enable prediction)\n"); }
+        } else if whatif_result.command_directive < -256 {
+            unsafe { crate::uart_print(b"(disable prediction)\n"); }
+        } else {
+            unsafe { crate::uart_print(b"(maintain current)\n"); }
+        }
+
+        // Display confidence and assessment
+        unsafe { crate::uart_print(b"\nDecision Confidence:    "); }
+        self.print_number_simple((whatif_result.confidence / 10) as u64);
+        unsafe { crate::uart_print(b"/100 ("); }
+        self.print_number_simple(whatif_result.confidence as u64);
+        unsafe { crate::uart_print(b"/1000)\n"); }
+
+        // Confidence threshold check
+        let threshold = crate::autonomy::AUTONOMOUS_CONTROL.get_confidence_threshold();
+        unsafe { crate::uart_print(b"Would Execute?:         "); }
+        if whatif_result.confidence >= threshold {
+            unsafe { crate::uart_print(b"YES (confidence >= threshold "); }
+            self.print_number_simple(threshold as u64);
+            unsafe { crate::uart_print(b"/1000)\n"); }
+        } else {
+            unsafe { crate::uart_print(b"NO (confidence < threshold "); }
+            self.print_number_simple(threshold as u64);
+            unsafe { crate::uart_print(b"/1000)\n"); }
+        }
+
+        // Risk warnings
+        if whatif_result.memory_pressure > 80 || whatif_result.memory_fragmentation > 60 {
+            unsafe { crate::uart_print(b"\n[WARNING] High memory pressure or fragmentation in scenario!\n"); }
+        }
+        if whatif_result.deadline_misses > 20 {
+            unsafe { crate::uart_print(b"[WARNING] High deadline miss rate in scenario!\n"); }
+        }
+
+        // Usage hints
+        unsafe { crate::uart_print(b"\nUsage Examples:\n"); }
+        unsafe { crate::uart_print(b"  autoctl whatif mem=80              # What if memory pressure is 80%?\n"); }
+        unsafe { crate::uart_print(b"  autoctl whatif mem=80 frag=70      # Multiple conditions\n"); }
+        unsafe { crate::uart_print(b"  autoctl whatif mem=90 misses=40    # High load scenario\n\n"); }
+    }
+
     /// Set or get minimum confidence threshold (enhancement: runtime configuration)
     pub(crate) fn autoctl_conf_threshold(&self, threshold_str: Option<&str>) {
         use crate::autonomy::AUTONOMOUS_CONTROL;

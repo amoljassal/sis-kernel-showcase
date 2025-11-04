@@ -803,7 +803,7 @@ impl Shell {
 
     fn cmd_autoctl(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: autoctl <on|off|reset|status|interval N|limits|audit last N|rewards --breakdown|anomalies|verify|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck>\n"); }
+            unsafe { crate::uart_print(b"Usage: autoctl <on|off|reset|status|interval N|limits|audit last N|rewards --breakdown|anomalies|verify|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck|preview|attention|whatif [param=value...]>\n"); }
             return;
         }
 
@@ -1615,6 +1615,9 @@ impl Shell {
             }
             "attention" => {
                 self.autoctl_attention();
+            }
+            "whatif" => {
+                self.autoctl_whatif(&args[1..]);
             }
             "conf-threshold" => {
                 if args.len() >= 2 {
