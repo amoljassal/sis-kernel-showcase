@@ -88,9 +88,14 @@ Phase 5-6 enhance the kernel with user-facing safety controls and explainability
    - Enables safe testing and validation
    - Zero-risk exploration of memory management decisions
 
-2. **memctl approval on/off** - Approval gate for memory operations
-   - Requires user confirmation before executing memory operations
-   - Human-in-the-loop control for safety-critical operations
+2. **memctl approval workflow** - Human-in-the-loop approval for memory operations
+   - **memctl approval on/off**: Enable approval mode (operations queue for review)
+   - **memctl approvals**: List pending operations with risk scores and reasons
+   - **memctl approve [N]**: Approve and execute N operations (or all if omitted)
+   - **memctl reject <ID|all>**: Reject operations by ID or all
+   - Bounded queue (max 100 operations) with automatic coalescing
+   - Operations include confidence scores (0-1000) and risk scores (0-100)
+   - Freshness recheck before execution (skips if conditions improved)
    - EU AI Act Article 14 compliance (human oversight)
 
 3. **autoctl preview [N]** - Preview autonomous decisions without executing
@@ -136,9 +141,27 @@ memctl query-mode on          # Enable dry-run mode
 memctl predict compaction     # See predictions without execution
 memctl query-mode off         # Resume normal operation
 
-memctl approval on            # Require approval for memory ops
-# ... operations will wait for approval ...
+memctl approval on            # Enable approval mode (ops queue for review)
+autoctl on                    # Start autonomy (will queue operations)
+# ... wait for operations to queue ...
+memctl approvals              # List pending operations with risk scores
+memctl approve 2              # Approve exactly 2 operations
+memctl approvals              # View remaining operations
+memctl approve                # Approve all remaining operations
+memctl reject 5               # Reject specific operation by ID
+memctl reject all             # Reject all pending operations
+autoctl off                   # Stop autonomy (auto-clears queue)
 memctl approval off           # Disable approval mode
+
+# Example output from memctl approvals:
+# === Pending Memory Operations ===
+#   Total: 3
+#
+# ID   | Type            | Confidence | Risk | Reason
+# -----|-----------------|------------|------|--------------------------------------------------
+# 1    | Compaction      | 800/1000  | 80   | High fragmentation predicted (>70%)
+# 2    | Compaction      | 750/1000  | 50   | Moderate fragmentation predicted (>50%)
+# 3    | Compaction      | 650/1000  | 20   | Preventive compaction
 
 # Autonomy preview and control
 autoctl preview               # Preview next decision
@@ -4411,7 +4434,25 @@ Quick, copy-paste steps to record a short demo video or try locally.
   - `tools/sis_datactl.py --retries 4 start 100`
   - If you rotated the token in the shell, pass it: `--token 0xYOUR_HEX_TOKEN`.
 
-5) LLM demo (shell)
+5) Human-in-the-Loop Approval Workflow (EU AI Act Article 14)
+- Build and boot: `BRINGUP=1 ./scripts/uefi_run.sh`
+- In the SIS shell:
+  - `memctl approval on`       # Enable approval mode
+  - `autoctl on`                # Start autonomy
+  - Wait ~5 seconds for operations to queue
+  - `memctl approvals`          # List pending operations (shows risk scores)
+  - `memctl approve 1`          # Approve exactly 1 operation
+  - `memctl approvals`          # View remaining (new ops may have queued)
+  - `memctl approve`            # Approve all remaining
+  - `autoctl off`               # Stop autonomy (auto-clears queue)
+  - `memctl approval off`       # Disable approval mode
+- Expected behavior:
+  - Operations queue with risk scores (20-80) and confidence (0-1000)
+  - Coalescing keeps queue at 1 operation max (updates existing instead of duplicating)
+  - Freshness recheck before execution (may skip if state improved)
+  - Auto-clearing when autonomy stops
+
+6) LLM demo (shell)
 - Build and boot with LLM enabled: `SIS_FEATURES="llm" BRINGUP=1 ./scripts/uefi_run.sh`
 - In the SIS shell:
   - `llmctl load --wcet-cycles 25000`
