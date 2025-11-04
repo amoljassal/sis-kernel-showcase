@@ -522,8 +522,9 @@ These standards are enforced by review and advisory CI checks (see `docs/real-ha
   - Note: Demo commands are only available when the `demos` feature is enabled (see `shell/demos/`).
 
 #### Autonomy Controls (autoctl)
-- `autoctl on|off|status|interval <ms>`: Enable/disable, show status, and set decision interval.
-- `autoctl dashboard`: Compact view of last decisions (ID, reward, actions, explanation).
+- `autoctl on|off|status|interval <ms>`: Enable/disable, show status (includes confidence threshold, accepted/deferred counters), and set decision interval.
+- `autoctl dashboard`: Compact view of last decisions (ID, reward, actions, explanation) with acceptance rate and confidence reason breakdown.
+- `autoctl conf-threshold [N]`: Get or set minimum confidence threshold (0-1000, default 600=60%). Actions are only executed when confidence >= threshold. Allows runtime tuning without recompilation.
 - `autoctl rewards --breakdown`: Multi-objective reward components + total.
 - `autoctl anomalies`: Recent rate-limit hits, hard-limit violations, negative rewards.
 - `autoctl explain <id>`: Human-readable explanation (rationale code + context).
@@ -4698,7 +4699,7 @@ The SIS Kernel includes a comprehensive industry-grade testing framework that pr
   - `bringup` — Enable AArch64 bring-up path and boot markers.
   - `arm64-ai` — Enable AI benchmark wiring.
   - `neon-optimized` — Enable 16×16 NEON matmul demo and related metric.
-  - `perf-verbose` — Gate noisy `[PERF] ...` logs; METRICs and summaries are always on.
+  - `perf-verbose` — Gate verbose timer/IRQ debug logs ([IRQ_HANDLER], [TIMER_ISR], TVAL diagnostics) and noisy [PERF] logs; METRICs and summaries are always on. Production builds should omit this feature for clean logs.
   - `graph-demo` — Enable the `graphdemo` shell demo and graph scaffolding helpers.
   - `graph-autostats` — Auto-emit baseline graph counts (`graph_stats_ops`, `graph_stats_channels`) on boot.
   - `deterministic` — Enable deterministic scheduler scaffolding demos and METRICs.
