@@ -590,7 +590,7 @@ impl Shell {
 
     fn cmd_memctl(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress|strategy|learn|query-mode|approval> ...\n"); }
+            unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress|strategy|learn|query-mode|approval|approvals|approve|reject> ...\n"); }
             return;
         }
         match args[0] {
@@ -695,7 +695,24 @@ impl Shell {
                 unsafe { crate::uart_print(b"[MEM] Stress test complete\n"); }
                 crate::heap::print_heap_stats();
             }
-            _ => unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress|strategy|learn|query-mode|approval> ...\n"); }
+            "approvals" => {
+                // List pending operations for approval
+                self.memctl_approvals();
+            }
+            "approve" => {
+                // Approve pending operations
+                let count_str = args.get(1).copied();
+                self.memctl_approve(count_str);
+            }
+            "reject" => {
+                // Reject pending operations
+                if args.len() >= 2 {
+                    self.memctl_reject(args[1]);
+                } else {
+                    unsafe { crate::uart_print(b"Usage: memctl reject <ID|all>\n"); }
+                }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress|strategy|learn|query-mode|approval|approvals|approve|reject> ...\n"); }
         }
     }
 

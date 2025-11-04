@@ -15,6 +15,94 @@ use core::sync::atomic::{AtomicBool, Ordering};
 pub static MEMORY_QUERY_MODE: AtomicBool = AtomicBool::new(false);
 pub static MEMORY_APPROVAL_MODE: AtomicBool = AtomicBool::new(false);
 
+// UX Enhancement: Pending operations queue for approval workflow
+#[derive(Debug, Copy, Clone)]
+pub enum OperationType {
+    Compaction,
+    StrategyChange,
+}
+
+impl OperationType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            OperationType::Compaction => "Compaction",
+            OperationType::StrategyChange => "Strategy Change",
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct PendingOperation {
+    pub id: usize,
+    pub operation_type: OperationType,
+    pub timestamp_us: u64,
+    pub reason: &'static str,
+    pub confidence: u16,         // 0-1000
+    pub risk_score: u8,          // 0-100 (higher = riskier)
+}
+
+pub struct PendingOperationsQueue {
+    operations: Vec<PendingOperation>,
+    next_id: usize,
+}
+
+impl PendingOperationsQueue {
+    pub const fn new() -> Self {
+        Self {
+            operations: Vec::new(),
+            next_id: 1,
+        }
+    }
+
+    pub fn enqueue(&mut self, op_type: OperationType, reason: &'static str, confidence: u16, risk: u8) -> usize {
+        let id = self.next_id;
+        self.next_id += 1;
+        let op = PendingOperation {
+            id,
+            operation_type: op_type,
+            timestamp_us: get_timestamp_us(),
+            reason,
+            confidence,
+            risk_score: risk,
+        };
+        self.operations.push(op);
+        id
+    }
+
+    pub fn len(&self) -> usize {
+        self.operations.len()
+    }
+
+    pub fn get(&self, index: usize) -> Option<&PendingOperation> {
+        self.operations.get(index)
+    }
+
+    pub fn approve_all(&mut self) -> Vec<PendingOperation> {
+        let drained = self.operations.drain(..).collect();
+        drained
+    }
+
+    pub fn approve_n(&mut self, n: usize) -> Vec<PendingOperation> {
+        let count = core::cmp::min(n, self.operations.len());
+        self.operations.drain(..count).collect()
+    }
+
+    pub fn reject_all(&mut self) {
+        self.operations.clear();
+    }
+
+    pub fn reject_by_id(&mut self, id: usize) -> bool {
+        if let Some(pos) = self.operations.iter().position(|op| op.id == id) {
+            self.operations.remove(pos);
+            true
+        } else {
+            false
+        }
+    }
+}
+
+pub static PENDING_OPERATIONS: Mutex<PendingOperationsQueue> = Mutex::new(PendingOperationsQueue::new());
+
 /// Allocation strategy selected by meta-agent
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum AllocationStrategy {
@@ -424,6 +512,32 @@ pub fn execute_predictive_compaction_verbose(verbose: bool) -> bool {
         }
     }
 
+    // UX Enhancement: If approval mode is ON, enqueue instead of executing
+    if should_compact && MEMORY_APPROVAL_MODE.load(Ordering::Relaxed) {
+        drop(state);  // Release lock before acquiring PENDING_OPERATIONS
+        let risk_score = if predicted_frag > 70 { 80 } else if predicted_frag > 50 { 50 } else { 20 };
+        let reason = if predicted_frag > 70 {
+            "High fragmentation predicted (>70%)"
+        } else if predicted_frag > 50 {
+            "Moderate fragmentation predicted (>50%)"
+        } else {
+            "Preventive compaction"
+        };
+
+        let mut pending = PENDING_OPERATIONS.lock();
+        let op_id = pending.enqueue(OperationType::Compaction, reason, confidence, risk_score);
+        drop(pending);
+
+        if verbose {
+            unsafe {
+                crate::uart_print(b"[PRED_MEM] Operation queued for approval (ID: ");
+                crate::shell::print_number_simple(op_id as u64);
+                crate::uart_print(b")\n");
+            }
+        }
+        return false;  // Not executed yet
+    }
+
     // TODO: Actual compaction would be triggered here
     // For now, this is a demonstration of the decision logic
     // In a real implementation, this would call a heap compaction function
@@ -590,4 +704,38 @@ pub fn print_statistics() {
         crate::shell::print_number_simple(state.strategy_count as u64);
         crate::uart_print(b"\n");
     }
+}
+
+/// Execute approved pending operations
+pub fn execute_approved_operations(operations: Vec<PendingOperation>) -> (usize, usize) {
+    let mut executed = 0;
+    let failed = 0;
+
+    for op in operations {
+        unsafe {
+            crate::uart_print(b"[MEMCTL] Executing approved operation ");
+            crate::shell::print_number_simple(op.id as u64);
+            crate::uart_print(b": ");
+            crate::uart_print(op.operation_type.as_str().as_bytes());
+            crate::uart_print(b"\n  Reason: ");
+            crate::uart_print(op.reason.as_bytes());
+            crate::uart_print(b"\n");
+        }
+
+        match op.operation_type {
+            OperationType::Compaction => {
+                // TODO: Actual compaction execution would go here
+                // For now, simulate successful execution
+                unsafe { crate::uart_print(b"  Status: Simulated (would trigger heap compaction)\n"); }
+                executed += 1;
+            }
+            OperationType::StrategyChange => {
+                // TODO: Actual strategy change execution would go here
+                unsafe { crate::uart_print(b"  Status: Simulated (would change allocation strategy)\n"); }
+                executed += 1;
+            }
+        }
+    }
+
+    (executed, failed)
 }
