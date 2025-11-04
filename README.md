@@ -77,9 +77,9 @@ See `docs/PHASE4-COMPLETION-REPORT.md` for complete details.
 
 ## Phase 5: UX Safety Enhancements (IN PROGRESS)
 
-**Status:** Phase 5 safety controls implemented, Phase 6 explainability features pending
+**Status:** Phase 5 safety controls implemented ✅, Phase 6 explainability in progress (1/2 features done)
 
-Phase 5 enhances the kernel with user-facing safety controls and explainability features based on dev team feedback. These enhancements improve production deployment workflows, transparency, and regulatory compliance.
+Phase 5-6 enhance the kernel with user-facing safety controls and explainability features based on dev team feedback. These enhancements improve production deployment workflows, transparency, and regulatory compliance (EU AI Act Articles 13-14).
 
 **Phase 5: Safety Controls (IMPLEMENTED ✅)**
 
@@ -107,17 +107,20 @@ Phase 5 enhances the kernel with user-facing safety controls and explainability 
    - Each phase has recommended decision intervals (100ms-2000ms)
    - Supports staged production rollout workflows
 
-**Phase 6: Explainability Features (PLANNED)**
+**Phase 6: Explainability Features (IN PROGRESS: 1/2 done)**
 
-5. **autoctl attention** - Attention mechanism visualization (planned)
-   - Visualize which inputs influence decisions most
-   - Feature importance ranking with weights
+5. **autoctl attention** - Attention mechanism visualization (IMPLEMENTED ✅)
+   - Shows which inputs influenced the last autonomous decision
+   - Feature importance displayed as percentages with progress bars
+   - Breakdown by feature group: Memory (33%), Scheduling (33%), Command (34%)
+   - Interpretation guidance (which factors drove the decision)
    - EU AI Act Article 13 compliance (transparency)
 
-6. **autoctl whatif <scenario>** - What-if scenario analysis (planned)
-   - Simulate hypothetical scenarios (mem-low, high-load, etc.)
-   - Predict 5-step decision sequences
-   - Risk assessment for each scenario
+6. **autoctl whatif <scenario>** - What-if scenario analysis (PLANNED)
+   - Simulate hypothetical scenarios (high-pressure, high-fragmentation, deadline-stress, combined-stress, low-load)
+   - Preview autonomous response to each scenario
+   - Risk assessment against current phase limits
+   - Actionable recommendations for each scenario
 
 **Benefits:**
 - **Safety:** Preview, approval, and query modes prevent unexpected actions
@@ -162,11 +165,44 @@ autoctl interval 200          # Set recommended interval for phase
 #   Command Prediction: 256 (enable prediction)
 #
 # Decision Confidence: 51/100
+
+# Explainability features
+autoctl attention                # View last decision's feature importance
+
+# Example output from autoctl attention:
+# === Decision Attention Analysis ===
+# Last Decision ID: #46
+# Timestamp: 115 seconds
+# Explanation: Skipped action: confidence below threshold
+#
+# Input Feature Influence (0-100%):
+#   Memory Features:      [======              ] 33% (LOW)
+#   Scheduling Features:  [======              ] 33% (LOW)
+#   Command Features:     [======              ] 34% (LOW)
+#
+# System State at Decision Time:
+#   Memory Pressure:      0%
+#   Memory Fragmentation: 0%
+#   Deadline Misses:      0%
+#   Command Rate:         0/100
+#
+# Directives Issued:
+#   Memory Directive:     0 (Q8.8)
+#   Scheduling Directive: 0 (Q8.8)
+#   Command Directive:    0 (Q8.8)
+#
+# Overall Decision Confidence: 0/1000
+#
+# Interpretation:
+#   The decision was influenced EQUALLY by multiple factors.
+#   System is operating in balanced conditions.
 ```
 
 **Documentation:**
+- Phase 5 testing guide: `docs/PHASE5-TESTING-GUIDE.md`
+- Phase 5 test results: `docs/PHASE5-TEST-RESULTS.md`
+- Phase 6 implementation plan: `docs/plans/PHASE6-EXPLAINABILITY-PLAN.md`
 - UX enhancements assessment: `docs/plans/UX-ENHANCEMENTS-ASSESSMENT.md`
-- Implementation roadmap (Phase 5: 4.5 weeks, Phase 6: 4.5 weeks)
 - Complete feature specifications with pros/cons analysis
 
 ## Current Stats
