@@ -1475,7 +1475,14 @@ impl Shell {
             "attention" => {
                 self.autoctl_attention();
             }
-            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|limits|audit last N|rewards --breakdown|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck|rollout|circuit-breaker|preview [N]|phase [A|B|C|D]|attention>\n"); }
+            "conf-threshold" => {
+                if args.len() >= 2 {
+                    self.autoctl_conf_threshold(Some(args[1]));
+                } else {
+                    self.autoctl_conf_threshold(None);
+                }
+            }
+            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|limits|audit last N|rewards --breakdown|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck|rollout|circuit-breaker|preview [N]|phase [A|B|C|D]|attention|conf-threshold [N]>\n"); }
         }
     }
 
