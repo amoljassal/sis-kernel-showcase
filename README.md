@@ -75,9 +75,9 @@ See `docs/PHASE4-COMPLETION-REPORT.md` for complete details.
 
 **Next Phase:** Phase 5 - Production Hardening (companion test crate, module refactoring, performance optimization, hardware validation)
 
-## Phase 5: UX Safety Enhancements (IN PROGRESS)
+## Phase 5: UX Safety Enhancements (COMPLETE ✅)
 
-**Status:** Phase 5 safety controls implemented ✅, Phase 6 explainability in progress (1/2 features done)
+**Status:** Phase 5 safety controls COMPLETE ✅, Phase 6 explainability COMPLETE ✅
 
 Phase 5-6 enhance the kernel with user-facing safety controls and explainability features based on dev team feedback. These enhancements improve production deployment workflows, transparency, and regulatory compliance (EU AI Act Articles 13-14).
 
@@ -112,7 +112,7 @@ Phase 5-6 enhance the kernel with user-facing safety controls and explainability
    - Each phase has recommended decision intervals (100ms-2000ms)
    - Supports staged production rollout workflows
 
-**Phase 6: Explainability Features (IN PROGRESS: 1/2 done)**
+**Phase 6: Explainability Features (COMPLETE: 2/2 done ✅)**
 
 5. **autoctl attention** - Attention mechanism visualization (IMPLEMENTED ✅)
    - Shows which inputs influenced the last autonomous decision
@@ -121,11 +121,15 @@ Phase 5-6 enhance the kernel with user-facing safety controls and explainability
    - Interpretation guidance (which factors drove the decision)
    - EU AI Act Article 13 compliance (transparency)
 
-6. **autoctl whatif <scenario>** - What-if scenario analysis (PLANNED)
-   - Simulate hypothetical scenarios (high-pressure, high-fragmentation, deadline-stress, combined-stress, low-load)
-   - Preview autonomous response to each scenario
-   - Risk assessment against current phase limits
-   - Actionable recommendations for each scenario
+6. **autoctl whatif [param=value...]** - What-if scenario analysis (IMPLEMENTED ✅)
+   - Simulates AI decisions under hypothetical system conditions
+   - Supported parameters: mem=N (pressure %), frag=N (fragmentation %), misses=N (deadline %), rate=N (command rate %)
+   - Shows state comparison (Current -> Hypothetical)
+   - Displays predicted AI directives with human-readable interpretation
+   - Indicates whether action would execute based on confidence threshold
+   - Risk warnings for dangerous scenarios (high pressure, fragmentation, misses)
+   - Zero side effects (preserves agent state, no statistics updates)
+   - EU AI Act Article 14 compliance (human oversight)
 
 **Benefits:**
 - **Safety:** Preview, approval, and query modes prevent unexpected actions
@@ -191,6 +195,12 @@ autoctl interval 200          # Set recommended interval for phase
 
 # Explainability features
 autoctl attention                # View last decision's feature importance
+autoctl whatif                   # Simulate decision with current state
+autoctl whatif mem=80            # What if memory pressure is 80%?
+autoctl whatif mem=80 frag=70    # Multiple conditions
+autoctl whatif mem=90 misses=40  # High load scenario
+autoctl conf-threshold 650       # Raise confidence threshold
+autoctl whatif mem=80 frag=70    # Re-check if it would execute now
 
 # Example output from autoctl attention:
 # === Decision Attention Analysis ===
@@ -219,6 +229,30 @@ autoctl attention                # View last decision's feature importance
 # Interpretation:
 #   The decision was influenced EQUALLY by multiple factors.
 #   System is operating in balanced conditions.
+
+# Example output from autoctl whatif mem=80 frag=70:
+# === What-If Scenario Analysis ===
+#
+# Scenario: HYPOTHETICAL STATE with overrides:
+#   mem=80%
+#   frag=70%
+#
+# --- System State Comparison ---
+#                       Current   ->  Hypothetical
+# Memory Pressure:        0%     ->  80%
+# Memory Fragmentation:   80%     ->  70%
+# Deadline Misses:        0%     ->  0%
+# Command Rate:           0%     ->  0%
+#
+# --- Predicted AI Directives (Q8.8 fixed-point) ---
+# Memory Directive:       796 (increase allocation)
+# Scheduling Directive:   699 (increase priority)
+# Command Directive:      386 (enable prediction)
+#
+# Decision Confidence:    62/100 (627/1000)
+# Would Execute?:         YES (confidence >= threshold 600/1000)
+#
+# [WARNING] High memory pressure or fragmentation in scenario!
 ```
 
 **Documentation:**
@@ -4451,6 +4485,23 @@ Quick, copy-paste steps to record a short demo video or try locally.
   - Coalescing keeps queue at 1 operation max (updates existing instead of duplicating)
   - Freshness recheck before execution (may skip if state improved)
   - Auto-clearing when autonomy stops
+
+5.1) What-If Scenario Analysis (EU AI Act Article 14 - Human Oversight)
+- Build and boot: `BRINGUP=1 ./scripts/uefi_run.sh`
+- In the SIS shell:
+  - `autoctl whatif`                    # Simulate with current state
+  - `autoctl whatif mem=80`             # What if memory pressure is 80%?
+  - `autoctl whatif mem=80 frag=70`     # Multiple conditions
+  - `autoctl whatif mem=90 misses=40`   # High load scenario
+  - `autoctl conf-threshold 650`        # Raise confidence threshold to 65%
+  - `autoctl whatif mem=80 frag=70`     # Re-check (should now show "Would Execute?: NO")
+- Expected behavior:
+  - Shows state comparison (Current -> Hypothetical)
+  - Displays predicted AI directives with human-readable interpretation
+  - Indicates whether action would execute based on confidence threshold
+  - Risk warnings for dangerous scenarios (high pressure/fragmentation)
+  - Zero side effects (preserves agent state)
+  - Helps operators validate safety properties and tune confidence thresholds
 
 6) LLM demo (shell)
 - Build and boot with LLM enabled: `SIS_FEATURES="llm" BRINGUP=1 ./scripts/uefi_run.sh`
