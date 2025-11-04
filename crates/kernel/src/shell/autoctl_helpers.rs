@@ -221,7 +221,7 @@ impl super::Shell {
 
             unsafe { crate::uart_print(b"\nPredicted Directives (Q8.8 fixed-point):\n"); }
             unsafe { crate::uart_print(b"  Memory: "); }
-            self.print_number_signed(preview.memory_directive as i64);
+            super::print_number_signed(preview.memory_directive as i64);
             unsafe { crate::uart_print(b" ("); }
             if preview.memory_directive > 256 {
                 unsafe { crate::uart_print(b"increase allocation)\n"); }
@@ -232,7 +232,7 @@ impl super::Shell {
             }
 
             unsafe { crate::uart_print(b"  Scheduling: "); }
-            self.print_number_signed(preview.scheduling_directive as i64);
+            super::print_number_signed(preview.scheduling_directive as i64);
             unsafe { crate::uart_print(b" ("); }
             if preview.scheduling_directive > 256 {
                 unsafe { crate::uart_print(b"increase priority)\n"); }
@@ -243,7 +243,7 @@ impl super::Shell {
             }
 
             unsafe { crate::uart_print(b"  Command Prediction: "); }
-            self.print_number_signed(preview.command_directive as i64);
+            super::print_number_signed(preview.command_directive as i64);
             unsafe { crate::uart_print(b" ("); }
             if preview.command_directive > 256 {
                 unsafe { crate::uart_print(b"enable prediction)\n"); }

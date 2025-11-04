@@ -10,7 +10,7 @@
 //! - Layer 6: Incremental autonomy (phased deployment)
 
 use crate::meta_agent::MetaState;
-use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
 
 // ============================================================================
 // Layer 1: Hard Limits (Kernel-Enforced Bounds)
@@ -2176,17 +2176,14 @@ pub fn preview_next_decision() -> DecisionPreview {
     let curr_state = crate::meta_agent::collect_telemetry();
 
     // Run meta-agent inference (read-only)
-    let directives = crate::meta_agent::run_meta_agent_inference(&curr_state);
-
-    // Calculate confidence (simplified - real version uses full decision logic)
-    let confidence = 512i16; // Default medium confidence for preview
+    let decision = crate::meta_agent::force_meta_decision();
 
     DecisionPreview {
         timestamp,
-        memory_directive: directives[0],
-        scheduling_directive: directives[1],
-        command_directive: directives[2],
-        confidence,
+        memory_directive: decision.memory_directive,
+        scheduling_directive: decision.scheduling_directive,
+        command_directive: decision.command_directive,
+        confidence: decision.confidence as i16,
         memory_pressure: curr_state.memory_pressure,
         memory_fragmentation: curr_state.memory_fragmentation,
         deadline_misses: curr_state.deadline_misses,
