@@ -361,7 +361,7 @@ impl Shell {
             crate::uart_print(b"  mladvdemo - Demo advanced ML features (experience replay, TD learning, topology)\n");
             crate::uart_print(b"  actorctl - Actor-critic: status | policy | sample | lambda N | natural on/off | kl N | on | off\n");
             crate::uart_print(b"  actorcriticdemo - Demo actor-critic with policy gradients and eligibility traces\n");
-            crate::uart_print(b"  autoctl  - Autonomous control: on | off | status | interval N | preview [N] | phase [A|B|C|D] | attention | limits | audit last N | rewards --breakdown | explain ID | dashboard | tick\n");
+            crate::uart_print(b"  autoctl  - Autonomous control: on | off | status | interval N | conf-threshold [N] | preview [N] | phase [A|B|C|D] | attention | limits | audit last N | rewards --breakdown | explain ID | dashboard | tick\n");
             crate::uart_print(b"  learnctl - Prediction tracking: stats | train | feedback good|bad|verybad ID\n");
             crate::uart_print(b"  memctl   - Memory neural agent: status | predict | stress [N] | query-mode on/off | approval on/off\n");
             crate::uart_print(b"  schedctl - Scheduling control: workload | priorities | affinity | shadow on|off|compare | feature enable|disable|list NAME\n");
