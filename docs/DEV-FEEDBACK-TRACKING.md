@@ -31,26 +31,31 @@ Changed message to "Compaction recommended (decision pending autonomy)" to clari
 
 ---
 
-### 2. Gate Verbose Timer/IRQ Lines ⏳ PENDING
+### 2. Gate Verbose Timer/IRQ Lines ✅ COMPLETE
 
 **Issue:**
 Verbose timer/IRQ debug lines ([IRQ_HANDLER], [TIMER_ISR], "TVAL set OK") clutter runtime logs.
 
-**Proposed Solution:**
-Gate behind `perf-verbose` feature flag for cleaner production logs.
+**Solution Implemented:**
+Gated verbose logging behind existing `perf-verbose` feature flag for cleaner production logs.
 
-**Implementation Plan:**
-1. Add `perf-verbose` feature to `Cargo.toml`
-2. Wrap verbose logging in `#[cfg(feature = "perf-verbose")]`
-3. Keep essential milestone messages (e.g., "Timer running silently")
+**Implementation:**
+1. `perf-verbose` feature already existed in `Cargo.toml` (line 41)
+2. Wrapped 5 verbose logging blocks in `#[cfg(feature = "perf-verbose")]`:
+   - Lines 776-782: [IRQ_HANDLER] IRQ entry logs
+   - Lines 795-800: [IRQ_HANDLER] INTID logs
+   - Lines 904-911: [TIMER_ISR] tick-by-tick logs
+   - Lines 1046-1051: [TIMER] TVAL diagnostics
+3. Essential milestone message "[TIMER] Timer running silently..." now shows on tick 1 when perf-verbose is disabled, tick 6 when enabled
 
-**Files to Modify:**
-- `crates/kernel/Cargo.toml` - Add feature flag
-- `crates/kernel/src/main.rs` - Wrap verbose logs
+**Files Modified:**
+- `crates/kernel/src/main.rs` - Wrapped verbose logs in feature guards
 
-**Estimated Effort:** 1-2 hours
+**Commit:** (pending)
 
-**Priority:** Medium (improves production log readability)
+**Impact:** Medium-High - Production logs are now clean and readable, with detailed debugging available via feature flag when needed
+
+**Verified:** ✅ Build successful without perf-verbose, logs are clean
 
 ---
 
@@ -168,12 +173,12 @@ exit 0
 | Item | Priority | Status | Effort | Impact |
 |------|----------|--------|--------|--------|
 | Logging clarity | High | ✅ DONE | 15 min | High |
-| README updates | Low | ⏳ Pending | 30 min | Low |
-| Confidence reason | Med-High | ⏳ Pending | 2-3 hrs | High |
-| Gate verbose logs | Medium | ⏳ Pending | 1-2 hrs | Med |
+| README updates | Low | ✅ DONE | 30 min | Low |
+| Confidence reason | Med-High | ✅ DONE | 2-3 hrs | High |
+| Gate verbose logs | Medium | ✅ DONE | 1 hr | Med-High |
 | CI smoke test | Low (optional) | 📋 Future | 3-4 hrs | Med-High |
 
-**Total Remaining Effort:** ~4-6 hours (excluding CI)
+**Total Remaining Effort:** ~3-4 hours (CI smoke test only, optional)
 
 ---
 
