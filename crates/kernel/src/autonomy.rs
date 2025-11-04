@@ -10,7 +10,7 @@
 //! - Layer 6: Incremental autonomy (phased deployment)
 
 use crate::meta_agent::MetaState;
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, AtomicI16, Ordering};
 
 // ============================================================================
 // Layer 1: Hard Limits (Kernel-Enforced Bounds)
@@ -753,6 +753,16 @@ pub struct AutonomousControl {
     pub last_decision_timestamp: AtomicU64,
     pub total_decisions: AtomicU64,
     pub phase: AtomicU32,  // 0=disabled, 1=supervised, 2=limited, 3=guarded, 4=full
+
+    // Runtime configuration (enhancement: settable threshold)
+    pub min_confidence_threshold: AtomicI16,  // Q8.8 format, default 600 (60%)
+
+    // Telemetry counters (enhancement: track accepted vs deferred)
+    pub decisions_accepted: AtomicU64,  // Actions executed (confidence >= threshold)
+    pub decisions_deferred: AtomicU64,  // Actions deferred (confidence < threshold)
+
+    // Confidence reason breakdown for last 100 decisions (ring buffer counters)
+    pub confidence_reason_counts: [AtomicU32; 5],  // Indexed by ConfidenceReason as u8
 }
 
 impl AutonomousControl {
@@ -765,6 +775,16 @@ impl AutonomousControl {
             last_decision_timestamp: AtomicU64::new(0),
             total_decisions: AtomicU64::new(0),
             phase: AtomicU32::new(0),  // Disabled by default
+            min_confidence_threshold: AtomicI16::new(MIN_CONFIDENCE_FOR_ACTION),  // 600 (60%)
+            decisions_accepted: AtomicU64::new(0),
+            decisions_deferred: AtomicU64::new(0),
+            confidence_reason_counts: [
+                AtomicU32::new(0),  // Normal
+                AtomicU32::new(0),  // InsufficientHistory
+                AtomicU32::new(0),  // AllDirectivesNeutral
+                AtomicU32::new(0),  // ModelInitializing
+                AtomicU32::new(0),  // HighStateUncertainty
+            ],
         }
     }
 
@@ -795,6 +815,44 @@ impl AutonomousControl {
 
     pub fn increment_decisions(&self) {
         self.total_decisions.fetch_add(1, Ordering::Relaxed);
+    }
+
+    // Enhancement: Runtime confidence threshold configuration
+    pub fn get_confidence_threshold(&self) -> i16 {
+        self.min_confidence_threshold.load(Ordering::Relaxed)
+    }
+
+    pub fn set_confidence_threshold(&self, threshold: i16) {
+        // Clamp to valid range 0-1000 (Q8.8 format)
+        let clamped = threshold.clamp(0, 1000);
+        self.min_confidence_threshold.store(clamped, Ordering::Relaxed);
+    }
+
+    // Enhancement: Decision outcome tracking
+    pub fn record_decision_accepted(&self, reason: ConfidenceReason) {
+        self.decisions_accepted.fetch_add(1, Ordering::Relaxed);
+        self.record_confidence_reason(reason);
+    }
+
+    pub fn record_decision_deferred(&self, reason: ConfidenceReason) {
+        self.decisions_deferred.fetch_add(1, Ordering::Relaxed);
+        self.record_confidence_reason(reason);
+    }
+
+    fn record_confidence_reason(&self, reason: ConfidenceReason) {
+        let index = reason as usize;
+        if index < 5 {
+            self.confidence_reason_counts[index].fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    pub fn get_confidence_reason_count(&self, reason: ConfidenceReason) -> u32 {
+        let index = reason as usize;
+        if index < 5 {
+            self.confidence_reason_counts[index].load(Ordering::Relaxed)
+        } else {
+            0
+        }
     }
 
     pub fn get_total_decisions(&self) -> u64 {
@@ -2056,14 +2114,17 @@ pub fn autonomous_decision_tick() {
         &curr_state,
     );
 
-    if confidence < MIN_CONFIDENCE_FOR_ACTION {
+    // Use runtime threshold (enhancement: settable via autoctl conf-threshold)
+    let min_threshold = AUTONOMOUS_CONTROL.get_confidence_threshold();
+
+    if confidence < min_threshold {
         unsafe {
             // Only print low confidence message for first 5 ticks
             if AUTO_TICK_COUNT <= 5 {
                 crate::uart_print(b"[AUTONOMY] Low confidence (");
                 uart_print_i64(confidence as i64);
                 crate::uart_print(b" < ");
-                uart_print_i64(MIN_CONFIDENCE_FOR_ACTION as i64);
+                uart_print_i64(min_threshold as i64);  // Use runtime threshold
                 crate::uart_print(b"), deferring action: ");
                 crate::uart_print(confidence_reason.as_str().as_bytes());
                 crate::uart_print(b"\n");
@@ -2090,8 +2151,13 @@ pub fn autonomous_decision_tick() {
         // Update decision counters and timestamp even when deferring actions
         AUTONOMOUS_CONTROL.last_decision_timestamp.store(timestamp, core::sync::atomic::Ordering::Relaxed);
         AUTONOMOUS_CONTROL.total_decisions.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        // Enhancement: Track deferred decisions with reason
+        AUTONOMOUS_CONTROL.record_decision_deferred(confidence_reason);
         return;
     }
+
+    // Enhancement: Track accepted decisions with reason
+    AUTONOMOUS_CONTROL.record_decision_accepted(confidence_reason);
 
     // ========================================================================
     // Step 5: Execute Actions (with Safety Checks)

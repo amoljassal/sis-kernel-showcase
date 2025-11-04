@@ -489,5 +489,39 @@ impl super::Shell {
         }
         unsafe { crate::uart_print(b"]"); }
     }
+
+    /// Set or get minimum confidence threshold (enhancement: runtime configuration)
+    pub(crate) fn autoctl_conf_threshold(&self, threshold_str: Option<&str>) {
+        use crate::autonomy::AUTONOMOUS_CONTROL;
+
+        if let Some(value_str) = threshold_str {
+            // Parse and set new threshold
+            if let Ok(value) = value_str.parse::<usize>() {
+                let threshold_i16 = value as i16;
+                AUTONOMOUS_CONTROL.set_confidence_threshold(threshold_i16);
+                unsafe {
+                    crate::uart_print(b"[AUTOCTL] Confidence threshold set to: ");
+                    self.print_number_simple(value as u64);
+                    crate::uart_print(b"/1000 (");
+                    self.print_number_simple((value / 10) as u64);
+                    crate::uart_print(b"%)\n");
+                }
+            } else {
+                unsafe { crate::uart_print(b"[ERROR] Invalid threshold value. Use 0-1000 (0-100%)\n"); }
+            }
+        } else {
+            // Display current threshold
+            let current = AUTONOMOUS_CONTROL.get_confidence_threshold();
+            unsafe {
+                crate::uart_print(b"[AUTOCTL] Current confidence threshold: ");
+                self.print_number_simple(current as u64);
+                crate::uart_print(b"/1000 (");
+                self.print_number_simple((current as usize / 10) as u64);
+                crate::uart_print(b"%)\n");
+                crate::uart_print(b"  Actions are accepted when confidence >= threshold.\n");
+                crate::uart_print(b"  Usage: autoctl conf-threshold <0-1000>\n");
+            }
+        }
+    }
 }
 
