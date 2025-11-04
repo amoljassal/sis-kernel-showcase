@@ -531,6 +531,7 @@ These standards are enforced by review and advisory CI checks (see `docs/real-ha
 - `autoctl checkpoints|saveckpt|restoreckpt N|restorebest`: Model checkpoint management.
 - `autoctl preview [N]`: Preview upcoming autonomous decisions without executing (multi-step supported).
 - `autoctl phase [status|A|B|C|D]`: Phase management (Learning/Validation/Production/Emergency) with recommended intervals.
+- `autoctl attention`: View feature importance for the last autonomous decision (explainability - shows which inputs influenced the decision).
 - `autoctl rollout <0|1|5|10|50|100|advance|rollback|status>`: Canary rollout stages.
 - `autoctl circuit-breaker <status|reset>`: Circuit breaker state and reset.
 
@@ -538,7 +539,7 @@ These standards are enforced by review and advisory CI checks (see `docs/real-ha
 - `memctl status`: Memory agent status and telemetry.
 - `memctl predict [compaction]`: Predict health/compaction; in query-mode shows a dry-run preview.
 - `memctl query-mode <on|off|status>`: Dry-run mode for memory operations (predict but do not execute).
-- `memctl approval <on|off|status>`: Require explicit approval for memory actions (approval flow configurable).
+- `memctl approval <on|off|status>`: Approval mode flag for memory operations (infrastructure in place; full approve/deny workflow planned for future enhancement).
 
 - IRQ/Timer + Autonomy Gate (`main.rs` vectors, `crates/kernel/src/autonomy.rs`)
   - Purpose: GICv3 PPI 27 virtual timer drives periodic decisions when `AUTONOMY_READY` is set.
