@@ -433,6 +433,11 @@ impl super::Shell {
         super::print_number_signed(decision.confidence as i64);
         unsafe { crate::uart_print(b"/1000\n"); }
 
+        // Confidence reason (dev feedback: interpretability)
+        unsafe { crate::uart_print(b"Confidence Reason: "); }
+        unsafe { crate::uart_print(rationale.confidence_reason.as_str().as_bytes()); }
+        unsafe { crate::uart_print(b"\n"); }
+
         // Interpretation guidance
         unsafe { crate::uart_print(b"\nInterpretation:\n"); }
         let max_importance = rationale.memory_pressure_importance

@@ -107,11 +107,35 @@ impl ExplanationCode {
     }
 }
 
+/// Confidence reason for low-confidence decisions (Dev Feedback: Interpretability)
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[repr(u8)]
+pub enum ConfidenceReason {
+    Normal = 0,                    // Confidence at expected levels
+    InsufficientHistory = 1,       // Too few decisions for reliable prediction
+    AllDirectivesNeutral = 2,      // Network outputs near zero (indecisive)
+    ModelInitializing = 3,         // Very early in training (<10 decisions)
+    HighStateUncertainty = 4,      // State values outside normal ranges
+}
+
+impl ConfidenceReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Normal => "Normal confidence level",
+            Self::InsufficientHistory => "Insufficient training history (need more decisions)",
+            Self::AllDirectivesNeutral => "All neural outputs near zero (model indecisive)",
+            Self::ModelInitializing => "Model still initializing (< 10 decisions recorded)",
+            Self::HighStateUncertainty => "High state uncertainty (unusual operating conditions)",
+        }
+    }
+}
+
 /// Decision rationale for explainability (EU AI Act Article 13)
 #[derive(Copy, Clone)]
 pub struct DecisionRationale {
     pub explanation_code: ExplanationCode,
     pub confidence: i16,  // Q8.8 format
+    pub confidence_reason: ConfidenceReason,  // Why confidence is at this level
 
     // Feature importance (which inputs mattered most)
     pub memory_pressure_importance: u8,    // 0-100%
@@ -124,10 +148,46 @@ impl DecisionRationale {
         Self {
             explanation_code: code,
             confidence: 0,
+            confidence_reason: ConfidenceReason::Normal,
             memory_pressure_importance: 0,
             scheduling_load_importance: 0,
             command_rate_importance: 0,
         }
+    }
+
+    /// Compute confidence reason based on state and decision context
+    pub fn compute_confidence_reason(
+        _confidence: i16,  // Reserved for future threshold-based logic
+        directives: &[i16; 3],
+        decision_count: usize,
+        state: &crate::meta_agent::MetaState,
+    ) -> ConfidenceReason {
+        // Very early in training
+        if decision_count < 10 {
+            return ConfidenceReason::ModelInitializing;
+        }
+
+        // All directives near zero (model indecisive)
+        if directives[0].abs() < 50 && directives[1].abs() < 50 && directives[2].abs() < 50 {
+            return ConfidenceReason::AllDirectivesNeutral;
+        }
+
+        // Insufficient history
+        if decision_count < 50 {
+            return ConfidenceReason::InsufficientHistory;
+        }
+
+        // Check for unusual state values (potential OOD)
+        let unusual_memory = state.memory_pressure > 90 || state.memory_fragmentation > 80;
+        let unusual_scheduling = state.deadline_misses > 50;
+        let unusual_command = state.command_rate > 90;
+
+        if unusual_memory || unusual_scheduling || unusual_command {
+            return ConfidenceReason::HighStateUncertainty;
+        }
+
+        // Normal operation
+        ConfidenceReason::Normal
     }
 
     /// Compute feature importance using heuristic analysis (Phase 6: Explainability)
@@ -2003,7 +2063,13 @@ pub fn autonomous_decision_tick() {
         // Log decision with no actions taken
         let mut rationale = DecisionRationale::new(ExplanationCode::LowConfidenceDeferredAction);
         rationale.confidence = confidence;
-        // Phase 6: Compute feature importance for explainability
+        // Phase 6: Compute confidence reason and feature importance for explainability
+        rationale.confidence_reason = DecisionRationale::compute_confidence_reason(
+            confidence,
+            &directives,
+            audit_log.count,
+            &curr_state,
+        );
         rationale = rationale.with_feature_importance(&curr_state, &directives);
 
         audit_log.log_decision(
@@ -2187,7 +2253,13 @@ pub fn autonomous_decision_tick() {
 
     let mut rationale = DecisionRationale::new(explanation_code);
     rationale.confidence = confidence;
-    // Phase 6: Compute feature importance for explainability
+    // Phase 6: Compute confidence reason and feature importance for explainability
+    rationale.confidence_reason = DecisionRationale::compute_confidence_reason(
+        confidence,
+        &directives,
+        audit_log.count,
+        &curr_state,
+    );
     rationale = rationale.with_feature_importance(&curr_state, &directives);
 
     audit_log.log_decision(
