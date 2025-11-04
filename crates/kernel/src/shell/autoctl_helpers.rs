@@ -31,6 +31,34 @@ impl super::Shell {
             crate::uart_print(b"  Total Decisions: ");
             self.print_number_simple(total_decisions);
             crate::uart_print(b"\n");
+
+            // Enhancement: Display confidence threshold and decision outcomes
+            let threshold = crate::autonomy::AUTONOMOUS_CONTROL.get_confidence_threshold();
+            let accepted = crate::autonomy::AUTONOMOUS_CONTROL
+                .decisions_accepted
+                .load(core::sync::atomic::Ordering::Relaxed);
+            let deferred = crate::autonomy::AUTONOMOUS_CONTROL
+                .decisions_deferred
+                .load(core::sync::atomic::Ordering::Relaxed);
+
+            crate::uart_print(b"  Confidence Threshold: ");
+            self.print_number_simple(threshold as u64);
+            crate::uart_print(b"/1000 (");
+            self.print_number_simple((threshold as usize / 10) as u64);
+            crate::uart_print(b"%)\n");
+
+            crate::uart_print(b"  Decisions Accepted: ");
+            self.print_number_simple(accepted);
+            crate::uart_print(b" | Deferred: ");
+            self.print_number_simple(deferred);
+            if accepted + deferred > 0 {
+                let acceptance_rate = (accepted * 100) / (accepted + deferred);
+                crate::uart_print(b" (");
+                self.print_number_simple(acceptance_rate);
+                crate::uart_print(b"% accepted)\n");
+            } else {
+                crate::uart_print(b"\n");
+            }
         }
 
         let audit_log = crate::autonomy::get_audit_log();
