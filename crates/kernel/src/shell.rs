@@ -1142,6 +1142,42 @@ impl Shell {
                     }
                 }
 
+                // Enhancement: Show decision outcome breakdown
+                {
+                    use crate::autonomy::{AUTONOMOUS_CONTROL, ConfidenceReason};
+                    let accepted = AUTONOMOUS_CONTROL.decisions_accepted.load(core::sync::atomic::Ordering::Relaxed);
+                    let deferred = AUTONOMOUS_CONTROL.decisions_deferred.load(core::sync::atomic::Ordering::Relaxed);
+
+                    unsafe {
+                        crate::uart_print(b"  Decisions: ");
+                        self.print_number_simple(accepted);
+                        crate::uart_print(b" accepted | ");
+                        self.print_number_simple(deferred);
+                        crate::uart_print(b" deferred");
+                        if accepted + deferred > 0 {
+                            let acceptance_rate = (accepted * 100) / (accepted + deferred);
+                            crate::uart_print(b" (");
+                            self.print_number_simple(acceptance_rate);
+                            crate::uart_print(b"% accept rate)\n");
+                        } else {
+                            crate::uart_print(b"\n");
+                        }
+
+                        crate::uart_print(b"  Confidence Breakdown:\n");
+                        crate::uart_print(b"    Normal:              ");
+                        self.print_number_simple(AUTONOMOUS_CONTROL.get_confidence_reason_count(ConfidenceReason::Normal) as u64);
+                        crate::uart_print(b"\n    Insufficient History: ");
+                        self.print_number_simple(AUTONOMOUS_CONTROL.get_confidence_reason_count(ConfidenceReason::InsufficientHistory) as u64);
+                        crate::uart_print(b"\n    All Directives Neutral: ");
+                        self.print_number_simple(AUTONOMOUS_CONTROL.get_confidence_reason_count(ConfidenceReason::AllDirectivesNeutral) as u64);
+                        crate::uart_print(b"\n    Model Initializing:  ");
+                        self.print_number_simple(AUTONOMOUS_CONTROL.get_confidence_reason_count(ConfidenceReason::ModelInitializing) as u64);
+                        crate::uart_print(b"\n    High State Uncertainty: ");
+                        self.print_number_simple(AUTONOMOUS_CONTROL.get_confidence_reason_count(ConfidenceReason::HighStateUncertainty) as u64);
+                        crate::uart_print(b"\n\n");
+                    }
+                }
+
                 // Show last 10 decisions (or fewer if less than 10)
                 let num_to_show = core::cmp::min(10, audit_log.len());
                 let start_idx = if audit_log.head_index() >= num_to_show {
