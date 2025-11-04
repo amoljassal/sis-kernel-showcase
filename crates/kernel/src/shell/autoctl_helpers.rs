@@ -336,5 +336,153 @@ impl super::Shell {
             unsafe { crate::uart_print(b"[AUDIT] Phase transition logged\n"); }
         }
     }
+
+    /// Display attention weights for the last decision (Phase 6: Explainability)
+    pub(crate) fn autoctl_attention(&self) {
+        unsafe { crate::uart_print(b"\n=== Decision Attention Analysis ===\n"); }
+
+        // Retrieve last decision from audit log
+        let decision_opt = crate::autonomy::get_last_decision_rationale();
+
+        if decision_opt.is_none() {
+            unsafe { crate::uart_print(b"No decisions have been made yet.\n"); }
+            unsafe { crate::uart_print(b"\nRun 'autoctl on' and 'autoctl tick' to generate a decision.\n"); }
+            return;
+        }
+
+        let decision = decision_opt.unwrap();
+        let rationale = decision.rationale;
+
+        // Display decision metadata
+        unsafe { crate::uart_print(b"Last Decision ID: #"); }
+        self.print_number_simple(decision.decision_id);
+        unsafe { crate::uart_print(b"\n"); }
+
+        unsafe { crate::uart_print(b"Timestamp: "); }
+        self.print_number_simple(decision.timestamp / 1_000_000); // Convert to seconds
+        unsafe { crate::uart_print(b" seconds\n"); }
+
+        unsafe { crate::uart_print(b"Explanation: "); }
+        unsafe { crate::uart_print(rationale.explanation_code.as_str().as_bytes()); }
+        unsafe { crate::uart_print(b"\n"); }
+
+        // Display feature importance with visual bars
+        unsafe { crate::uart_print(b"\nInput Feature Influence (0-100%):\n"); }
+
+        // Memory features
+        unsafe { crate::uart_print(b"  Memory Features:      "); }
+        self.print_progress_bar(rationale.memory_pressure_importance, 100);
+        unsafe { crate::uart_print(b" "); }
+        self.print_number_simple(rationale.memory_pressure_importance as u64);
+        unsafe { crate::uart_print(b"% "); }
+        self.print_importance_level(rationale.memory_pressure_importance);
+        unsafe { crate::uart_print(b"\n"); }
+
+        // Scheduling features
+        unsafe { crate::uart_print(b"  Scheduling Features:  "); }
+        self.print_progress_bar(rationale.scheduling_load_importance, 100);
+        unsafe { crate::uart_print(b" "); }
+        self.print_number_simple(rationale.scheduling_load_importance as u64);
+        unsafe { crate::uart_print(b"% "); }
+        self.print_importance_level(rationale.scheduling_load_importance);
+        unsafe { crate::uart_print(b"\n"); }
+
+        // Command features
+        unsafe { crate::uart_print(b"  Command Features:     "); }
+        self.print_progress_bar(rationale.command_rate_importance, 100);
+        unsafe { crate::uart_print(b" "); }
+        self.print_number_simple(rationale.command_rate_importance as u64);
+        unsafe { crate::uart_print(b"% "); }
+        self.print_importance_level(rationale.command_rate_importance);
+        unsafe { crate::uart_print(b"\n"); }
+
+        // Display system state at decision time
+        unsafe { crate::uart_print(b"\nSystem State at Decision Time:\n"); }
+        unsafe { crate::uart_print(b"  Memory Pressure:      "); }
+        self.print_number_simple(decision.state_before.memory_pressure as u64);
+        unsafe { crate::uart_print(b"%\n"); }
+
+        unsafe { crate::uart_print(b"  Memory Fragmentation: "); }
+        self.print_number_simple(decision.state_before.memory_fragmentation as u64);
+        unsafe { crate::uart_print(b"%\n"); }
+
+        unsafe { crate::uart_print(b"  Deadline Misses:      "); }
+        self.print_number_simple(decision.state_before.deadline_misses as u64);
+        unsafe { crate::uart_print(b"%\n"); }
+
+        unsafe { crate::uart_print(b"  Command Rate:         "); }
+        self.print_number_simple(decision.state_before.command_rate as u64);
+        unsafe { crate::uart_print(b"/100\n"); }
+
+        // Display directives taken
+        unsafe { crate::uart_print(b"\nDirectives Issued:\n"); }
+        unsafe { crate::uart_print(b"  Memory Directive:     "); }
+        super::print_number_signed(decision.directives[0] as i64);
+        unsafe { crate::uart_print(b" (Q8.8)\n"); }
+
+        unsafe { crate::uart_print(b"  Scheduling Directive: "); }
+        super::print_number_signed(decision.directives[1] as i64);
+        unsafe { crate::uart_print(b" (Q8.8)\n"); }
+
+        unsafe { crate::uart_print(b"  Command Directive:    "); }
+        super::print_number_signed(decision.directives[2] as i64);
+        unsafe { crate::uart_print(b" (Q8.8)\n"); }
+
+        // Overall confidence
+        unsafe { crate::uart_print(b"\nOverall Decision Confidence: "); }
+        super::print_number_signed(decision.confidence as i64);
+        unsafe { crate::uart_print(b"/1000\n"); }
+
+        // Interpretation guidance
+        unsafe { crate::uart_print(b"\nInterpretation:\n"); }
+        let max_importance = rationale.memory_pressure_importance
+            .max(rationale.scheduling_load_importance)
+            .max(rationale.command_rate_importance);
+
+        if max_importance == rationale.memory_pressure_importance && max_importance > 50 {
+            unsafe { crate::uart_print(b"  The decision was PRIMARILY driven by memory conditions.\n"); }
+            unsafe { crate::uart_print(b"  Monitor memory allocation patterns to understand decisions.\n"); }
+        } else if max_importance == rationale.scheduling_load_importance && max_importance > 50 {
+            unsafe { crate::uart_print(b"  The decision was PRIMARILY driven by scheduling conditions.\n"); }
+            unsafe { crate::uart_print(b"  Monitor deadline misses and task latency to understand decisions.\n"); }
+        } else if max_importance == rationale.command_rate_importance && max_importance > 50 {
+            unsafe { crate::uart_print(b"  The decision was PRIMARILY driven by command load.\n"); }
+            unsafe { crate::uart_print(b"  Monitor command rate and complexity to understand decisions.\n"); }
+        } else {
+            unsafe { crate::uart_print(b"  The decision was influenced EQUALLY by multiple factors.\n"); }
+            unsafe { crate::uart_print(b"  System is operating in balanced conditions.\n"); }
+        }
+
+        unsafe { crate::uart_print(b"\n"); }
+    }
+
+    /// Print importance level label
+    fn print_importance_level(&self, importance: u8) {
+        if importance >= 60 {
+            unsafe { crate::uart_print(b"(HIGH)"); }
+        } else if importance >= 40 {
+            unsafe { crate::uart_print(b"(MEDIUM)"); }
+        } else if importance >= 20 {
+            unsafe { crate::uart_print(b"(LOW)"); }
+        } else {
+            unsafe { crate::uart_print(b"(MINIMAL)"); }
+        }
+    }
+
+    /// Print a simple progress bar (20 chars max)
+    fn print_progress_bar(&self, value: u8, max: u8) {
+        let bar_width: u32 = 20;
+        let filled = (value as u32 * bar_width) / max as u32;
+
+        unsafe { crate::uart_print(b"["); }
+        for i in 0..bar_width {
+            if i < filled {
+                unsafe { crate::uart_print(b"="); }
+            } else {
+                unsafe { crate::uart_print(b" "); }
+            }
+        }
+        unsafe { crate::uart_print(b"]"); }
+    }
 }
 
