@@ -773,6 +773,7 @@ mod bringup {
             IRQ_COUNT += 1;
 
             // Only print debug output for first 5 IRQs to avoid spam
+            #[cfg(feature = "perf-verbose")]
             if IRQ_COUNT <= 5 {
                 super::uart_print(b"[IRQ] ENTER\n");
                 super::uart_print(b"[IRQ_HANDLER] IRQ ");
@@ -791,6 +792,7 @@ mod bringup {
                 return;
             }
 
+            #[cfg(feature = "perf-verbose")]
             if IRQ_COUNT <= 5 {
                 super::uart_print(b"[IRQ_HANDLER] INTID=");
                 print_number(intid as usize);
@@ -899,13 +901,20 @@ mod bringup {
 
                     // Debug: Print first 5 timer interrupts (reduced from 20 for usability)
                     TIMER_TICK_COUNT += 1;
+                    #[cfg(feature = "perf-verbose")]
                     if TIMER_TICK_COUNT <= 5 {
                         super::uart_print(b"[TIMER_ISR] Tick ");
                         print_number(TIMER_TICK_COUNT as usize);
                         super::uart_print(b" intid=");
                         print_number(intid as usize);
                         super::uart_print(b"\n");
-                    } else if TIMER_TICK_COUNT == 6 {
+                    }
+                    #[cfg(not(feature = "perf-verbose"))]
+                    if TIMER_TICK_COUNT == 1 {
+                        super::uart_print(b"[TIMER] Timer running silently (use 'autoctl status' to check)\n");
+                    }
+                    #[cfg(feature = "perf-verbose")]
+                    if TIMER_TICK_COUNT == 6 {
                         super::uart_print(b"[TIMER] Timer running silently (use 'autoctl status' to check)\n");
                     }
 
@@ -1033,7 +1042,9 @@ mod bringup {
                                     super::uart_print(b" ERROR: TVAL negative! val=");
                                     print_number((tval as i64).wrapping_abs() as usize);
                                     super::uart_print(b"\n");
-                                } else if TIMER_TICK_COUNT <= 3 {
+                                }
+                                #[cfg(feature = "perf-verbose")]
+                                if TIMER_TICK_COUNT <= 3 {
                                     super::uart_print(b"[TIMER] TVAL set OK: ");
                                     print_number(tval as usize);
                                     super::uart_print(b" cycles\n");
