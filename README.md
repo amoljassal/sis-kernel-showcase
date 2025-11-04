@@ -485,6 +485,25 @@ These standards are enforced by review and advisory CI checks (see `docs/real-ha
   - See: [Shell Helpers](#shell-helpers) for the module list.
   - Note: Demo commands are only available when the `demos` feature is enabled (see `shell/demos/`).
 
+#### Autonomy Controls (autoctl)
+- `autoctl on|off|status|interval <ms>`: Enable/disable, show status, and set decision interval.
+- `autoctl dashboard`: Compact view of last decisions (ID, reward, actions, explanation).
+- `autoctl rewards --breakdown`: Multi-objective reward components + total.
+- `autoctl anomalies`: Recent rate-limit hits, hard-limit violations, negative rewards.
+- `autoctl explain <id>`: Human-readable explanation (rationale code + context).
+- `autoctl verify`: Minimal runtime property checks (informational).
+- `autoctl checkpoints|saveckpt|restoreckpt N|restorebest`: Model checkpoint management.
+- `autoctl preview [N]`: Preview upcoming autonomous decisions without executing (multi-step supported).
+- `autoctl phase [status|A|B|C|D]`: Phase management (Learning/Validation/Production/Emergency) with recommended intervals.
+- `autoctl rollout <0|1|5|10|50|100|advance|rollback|status>`: Canary rollout stages.
+- `autoctl circuit-breaker <status|reset>`: Circuit breaker state and reset.
+
+#### Memory Controls (memctl)
+- `memctl status`: Memory agent status and telemetry.
+- `memctl predict [compaction]`: Predict health/compaction; in query-mode shows a dry-run preview.
+- `memctl query-mode <on|off|status>`: Dry-run mode for memory operations (predict but do not execute).
+- `memctl approval <on|off|status>`: Require explicit approval for memory actions (approval flow configurable).
+
 - IRQ/Timer + Autonomy Gate (`main.rs` vectors, `crates/kernel/src/autonomy.rs`)
   - Purpose: GICv3 PPI 27 virtual timer drives periodic decisions when `AUTONOMY_READY` is set.
   - Enable/disable: Always built; runtime control via `autoctl on|off|status|interval N`.
