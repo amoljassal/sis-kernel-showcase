@@ -9,6 +9,11 @@
 use spin::Mutex;
 use alloc::vec::Vec;
 use crate::time::get_timestamp_us;
+use core::sync::atomic::{AtomicBool, Ordering};
+
+// UX Enhancement: Query mode and approval mode flags
+pub static MEMORY_QUERY_MODE: AtomicBool = AtomicBool::new(false);
+pub static MEMORY_APPROVAL_MODE: AtomicBool = AtomicBool::new(false);
 
 /// Allocation strategy selected by meta-agent
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -355,8 +360,16 @@ pub fn evaluate_compaction_policy() -> (bool, u8, u16) {
     const CONFIDENCE_THRESHOLD: u16 = 700; // 70%
     const FRAGMENTATION_THRESHOLD: u8 = 60; // 60%
 
-    let should_compact =
+    let mut should_compact =
         confidence >= CONFIDENCE_THRESHOLD && predicted_frag >= FRAGMENTATION_THRESHOLD;
+
+    // UX Enhancement: Query mode - never execute, only predict
+    if MEMORY_QUERY_MODE.load(Ordering::Acquire) {
+        if should_compact {
+            unsafe { crate::uart_print(b"[QUERY] Would trigger compaction (dry-run mode)\n"); }
+        }
+        should_compact = false; // Never execute in query mode
+    }
 
     (should_compact, predicted_frag, confidence)
 }

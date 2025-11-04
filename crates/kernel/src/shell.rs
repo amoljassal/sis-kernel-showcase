@@ -361,9 +361,9 @@ impl Shell {
             crate::uart_print(b"  mladvdemo - Demo advanced ML features (experience replay, TD learning, topology)\n");
             crate::uart_print(b"  actorctl - Actor-critic: status | policy | sample | lambda N | natural on/off | kl N | on | off\n");
             crate::uart_print(b"  actorcriticdemo - Demo actor-critic with policy gradients and eligibility traces\n");
-            crate::uart_print(b"  autoctl  - Autonomous control: on | off | status | interval N | limits | audit last N | rewards --breakdown | explain ID | dashboard | checkpoints | saveckpt | restoreckpt N | restorebest | tick | oodcheck\n");
+            crate::uart_print(b"  autoctl  - Autonomous control: on | off | status | interval N | preview [N] | phase [A|B|C|D] | limits | audit last N | rewards --breakdown | explain ID | dashboard | tick\n");
             crate::uart_print(b"  learnctl - Prediction tracking: stats | train | feedback good|bad|verybad ID\n");
-            crate::uart_print(b"  memctl   - Memory neural agent: status | predict | stress [N]\n");
+            crate::uart_print(b"  memctl   - Memory neural agent: status | predict | stress [N] | query-mode on/off | approval on/off\n");
             crate::uart_print(b"  schedctl - Scheduling control: workload | priorities | affinity | shadow on|off|compare | feature enable|disable|list NAME\n");
             crate::uart_print(b"  ask-ai   - Ask a simple question: ask-ai \"<text>\" (maps to features, runs agent)\n");
             crate::uart_print(b"  nnjson   - Print neural audit ring as JSON\n");
@@ -590,11 +590,25 @@ impl Shell {
 
     fn cmd_memctl(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress|strategy|learn> ...\n"); }
+            unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress|strategy|learn|query-mode|approval> ...\n"); }
             return;
         }
         match args[0] {
             "status" => { self.memctl_status(); }
+            "query-mode" => {
+                if args.len() > 1 {
+                    self.memctl_query_mode(args[1]);
+                } else {
+                    unsafe { crate::uart_print(b"Usage: memctl query-mode <on|off|status>\n"); }
+                }
+            }
+            "approval" => {
+                if args.len() > 1 {
+                    self.memctl_approval(args[1]);
+                } else {
+                    unsafe { crate::uart_print(b"Usage: memctl approval <on|off|status>\n"); }
+                }
+            }
             "strategy" => {
                 // Show or update allocation strategy
                 if args.len() > 1 && args[1] == "status" {
@@ -681,7 +695,7 @@ impl Shell {
                 unsafe { crate::uart_print(b"[MEM] Stress test complete\n"); }
                 crate::heap::print_heap_stats();
             }
-            _ => unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress|strategy|learn> ...\n"); }
+            _ => unsafe { crate::uart_print(b"Usage: memctl <status|predict|stress|strategy|learn|query-mode|approval> ...\n"); }
         }
     }
 
@@ -1446,7 +1460,19 @@ impl Shell {
                     unsafe { crate::uart_print(b"Usage: autoctl circuit-breaker [status|reset]\n"); }
                 }
             }
-            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|limits|audit last N|rewards --breakdown|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck|rollout|circuit-breaker>\n"); }
+            "preview" => {
+                let count = if args.len() > 1 {
+                    args[1].parse::<usize>().ok()
+                } else {
+                    None
+                };
+                self.autoctl_preview(count);
+            }
+            "phase" => {
+                let phase = args.get(1).copied();
+                self.autoctl_phase(phase);
+            }
+            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|limits|audit last N|rewards --breakdown|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck|rollout|circuit-breaker|preview [N]|phase [A|B|C|D]>\n"); }
         }
     }
 

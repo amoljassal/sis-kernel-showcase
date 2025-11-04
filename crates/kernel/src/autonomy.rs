@@ -668,6 +668,83 @@ pub fn set_ready(ready: bool) {
     AUTONOMY_READY.store(ready, Ordering::Release);
 }
 
+// ============================================================================
+// UX Enhancement: Autonomy Phase Control
+// ============================================================================
+
+/// Autonomy operational phases (for production deployment control)
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[repr(u8)]
+pub enum AutonomyPhase {
+    PhaseA = 0,  // Learning: Aggressive exploration, low-risk actions only
+    PhaseB = 1,  // Validation: Balanced exploration/exploitation, medium risk
+    PhaseC = 2,  // Production: Conservative exploitation, reduced risk
+    PhaseD = 3,  // Emergency: Minimal autonomy, safety-critical only
+}
+
+impl AutonomyPhase {
+    pub fn from_u8(val: u8) -> Self {
+        match val {
+            0 => AutonomyPhase::PhaseA,
+            1 => AutonomyPhase::PhaseB,
+            2 => AutonomyPhase::PhaseC,
+            3 => AutonomyPhase::PhaseD,
+            _ => AutonomyPhase::PhaseA, // Default to learning
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AutonomyPhase::PhaseA => "A (Learning)",
+            AutonomyPhase::PhaseB => "B (Validation)",
+            AutonomyPhase::PhaseC => "C (Production)",
+            AutonomyPhase::PhaseD => "D (Emergency)",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            AutonomyPhase::PhaseA => "Aggressive exploration, low-risk actions only",
+            AutonomyPhase::PhaseB => "Balanced exploration/exploitation, medium risk allowed",
+            AutonomyPhase::PhaseC => "Conservative exploitation, reduced risk tolerance",
+            AutonomyPhase::PhaseD => "Minimal autonomy, safety-critical actions only",
+        }
+    }
+
+    /// Maximum risk score allowed in this phase (0-100 scale)
+    pub fn max_risk_score(&self) -> u8 {
+        match self {
+            AutonomyPhase::PhaseA => 30,   // Low risk only during learning
+            AutonomyPhase::PhaseB => 60,   // Medium risk during validation
+            AutonomyPhase::PhaseC => 40,   // Conservative in production
+            AutonomyPhase::PhaseD => 10,   // Minimal risk in emergency
+        }
+    }
+
+    /// Decision interval (ms) recommended for this phase
+    pub fn recommended_interval_ms(&self) -> u64 {
+        match self {
+            AutonomyPhase::PhaseA => 100,   // Fast iterations for learning
+            AutonomyPhase::PhaseB => 200,   // Moderate pace for validation
+            AutonomyPhase::PhaseC => 500,   // Conservative pace for production
+            AutonomyPhase::PhaseD => 2000,  // Slow pace in emergency
+        }
+    }
+}
+
+/// Current autonomy phase (global state)
+pub static AUTONOMY_PHASE: AtomicU8 = AtomicU8::new(AutonomyPhase::PhaseA as u8);
+
+/// Get current autonomy phase
+pub fn get_autonomy_phase() -> AutonomyPhase {
+    AutonomyPhase::from_u8(AUTONOMY_PHASE.load(Ordering::Acquire))
+}
+
+/// Set autonomy phase
+pub fn set_autonomy_phase(phase: AutonomyPhase) {
+    AUTONOMY_PHASE.store(phase as u8, Ordering::Release);
+}
+
 // C-ABI setter removed after stabilizing direct atomic store usage
 
 /// Check if autonomy ticks are allowed
@@ -2053,4 +2130,68 @@ pub fn autonomous_decision_tick() {
 /// Public API: Trigger one autonomous decision tick
 pub fn trigger_autonomous_tick() {
     autonomous_decision_tick();
+}
+
+/// Preview decision data (for UX enhancement: autoctl preview)
+pub struct DecisionPreview {
+    pub timestamp: u64,
+    pub memory_directive: i16,
+    pub scheduling_directive: i16,
+    pub command_directive: i16,
+    pub confidence: i16,
+    pub memory_pressure: u8,
+    pub memory_fragmentation: u8,
+    pub deadline_misses: u8,
+    pub command_rate: u8,
+    pub enabled: bool,
+    pub safe_mode: bool,
+}
+
+/// UX Enhancement: Preview next autonomous decision without executing
+/// Returns what the system would do if autonomy runs now
+pub fn preview_next_decision() -> DecisionPreview {
+    let timestamp = crate::time::get_timestamp_us();
+    let enabled = AUTONOMOUS_CONTROL.is_enabled();
+    let safe_mode = AUTONOMOUS_CONTROL.is_safe_mode();
+
+    // If not enabled or in safe mode, return default preview
+    if !enabled || safe_mode {
+        let state = crate::meta_agent::collect_telemetry();
+        return DecisionPreview {
+            timestamp,
+            memory_directive: 0,
+            scheduling_directive: 0,
+            command_directive: 0,
+            confidence: 0,
+            memory_pressure: state.memory_pressure,
+            memory_fragmentation: state.memory_fragmentation,
+            deadline_misses: state.deadline_misses,
+            command_rate: state.command_rate,
+            enabled,
+            safe_mode,
+        };
+    }
+
+    // Collect current telemetry
+    let curr_state = crate::meta_agent::collect_telemetry();
+
+    // Run meta-agent inference (read-only)
+    let directives = crate::meta_agent::run_meta_agent_inference(&curr_state);
+
+    // Calculate confidence (simplified - real version uses full decision logic)
+    let confidence = 512i16; // Default medium confidence for preview
+
+    DecisionPreview {
+        timestamp,
+        memory_directive: directives[0],
+        scheduling_directive: directives[1],
+        command_directive: directives[2],
+        confidence,
+        memory_pressure: curr_state.memory_pressure,
+        memory_fragmentation: curr_state.memory_fragmentation,
+        deadline_misses: curr_state.deadline_misses,
+        command_rate: curr_state.command_rate,
+        enabled,
+        safe_mode,
+    }
 }

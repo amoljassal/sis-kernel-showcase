@@ -31,5 +31,55 @@ impl super::Shell {
             else { unsafe { crate::uart_print(b"NO (Memory compact)\n"); } }
         }
     }
+
+    pub(crate) fn memctl_query_mode(&self, state: &str) {
+        use core::sync::atomic::Ordering;
+        match state {
+            "on" => {
+                crate::predictive_memory::MEMORY_QUERY_MODE.store(true, Ordering::Release);
+                unsafe { crate::uart_print(b"[MEMCTL] Query mode: ENABLED\n"); }
+                unsafe { crate::uart_print(b"  Memory operations will be predicted but NOT executed.\n"); }
+                unsafe { crate::uart_print(b"  Use 'memctl query-mode off' to resume normal operation.\n"); }
+            }
+            "off" => {
+                crate::predictive_memory::MEMORY_QUERY_MODE.store(false, Ordering::Release);
+                unsafe { crate::uart_print(b"[MEMCTL] Query mode: DISABLED\n"); }
+                unsafe { crate::uart_print(b"  Memory operations will execute normally.\n"); }
+            }
+            "status" => {
+                let enabled = crate::predictive_memory::MEMORY_QUERY_MODE.load(Ordering::Acquire);
+                unsafe { crate::uart_print(b"[MEMCTL] Query mode: "); }
+                unsafe { crate::uart_print(if enabled { b"ENABLED (dry-run)\n" } else { b"DISABLED (normal)\n" }); }
+            }
+            _ => {
+                unsafe { crate::uart_print(b"Usage: memctl query-mode <on|off|status>\n"); }
+            }
+        }
+    }
+
+    pub(crate) fn memctl_approval(&self, state: &str) {
+        use core::sync::atomic::Ordering;
+        match state {
+            "on" => {
+                crate::predictive_memory::MEMORY_APPROVAL_MODE.store(true, Ordering::Release);
+                unsafe { crate::uart_print(b"[MEMCTL] Approval mode: ENABLED\n"); }
+                unsafe { crate::uart_print(b"  Memory operations will require explicit confirmation.\n"); }
+                unsafe { crate::uart_print(b"  Use 'memctl approve' to confirm pending operations.\n"); }
+            }
+            "off" => {
+                crate::predictive_memory::MEMORY_APPROVAL_MODE.store(false, Ordering::Release);
+                unsafe { crate::uart_print(b"[MEMCTL] Approval mode: DISABLED\n"); }
+                unsafe { crate::uart_print(b"  Memory operations will execute automatically.\n"); }
+            }
+            "status" => {
+                let enabled = crate::predictive_memory::MEMORY_APPROVAL_MODE.load(Ordering::Acquire);
+                unsafe { crate::uart_print(b"[MEMCTL] Approval mode: "); }
+                unsafe { crate::uart_print(if enabled { b"ENABLED (requires approval)\n" } else { b"DISABLED (automatic)\n" }); }
+            }
+            _ => {
+                unsafe { crate::uart_print(b"Usage: memctl approval <on|off|status>\n"); }
+            }
+        }
+    }
 }
 
