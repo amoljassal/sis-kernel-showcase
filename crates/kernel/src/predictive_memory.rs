@@ -42,19 +42,35 @@ pub struct PendingOperation {
 }
 
 pub struct PendingOperationsQueue {
-    operations: Vec<PendingOperation>,
+    operations: heapless::Vec<PendingOperation, 100>,  // Bounded queue: max 100 pending operations
     next_id: usize,
+    // Debounce/coalesce compaction enqueue to avoid floods when approval is ON
+    last_compaction_ts_us: u64,
 }
 
 impl PendingOperationsQueue {
     pub const fn new() -> Self {
         Self {
-            operations: Vec::new(),
+            operations: heapless::Vec::new(),
             next_id: 1,
+            last_compaction_ts_us: 0,
         }
     }
 
-    pub fn enqueue(&mut self, op_type: OperationType, reason: &'static str, confidence: u16, risk: u8) -> usize {
+    pub fn enqueue(&mut self, op_type: OperationType, reason: &'static str, confidence: u16, risk: u8) -> (usize, bool) {
+        // Coalesce compaction operations: if one is already pending, update it instead of enqueuing new
+        if let OperationType::Compaction = op_type {
+            if let Some(pos) = self.operations.iter().rposition(|op| matches!(op.operation_type, OperationType::Compaction)) {
+                // Update existing pending compaction with latest metadata
+                let now = get_timestamp_us();
+                self.operations[pos].timestamp_us = now;
+                self.operations[pos].reason = reason;
+                self.operations[pos].confidence = confidence;
+                self.operations[pos].risk_score = risk;
+                self.last_compaction_ts_us = now;
+                return (self.operations[pos].id, false);
+            }
+        }
         let id = self.next_id;
         self.next_id += 1;
         let op = PendingOperation {
@@ -65,8 +81,15 @@ impl PendingOperationsQueue {
             confidence,
             risk_score: risk,
         };
-        self.operations.push(op);
-        id
+        // Bounded queue: if full, drop oldest operation (FIFO)
+        if self.operations.is_full() {
+            self.operations.remove(0);  // Remove oldest
+        }
+        let _ = self.operations.push(op);  // Always succeeds after room is made
+        if let OperationType::Compaction = op_type {
+            self.last_compaction_ts_us = get_timestamp_us();
+        }
+        (id, true)
     }
 
     pub fn len(&self) -> usize {
@@ -77,14 +100,32 @@ impl PendingOperationsQueue {
         self.operations.get(index)
     }
 
-    pub fn approve_all(&mut self) -> Vec<PendingOperation> {
-        let drained = self.operations.drain(..).collect();
-        drained
+    pub fn approve_all(&mut self) -> heapless::Vec<PendingOperation, 100> {
+        // Clone all operations and clear the queue
+        let approved = self.operations.clone();
+        self.operations.clear();
+        approved
     }
 
-    pub fn approve_n(&mut self, n: usize) -> Vec<PendingOperation> {
+    pub fn approve_n(&mut self, n: usize) -> heapless::Vec<PendingOperation, 100> {
         let count = core::cmp::min(n, self.operations.len());
-        self.operations.drain(..count).collect()
+        let mut approved = heapless::Vec::new();
+
+        // Copy first N operations
+        for i in 0..count {
+            if let Some(op) = self.operations.get(i) {
+                let _ = approved.push(*op);
+            }
+        }
+
+        // Remove first N operations by shifting remaining ones
+        let remaining = self.operations.len() - count;
+        for i in 0..remaining {
+            self.operations[i] = self.operations[i + count];
+        }
+        self.operations.truncate(remaining);
+
+        approved
     }
 
     pub fn reject_all(&mut self) {
@@ -525,10 +566,10 @@ pub fn execute_predictive_compaction_verbose(verbose: bool) -> bool {
         };
 
         let mut pending = PENDING_OPERATIONS.lock();
-        let op_id = pending.enqueue(OperationType::Compaction, reason, confidence, risk_score);
+        let (op_id, inserted) = pending.enqueue(OperationType::Compaction, reason, confidence, risk_score);
         drop(pending);
 
-        if verbose {
+        if verbose && inserted {
             unsafe {
                 crate::uart_print(b"[PRED_MEM] Operation queued for approval (ID: ");
                 crate::shell::print_number_simple(op_id as u64);
@@ -707,7 +748,7 @@ pub fn print_statistics() {
 }
 
 /// Execute approved pending operations
-pub fn execute_approved_operations(operations: Vec<PendingOperation>) -> (usize, usize) {
+pub fn execute_approved_operations(operations: heapless::Vec<PendingOperation, 100>) -> (usize, usize) {
     let mut executed = 0;
     let failed = 0;
 
@@ -724,10 +765,20 @@ pub fn execute_approved_operations(operations: Vec<PendingOperation>) -> (usize,
 
         match op.operation_type {
             OperationType::Compaction => {
-                // TODO: Actual compaction execution would go here
-                // For now, simulate successful execution
-                unsafe { crate::uart_print(b"  Status: Simulated (would trigger heap compaction)\n"); }
-                executed += 1;
+                // Freshness recheck: if state has improved below thresholds, skip
+                let (should_compact_now, pred_frag, _conf) = evaluate_compaction_policy();
+                if !should_compact_now {
+                    unsafe {
+                        crate::uart_print(b"  Info: State changed, skipping compaction (pred_frag=");
+                        crate::shell::print_number_simple(pred_frag as u64);
+                        crate::uart_print(b"%)\n");
+                    }
+                } else {
+                    // TODO: Actual compaction execution would go here
+                    // For now, simulate successful execution
+                    unsafe { crate::uart_print(b"  Status: Simulated (would trigger heap compaction)\n"); }
+                    executed += 1;
+                }
             }
             OperationType::StrategyChange => {
                 // TODO: Actual strategy change execution would go here

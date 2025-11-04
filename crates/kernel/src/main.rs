@@ -141,6 +141,7 @@ macro_rules! kprintln {
 #[cfg(all(target_arch = "aarch64", feature = "bringup"))]
 mod bringup {
     use core::arch::asm;
+    use core::sync::atomic::{AtomicBool, Ordering};
 
     // 64 KiB bootstrap stack (16-byte aligned)
     #[repr(C, align(16))]
@@ -771,6 +772,7 @@ mod bringup {
         unsafe {
             static mut IRQ_COUNT: u32 = 0;
             IRQ_COUNT += 1;
+            let mut tick_guard_acquired: bool = false;
 
             // Only print debug output for first 5 IRQs to avoid spam
             #[cfg(feature = "perf-verbose")]
@@ -919,6 +921,24 @@ mod bringup {
                     }
 
                     if intid == 30 {
+                        // Reentrancy guard for timer tick path
+                        if IN_TICK.swap(true, Ordering::AcqRel) {
+                            // Already in tick; skip work and proceed to EOI
+                        } else {
+                            tick_guard_acquired = true;
+                        // If autonomy is not enabled or not ready, keep timer disabled and do not rearm
+                        let autonomy_enabled = crate::autonomy::AUTONOMOUS_CONTROL.is_enabled();
+                        let autonomy_ready = crate::autonomy::is_ready();
+                        if !autonomy_enabled || !autonomy_ready {
+                            // Disable timer and clear pending to avoid rapid re-fires while disabled
+                            let ctl_off: u64 = 0;
+                            core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl_off);
+                            core::arch::asm!("dsb sy; isb");
+                            let clear_val: u64 = 1;
+                            core::arch::asm!("msr cntp_tval_el0, {x}", x = in(reg) clear_val);
+                            core::arch::asm!("isb");
+                            // Release guard and skip rest; EOI at bottom
+                        } else {
                         // Track last timer tick time to detect rapid firing
                         static mut LAST_TIMER_TICK: u64 = 0;
                         static mut RAPID_TICK_COUNT: u32 = 0;
@@ -986,7 +1006,7 @@ mod bringup {
                             let mut frq: u64;
                             core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
 
-                            // Rearm timer with autonomous interval
+                            // Rearm timer with autonomous interval (absolute cval = now + cycles)
                             let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL
                                 .decision_interval_ms
                                 .load(core::sync::atomic::Ordering::Relaxed)
@@ -1005,6 +1025,8 @@ mod bringup {
                                 let pf = crate::platform::active().timer().freq_hz;
                                 ((pf / 1000).max(1)).saturating_mul(interval_ms)
                             };
+                            let mut now_abs: u64; core::arch::asm!("mrs {x}, cntpct_el0", x = out(reg) now_abs);
+                            let next = now_abs.saturating_add(cycles);
 
                             // Only print interval change for first few ticks
                             if TIMER_TICK_COUNT <= 3 {
@@ -1015,11 +1037,9 @@ mod bringup {
                                 super::uart_print(b" cycles)\n");
                             }
 
-                            // Set new timer value while timer is disabled
-                            core::arch::asm!("msr cntp_tval_el0, {x}", x = in(reg) cycles);
+                            // Program absolute compare and re-enable
+                            core::arch::asm!("msr cntp_cval_el0, {x}", x = in(reg) next);
                             core::arch::asm!("isb");
-
-                            // Re-enable timer
                             let ctl: u64 = 1; // ENABLE=1, IMASK=0
                             core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl);
                             core::arch::asm!("isb");
@@ -1073,9 +1093,6 @@ mod bringup {
                             }
 
                             // Only call autonomous_decision_tick() if autonomy is enabled AND ready
-                            let autonomy_enabled = crate::autonomy::AUTONOMOUS_CONTROL.is_enabled();
-                            let autonomy_ready = crate::autonomy::is_ready();
-
                             if autonomy_enabled && autonomy_ready {
                                 // Only print debug message for first few ticks
                                 if TIMER_TICK_COUNT <= 5 {
@@ -1085,10 +1102,13 @@ mod bringup {
                                 crate::autonomy::autonomous_decision_tick();
                             }
                         } // Close the 'if RAPID_TICK_COUNT <= 5' block
+                        } // end autonomy enabled block
+                        } // end reentrancy guard acquired block
                     } // Close the 'if intid == 30' block
                 } // Close the 'else' block from BENCH_JUST_COMPLETED check
             }
             // signal end of interrupt
+            if tick_guard_acquired { IN_TICK.store(false, Ordering::Release); }
             asm!("msr icc_eoir1_el1, {x}", x = in(reg) irq);
             asm!("msr icc_dir_el1, {x}", x = in(reg) irq);
         }
@@ -1107,6 +1127,8 @@ mod bringup {
     static mut TIMER_MAX_NS: u64 = 0;
     static mut TIMER_SUM_COUNT: u32 = 0;
     static mut BENCH_JUST_COMPLETED: bool = false;
+    // Reentrancy guard static for timer ISR
+    static IN_TICK: AtomicBool = AtomicBool::new(false);
 
     unsafe fn delta_ns(t0: u64, t1: u64) -> u64 {
         let mut f: u64; core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) f);

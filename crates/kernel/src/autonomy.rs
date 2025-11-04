@@ -752,6 +752,7 @@ pub struct AutonomousControl {
     pub decision_interval_ms: AtomicU64,
     pub last_decision_timestamp: AtomicU64,
     pub total_decisions: AtomicU64,
+    pub decisions_at_enable: AtomicU64,
     pub phase: AtomicU32,  // 0=disabled, 1=supervised, 2=limited, 3=guarded, 4=full
 
     // Runtime configuration (enhancement: settable threshold)
@@ -774,6 +775,7 @@ impl AutonomousControl {
             decision_interval_ms: AtomicU64::new(500),
             last_decision_timestamp: AtomicU64::new(0),
             total_decisions: AtomicU64::new(0),
+            decisions_at_enable: AtomicU64::new(0),
             phase: AtomicU32::new(0),  // Disabled by default
             min_confidence_threshold: AtomicI16::new(MIN_CONFIDENCE_FOR_ACTION),  // 600 (60%)
             decisions_accepted: AtomicU64::new(0),
@@ -794,6 +796,9 @@ impl AutonomousControl {
 
     pub fn enable(&self) {
         self.enabled.store(true, Ordering::Relaxed);
+        // Reset per-enable baseline for tick gating
+        let current = self.total_decisions.load(Ordering::Relaxed);
+        self.decisions_at_enable.store(current, Ordering::Relaxed);
     }
 
     pub fn disable(&self) {
@@ -1966,9 +1971,6 @@ fn compute_health_score(state: &crate::meta_agent::MetaState) -> i16 {
 /// Safety is enforced at EVERY step - this function will abort early
 /// if any safety condition is violated.
 pub fn autonomous_decision_tick() {
-    // Static counter to track total autonomous ticks for debug output control
-    static mut AUTO_TICK_COUNT: u32 = 0;
-
     let timestamp = crate::time::get_timestamp_us();
 
     // Check if autonomous mode is enabled
@@ -1994,19 +1996,19 @@ pub fn autonomous_decision_tick() {
     }
 
     // Increment tick counter and control verbosity
-    unsafe {
-        AUTO_TICK_COUNT += 1;
-
-        // Only print verbose output for first 5 ticks
-        if AUTO_TICK_COUNT <= 5 {
+    // Determine ticks since last enable for gating of verbose and metrics
+    let total = AUTONOMOUS_CONTROL.get_total_decisions();
+    let base = AUTONOMOUS_CONTROL.decisions_at_enable.load(core::sync::atomic::Ordering::Relaxed);
+    let tick_index = total.saturating_sub(base).saturating_add(1); // 1-based
+    if tick_index <= 5 {
+        unsafe {
             crate::uart_print(b"[AUTONOMY] Starting decision tick at timestamp ");
             uart_print_num(timestamp);
             crate::uart_print(b"\n");
-        } else if AUTO_TICK_COUNT == 6 {
-            crate::uart_print(b"[AUTONOMY] Running silently (use 'autoctl status' to check)\n");
-            // Disable metrics after first 5 ticks to avoid console spam
-            crate::trace::metrics_set_enabled(false);
         }
+    } else if tick_index == 6 {
+        unsafe { crate::uart_print(b"[AUTONOMY] Running silently (use 'autoctl status' to check)\n"); }
+        crate::trace::metrics_set_enabled(false);
     }
 
     // Acquire locks on all safety infrastructure
@@ -2033,9 +2035,8 @@ pub fn autonomous_decision_tick() {
 
     let curr_state = collect_telemetry();
 
-    unsafe {
-        // Only print telemetry for first 5 ticks
-        if AUTO_TICK_COUNT <= 5 {
+    if tick_index <= 5 {
+        unsafe {
             crate::uart_print(b"[AUTONOMY] Telemetry: mem_pressure=");
             uart_print_num(curr_state.memory_pressure as u64);
             crate::uart_print(b" deadline_misses=");
@@ -2075,9 +2076,8 @@ pub fn autonomous_decision_tick() {
     // Use decision confidence
     let confidence = decision.confidence as i16;
 
-    unsafe {
-        // Only print meta-agent output for first 5 ticks
-        if AUTO_TICK_COUNT <= 5 {
+    if tick_index <= 5 {
+        unsafe {
             crate::uart_print(b"[AUTONOMY] Meta-agent directives: [");
             uart_print_num(directives[0] as u64);
             crate::uart_print(b", ");
@@ -2098,8 +2098,8 @@ pub fn autonomous_decision_tick() {
     let _strategy_changed = crate::predictive_memory::update_allocation_strategy(directives[0]);
 
     // Execute predictive compaction check (5-second lookahead)
-    // Only print verbose output for first 5 ticks
-    let verbose = unsafe { AUTO_TICK_COUNT <= 5 };
+    // Only print verbose output for first 5 ticks since last enable
+    let verbose = tick_index <= 5;
     let _compaction_triggered = crate::predictive_memory::execute_predictive_compaction_verbose(verbose);
 
     // ========================================================================
@@ -2120,7 +2120,7 @@ pub fn autonomous_decision_tick() {
     if confidence < min_threshold {
         unsafe {
             // Only print low confidence message for first 5 ticks
-            if AUTO_TICK_COUNT <= 5 {
+            if tick_index <= 5 {
                 crate::uart_print(b"[AUTONOMY] Low confidence (");
                 uart_print_i64(confidence as i64);
                 crate::uart_print(b" < ");
