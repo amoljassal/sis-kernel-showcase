@@ -81,5 +81,137 @@ impl super::Shell {
             }
         }
     }
+
+    /// List pending operations (approval workflow)
+    pub(crate) fn memctl_approvals(&self) {
+        let pending = crate::predictive_memory::PENDING_OPERATIONS.lock();
+
+        unsafe {
+            crate::uart_print(b"\n=== Pending Memory Operations ===\n");
+            crate::uart_print(b"  Total: ");
+            self.print_number_simple(pending.len() as u64);
+            crate::uart_print(b"\n\n");
+        }
+
+        if pending.len() == 0 {
+            unsafe { crate::uart_print(b"  No pending operations.\n\n"); }
+            return;
+        }
+
+        unsafe {
+            crate::uart_print(b"ID   | Type            | Confidence | Risk | Reason\n");
+            crate::uart_print(b"-----|-----------------|------------|------|--------------------------------------------------\n");
+        }
+
+        for i in 0..pending.len() {
+            if let Some(op) = pending.get(i) {
+                unsafe {
+                    // ID (padded to 4 chars)
+                    self.print_number_simple(op.id as u64);
+                    let id_len = if op.id < 10 { 1 } else if op.id < 100 { 2 } else { 3 };
+                    for _ in 0..(4 - id_len) { crate::uart_print(b" "); }
+                    crate::uart_print(b" | ");
+
+                    // Type (padded to 15 chars)
+                    let type_str = op.operation_type.as_str();
+                    crate::uart_print(type_str.as_bytes());
+                    for _ in 0..(15 - type_str.len()) { crate::uart_print(b" "); }
+                    crate::uart_print(b" | ");
+
+                    // Confidence (padded to 10 chars)
+                    self.print_number_simple(op.confidence as u64);
+                    crate::uart_print(b"/1000  | ");
+
+                    // Risk (padded to 4 chars)
+                    self.print_number_simple(op.risk_score as u64);
+                    let risk_len = if op.risk_score < 10 { 1 } else { 2 };
+                    for _ in 0..(4 - risk_len) { crate::uart_print(b" "); }
+                    crate::uart_print(b" | ");
+
+                    // Reason (truncated to 50 chars)
+                    let reason_bytes = op.reason.as_bytes();
+                    let max_len = core::cmp::min(50, reason_bytes.len());
+                    crate::uart_print(&reason_bytes[..max_len]);
+                    if reason_bytes.len() > 50 {
+                        crate::uart_print(b"...");
+                    }
+                    crate::uart_print(b"\n");
+                }
+            }
+        }
+
+        unsafe { crate::uart_print(b"\n"); }
+    }
+
+    /// Approve pending operations
+    pub(crate) fn memctl_approve(&self, count_str: Option<&str>) {
+        let mut pending = crate::predictive_memory::PENDING_OPERATIONS.lock();
+
+        if pending.len() == 0 {
+            unsafe { crate::uart_print(b"[MEMCTL] No pending operations to approve.\n"); }
+            return;
+        }
+
+        let operations = if let Some(n_str) = count_str {
+            if let Ok(n) = n_str.parse::<usize>() {
+                pending.approve_n(n)
+            } else {
+                unsafe { crate::uart_print(b"[ERROR] Invalid count. Usage: memctl approve [N]\n"); }
+                return;
+            }
+        } else {
+            pending.approve_all()
+        };
+
+        drop(pending);  // Release lock before executing
+
+        let count = operations.len();
+        unsafe {
+            crate::uart_print(b"[MEMCTL] Approving ");
+            self.print_number_simple(count as u64);
+            crate::uart_print(b" operation(s)...\n\n");
+        }
+
+        let (executed, _failed) = crate::predictive_memory::execute_approved_operations(operations);
+
+        unsafe {
+            crate::uart_print(b"\n[MEMCTL] Completed: ");
+            self.print_number_simple(executed as u64);
+            crate::uart_print(b" operation(s) executed successfully.\n");
+        }
+    }
+
+    /// Reject pending operations
+    pub(crate) fn memctl_reject(&self, target: &str) {
+        let mut pending = crate::predictive_memory::PENDING_OPERATIONS.lock();
+
+        if target == "all" {
+            let count = pending.len();
+            pending.reject_all();
+            unsafe {
+                crate::uart_print(b"[MEMCTL] Rejected ");
+                self.print_number_simple(count as u64);
+                crate::uart_print(b" pending operation(s).\n");
+            }
+        } else {
+            if let Ok(id) = target.parse::<usize>() {
+                if pending.reject_by_id(id) {
+                    unsafe {
+                        crate::uart_print(b"[MEMCTL] Rejected operation ");
+                        self.print_number_simple(id as u64);
+                        crate::uart_print(b".\n");
+                    }
+                } else {
+                    unsafe {
+                        crate::uart_print(b"[ERROR] Operation ID ");
+                        self.print_number_simple(id as u64);
+                        crate::uart_print(b" not found.\n");
+                    }
+                }
+            } else {
+                unsafe { crate::uart_print(b"[ERROR] Invalid ID. Usage: memctl reject <ID|all>\n"); }
+            }
+        }
+    }
 }
 

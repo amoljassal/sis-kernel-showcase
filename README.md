@@ -540,7 +540,10 @@ These standards are enforced by review and advisory CI checks (see `docs/real-ha
 - `memctl status`: Memory agent status and telemetry.
 - `memctl predict [compaction]`: Predict health/compaction; in query-mode shows a dry-run preview.
 - `memctl query-mode <on|off|status>`: Dry-run mode for memory operations (predict but do not execute).
-- `memctl approval <on|off|status>`: Approval mode flag for memory operations (infrastructure in place; full approve/deny workflow planned for future enhancement).
+- `memctl approval <on|off|status>`: Approval mode flag for memory operations. When enabled, risky operations are queued for human review instead of executing automatically.
+- `memctl approvals`: List pending operations awaiting approval (shows ID, type, confidence, risk score, reason).
+- `memctl approve [N]`: Approve and execute N pending operations (or all if N is omitted). Operations are drained from the queue and executed in order.
+- `memctl reject <ID|all>`: Reject pending operations by ID or reject all. Rejected operations are discarded without execution.
 
 - IRQ/Timer + Autonomy Gate (`main.rs` vectors, `crates/kernel/src/autonomy.rs`)
   - Purpose: GICv3 PPI 27 virtual timer drives periodic decisions when `AUTONOMY_READY` is set.
