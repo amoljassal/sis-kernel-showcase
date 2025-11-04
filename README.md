@@ -580,6 +580,7 @@ These standards are enforced by review and advisory CI checks (see `docs/real-ha
 
 #### Autonomy Controls (autoctl)
 - `autoctl on|off|status|interval <ms>`: Enable/disable, show status (includes confidence threshold, accepted/deferred counters), and set decision interval.
+- `autoctl reset`: Force a clean timer re‑arm even if already enabled (idempotent safety; use when you want to restart the periodic tick immediately).
 - `autoctl dashboard`: Compact view of last decisions (ID, reward, actions, explanation) with acceptance rate and confidence reason breakdown.
 - `autoctl conf-threshold [N]`: Get or set minimum confidence threshold (0-1000, default 600=60%). Actions are only executed when confidence >= threshold. Allows runtime tuning without recompilation.
 - `autoctl rewards --breakdown`: Multi-objective reward components + total.
@@ -590,8 +591,10 @@ These standards are enforced by review and advisory CI checks (see `docs/real-ha
 - `autoctl preview [N]`: Preview upcoming autonomous decisions without executing (multi-step supported).
 - `autoctl phase [status|A|B|C|D]`: Phase management (Learning/Validation/Production/Emergency) with recommended intervals.
 - `autoctl attention`: View feature importance for the last autonomous decision (explainability - shows which inputs influenced the decision and confidence reasoning). Confidence reasons also appear in deferral logs when actions are deferred due to low confidence.
+- `autoctl whatif [mem=.. frag=.. misses=.. cmd_rate=..]`: Read‑only scenario analysis against hypothetical state; prints directives, confidence and whether it would execute at current threshold.
 - `autoctl rollout <0|1|5|10|50|100|advance|rollback|status>`: Canary rollout stages.
 - `autoctl circuit-breaker <status|reset>`: Circuit breaker state and reset.
+- `autoctl tick`: Manually trigger one autonomous decision (supervised tick).
 
 #### Memory Controls (memctl)
 - `memctl status`: Memory agent status and telemetry.
@@ -602,8 +605,12 @@ These standards are enforced by review and advisory CI checks (see `docs/real-ha
 - `memctl approve [N]`: Approve and execute N pending operations (or all if N is omitted). Operations are drained from the queue and executed in order.
 - `memctl reject <ID|all>`: Reject pending operations by ID or reject all. Rejected operations are discarded without execution.
 
+Notes:
+- When approval mode is enabled, repeated compaction recommendations coalesce into a single pending entry to avoid queue growth under steady conditions.
+- On approval, a freshness recheck is performed; if conditions have improved, the operation is skipped (no‑op) and reported as such.
+
 - IRQ/Timer + Autonomy Gate (`main.rs` vectors, `crates/kernel/src/autonomy.rs`)
-  - Purpose: GICv3 PPI 27 virtual timer drives periodic decisions when `AUTONOMY_READY` is set.
+  - Purpose: GICv3 PPI 30 EL1 physical timer drives periodic decisions when `AUTONOMY_READY` is set.
   - Enable/disable: Always built; runtime control via `autoctl on|off|status|interval N`.
   - Interfaces: `autoctl …` (enable/disable, status, limits, watchdog/audit, tick, OOD/drift checks).
   - Decoupling: Gate is an `AtomicBool`; timer tick invokes `autonomy::autonomous_decision_tick()` without tight coupling.
@@ -794,7 +801,7 @@ Verification (local):
   - Env: `HWFIRST_WHITELIST="crates/kernel/src/driver.rs:crates/kernel/src/experiments/*" ./scripts/ci_guard_hwfirst.sh`
 - Assert bring-up banners in QEMU logs (manual run):
   - `./scripts/uefi_run.sh 2>&1 | tee /tmp/sis_qemu.log`
-  - `./scripts/self_check.sh /tmp/sis_qemu.log` (expects: KERNEL(U), STACK OK, MMU: SCTLR, MMU ON, UART: READY, GIC: INIT, LAUNCHING SHELL, GIC: ENABLE PPI27)
+  - `./scripts/self_check.sh /tmp/sis_qemu.log` (expects: KERNEL(U), STACK OK, MMU: SCTLR, MMU ON, UART: READY, GIC: INIT, LAUNCHING SHELL, GIC: ENABLE PPI30)
   - Streaming (live during run):
     - `./scripts/uefi_run.sh 2>&1 | ./scripts/self_check.sh -s [--timeout 30] [-q]`
     - Or follow a saved log: `./scripts/self_check.sh -s /tmp/sis_qemu.log`
@@ -868,7 +875,7 @@ Verification (local):
 ## Overview (Implemented)
 
 - Boots via UEFI on QEMU `virt` (GICv3, highmem) and prints deterministic boot markers.
-- Enables MMU and caches at EL1; initializes UART, heap, GICv3, virtual timer, and PMU hardware counters.
+- Enables MMU and caches at EL1; initializes UART, heap, GICv3, EL1 physical timer (PPI 30), and PMU hardware counters.
 - Implements dataflow graph architecture with operators, channels, and OSEMN stage classification.
 - Emits comprehensive performance metrics: per-operator latency percentiles (p50/p95/p99), channel backpressure tracking, PMU instruction-level attribution, scheduler timing, deterministic deadline tracking, model security audit logs, real-time AI inference metrics, and NPU processing statistics.
 - Features V0 binary control plane for graph management and zero-copy tensor handle passing.
@@ -889,7 +896,7 @@ Implemented today:
 - Fixed-point neural agent with `neuralctl` (status/reset/infer/update/teach/retrain/audit) and `ask-ai` mapping.
 - Neural/LLM audit rings with JSON output; host frames over VirtIO console for neural control.
 - Runtime metrics toggle: `metricsctl on|off|status` (emission on UART; snapshot APIs currently stubbed).
-- GICv3 init and virtual timer; stable bring-up to shell.
+- GICv3 init and EL1 physical timer; stable bring-up to shell.
 
 Planned (Phase 4+; scaffolding present but not fully integrated):
 - Autonomous meta-agent running on a periodic timer with guarded actions and full safety rollbacks.
@@ -4116,7 +4123,7 @@ sis> llmctl status
 - Boot and bring-up (UEFI/QEMU)
   - UART output: `KERNEL(U)`, `STACK OK`, `VECTORS OK`, `MMU ON`, `UART: READY`, `HEAP: READY`, `GIC: READY`, `LAUNCHING SHELL`.
   - PMU enabled; counter frequency printed as a metric: `METRIC cntfrq_hz=<hz>`.
-  - GICv3 configured, virtual timer (PPI 27) enabled, periodic interrupts.
+  - GICv3 configured, EL1 physical timer (PPI 30) enabled, periodic interrupts.
 
 - Kernel performance metrics (serial console)
   - Core system metrics:
@@ -4714,7 +4721,7 @@ You can generate a validation report and open a small HTML dashboard.
 ## Repository Structure (relevant parts)
 
 **Kernel Core**:
-- `crates/kernel/src/main.rs` — AArch64 bring-up, MMU, UART, GICv3, virtual timer, boot markers, NPU initialization.
+- `crates/kernel/src/main.rs` — AArch64 bring-up, MMU, UART, GICv3, EL1 physical timer, boot markers, NPU initialization.
 - `crates/kernel/src/graph.rs` — Phase 1 dataflow architecture: GraphDemo, operators, SPSC channels, per-operator latency tracking, Phase 2/3 scheduling integration.
 - `crates/kernel/src/control.rs` — V0 binary control plane for graph management with frame parsing.
 - `crates/kernel/src/virtio_console.rs` — Minimal VirtIO console driver (RX path) used by host control (opt-in).
@@ -4854,7 +4861,7 @@ METRIC zero_copy_count=100
 
 - Syscall proxy (`ctx_switch_ns`): minimal syscall path (getpid) timed via CNTVCT. Useful for syscall overhead trends, not a true context switch.
 
-- IRQ latency (`irq_latency_ns`): virtual timer (PPI 27) programmed at fixed intervals; discards 4 warm‑ups, prints 64 samples, and a `[SUMMARY]` (mean/min/max) at completion.
+- IRQ latency (`irq_latency_ns`): EL1 physical timer (PPI 30) programmed at fixed intervals; discards 4 warm‑ups, prints 64 samples, and a `[SUMMARY]` (mean/min/max) at completion.
 
 - AI metrics (`ai_inference_us`, `ai_inference_scalar_us`, `neon_matmul_us`): NEON‑based microbenchmarks; QEMU emulates NEON, so treat results as indicative of code paths and relative speedups.
 
