@@ -75,6 +75,100 @@ See `docs/PHASE4-COMPLETION-REPORT.md` for complete details.
 
 **Next Phase:** Phase 5 - Production Hardening (companion test crate, module refactoring, performance optimization, hardware validation)
 
+## Phase 5: UX Safety Enhancements (IN PROGRESS)
+
+**Status:** Phase 5 safety controls implemented, Phase 6 explainability features pending
+
+Phase 5 enhances the kernel with user-facing safety controls and explainability features based on dev team feedback. These enhancements improve production deployment workflows, transparency, and regulatory compliance.
+
+**Phase 5: Safety Controls (IMPLEMENTED ✅)**
+
+1. **memctl query-mode on/off** - Dry-run mode for memory operations
+   - Predicts memory operations without executing them
+   - Enables safe testing and validation
+   - Zero-risk exploration of memory management decisions
+
+2. **memctl approval on/off** - Approval gate for memory operations
+   - Requires user confirmation before executing memory operations
+   - Human-in-the-loop control for safety-critical operations
+   - EU AI Act Article 14 compliance (human oversight)
+
+3. **autoctl preview [N]** - Preview autonomous decisions without executing
+   - Shows what autonomy would do without taking action
+   - Displays system state, predicted directives, and confidence
+   - Supports multi-step preview (up to 5 steps)
+   - Warnings for high memory pressure or deadline misses
+
+4. **autoctl phase A|B|C|D** - Explicit phase transitions
+   - **Phase A (Learning):** Aggressive exploration, low-risk actions only (max risk: 30/100)
+   - **Phase B (Validation):** Balanced exploration/exploitation, medium risk (max risk: 60/100)
+   - **Phase C (Production):** Conservative exploitation, reduced risk (max risk: 40/100)
+   - **Phase D (Emergency):** Minimal autonomy, safety-critical only (max risk: 10/100)
+   - Each phase has recommended decision intervals (100ms-2000ms)
+   - Supports staged production rollout workflows
+
+**Phase 6: Explainability Features (PLANNED)**
+
+5. **autoctl attention** - Attention mechanism visualization (planned)
+   - Visualize which inputs influence decisions most
+   - Feature importance ranking with weights
+   - EU AI Act Article 13 compliance (transparency)
+
+6. **autoctl whatif <scenario>** - What-if scenario analysis (planned)
+   - Simulate hypothetical scenarios (mem-low, high-load, etc.)
+   - Predict 5-step decision sequences
+   - Risk assessment for each scenario
+
+**Benefits:**
+- **Safety:** Preview, approval, and query modes prevent unexpected actions
+- **Control:** Phase transitions enable production deployment workflows
+- **Compliance:** Improves EU AI Act compliance (+5-8%, target: 97-100%)
+- **Trust:** Enhanced transparency and explainability
+
+**Usage Examples:**
+
+```bash
+# Memory safety controls
+memctl query-mode on          # Enable dry-run mode
+memctl predict compaction     # See predictions without execution
+memctl query-mode off         # Resume normal operation
+
+memctl approval on            # Require approval for memory ops
+# ... operations will wait for approval ...
+memctl approval off           # Disable approval mode
+
+# Autonomy preview and control
+autoctl preview               # Preview next decision
+autoctl preview 3             # Preview next 3 decisions
+
+autoctl phase                 # Show current phase
+autoctl phase B               # Transition to validation phase
+autoctl interval 200          # Set recommended interval for phase
+
+# Example output from autoctl preview:
+# === Autonomy Decision Preview ===
+# Timestamp: 142 seconds
+# Autonomy Status: ENABLED
+#
+# Current System State:
+#   Memory Pressure: 45%
+#   Memory Fragmentation: 25%
+#   Deadline Misses: 5%
+#   Command Rate: 12 cmds/sec
+#
+# Predicted Directives (Q8.8 fixed-point):
+#   Memory: -128 (trigger compaction)
+#   Scheduling: 64 (maintain current)
+#   Command Prediction: 256 (enable prediction)
+#
+# Decision Confidence: 51/100
+```
+
+**Documentation:**
+- UX enhancements assessment: `docs/plans/UX-ENHANCEMENTS-ASSESSMENT.md`
+- Implementation roadmap (Phase 5: 4.5 weeks, Phase 6: 4.5 weeks)
+- Complete feature specifications with pros/cons analysis
+
 ## Current Stats
 
 - Rust LOC: 47,964

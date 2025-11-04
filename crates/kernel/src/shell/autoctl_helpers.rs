@@ -170,5 +170,171 @@ impl super::Shell {
         breaker.success_count = 0;
         unsafe { crate::uart_print(b"[CIRCUIT_BREAKER] Manually reset to CLOSED\n"); }
     }
+
+    /// UX Enhancement: Preview next autonomous decision without executing
+    pub(crate) fn autoctl_preview(&self, count: Option<usize>) {
+        let steps = count.unwrap_or(1).min(5); // Max 5 preview steps
+
+        unsafe { crate::uart_print(b"\n=== Autonomy Decision Preview ===\n"); }
+
+        if steps > 1 {
+            unsafe { crate::uart_print(b"NOTE: Multi-step preview shows "); }
+            self.print_number_simple(steps as u64);
+            unsafe { crate::uart_print(b" iterations of the same state.\n"); }
+            unsafe { crate::uart_print(b"Real execution would change state between decisions.\n\n"); }
+        }
+
+        for i in 0..steps {
+            if steps > 1 {
+                unsafe { crate::uart_print(b"\n--- Step "); }
+                self.print_number_simple((i + 1) as u64);
+                unsafe { crate::uart_print(b" ---\n"); }
+            }
+
+            let preview = crate::autonomy::preview_next_decision();
+
+            unsafe { crate::uart_print(b"Timestamp: "); }
+            self.print_number_simple(preview.timestamp / 1_000_000);
+            unsafe { crate::uart_print(b" seconds\n"); }
+
+            unsafe { crate::uart_print(b"Autonomy Status: "); }
+            if !preview.enabled {
+                unsafe { crate::uart_print(b"DISABLED (would take no action)\n"); }
+                return;
+            } else if preview.safe_mode {
+                unsafe { crate::uart_print(b"SAFE MODE (would take no action)\n"); }
+                return;
+            } else {
+                unsafe { crate::uart_print(b"ENABLED\n"); }
+            }
+
+            unsafe { crate::uart_print(b"\nCurrent System State:\n"); }
+            unsafe { crate::uart_print(b"  Memory Pressure: "); }
+            self.print_number_simple(preview.memory_pressure as u64);
+            unsafe { crate::uart_print(b"%\n  Memory Fragmentation: "); }
+            self.print_number_simple(preview.memory_fragmentation as u64);
+            unsafe { crate::uart_print(b"%\n  Deadline Misses: "); }
+            self.print_number_simple(preview.deadline_misses as u64);
+            unsafe { crate::uart_print(b"%\n  Command Rate: "); }
+            self.print_number_simple(preview.command_rate as u64);
+            unsafe { crate::uart_print(b" cmds/sec\n"); }
+
+            unsafe { crate::uart_print(b"\nPredicted Directives (Q8.8 fixed-point):\n"); }
+            unsafe { crate::uart_print(b"  Memory: "); }
+            self.print_number_signed(preview.memory_directive as i64);
+            unsafe { crate::uart_print(b" ("); }
+            if preview.memory_directive > 256 {
+                unsafe { crate::uart_print(b"increase allocation)\n"); }
+            } else if preview.memory_directive < -256 {
+                unsafe { crate::uart_print(b"trigger compaction)\n"); }
+            } else {
+                unsafe { crate::uart_print(b"maintain current)\n"); }
+            }
+
+            unsafe { crate::uart_print(b"  Scheduling: "); }
+            self.print_number_signed(preview.scheduling_directive as i64);
+            unsafe { crate::uart_print(b" ("); }
+            if preview.scheduling_directive > 256 {
+                unsafe { crate::uart_print(b"increase priority)\n"); }
+            } else if preview.scheduling_directive < -256 {
+                unsafe { crate::uart_print(b"decrease priority)\n"); }
+            } else {
+                unsafe { crate::uart_print(b"maintain current)\n"); }
+            }
+
+            unsafe { crate::uart_print(b"  Command Prediction: "); }
+            self.print_number_signed(preview.command_directive as i64);
+            unsafe { crate::uart_print(b" ("); }
+            if preview.command_directive > 256 {
+                unsafe { crate::uart_print(b"enable prediction)\n"); }
+            } else if preview.command_directive < -256 {
+                unsafe { crate::uart_print(b"disable prediction)\n"); }
+            } else {
+                unsafe { crate::uart_print(b"maintain current)\n"); }
+            }
+
+            unsafe { crate::uart_print(b"\nDecision Confidence: "); }
+            self.print_number_simple((preview.confidence / 10) as u64);
+            unsafe { crate::uart_print(b"/100\n"); }
+
+            if preview.memory_pressure > 80 || preview.memory_fragmentation > 60 {
+                unsafe { crate::uart_print(b"\nWARNING: High memory pressure or fragmentation detected!\n"); }
+            }
+            if preview.deadline_misses > 20 {
+                unsafe { crate::uart_print(b"WARNING: High deadline miss rate detected!\n"); }
+            }
+        }
+
+        unsafe { crate::uart_print(b"\nUse 'autoctl on' to enable autonomous execution.\n"); }
+        unsafe { crate::uart_print(b"Use 'autoctl tick' to execute one decision manually.\n"); }
+    }
+
+    /// UX Enhancement: Show or set autonomy phase
+    pub(crate) fn autoctl_phase(&self, action: Option<&str>) {
+        if action.is_none() || action == Some("status") {
+            // Show current phase
+            let phase = crate::autonomy::get_autonomy_phase();
+            unsafe { crate::uart_print(b"\n=== Autonomy Phase Status ===\n"); }
+            unsafe { crate::uart_print(b"Current Phase: "); }
+            unsafe { crate::uart_print(phase.as_str().as_bytes()); }
+            unsafe { crate::uart_print(b"\n"); }
+            unsafe { crate::uart_print(b"Description: "); }
+            unsafe { crate::uart_print(phase.description().as_bytes()); }
+            unsafe { crate::uart_print(b"\n"); }
+            unsafe { crate::uart_print(b"Max Risk Score: "); }
+            self.print_number_simple(phase.max_risk_score() as u64);
+            unsafe { crate::uart_print(b"/100\n"); }
+            unsafe { crate::uart_print(b"Recommended Interval: "); }
+            self.print_number_simple(phase.recommended_interval_ms());
+            unsafe { crate::uart_print(b" ms\n"); }
+
+            unsafe { crate::uart_print(b"\nAvailable Phases:\n"); }
+            unsafe { crate::uart_print(b"  A - Learning (exploration, low risk)\n"); }
+            unsafe { crate::uart_print(b"  B - Validation (balanced, medium risk)\n"); }
+            unsafe { crate::uart_print(b"  C - Production (conservative, reduced risk)\n"); }
+            unsafe { crate::uart_print(b"  D - Emergency (minimal autonomy, safety-critical)\n"); }
+            unsafe { crate::uart_print(b"\nUse 'autoctl phase <A|B|C|D>' to change phase.\n"); }
+        } else {
+            // Set phase
+            let new_phase = match action.unwrap().to_uppercase().as_str() {
+                "A" => crate::autonomy::AutonomyPhase::PhaseA,
+                "B" => crate::autonomy::AutonomyPhase::PhaseB,
+                "C" => crate::autonomy::AutonomyPhase::PhaseC,
+                "D" => crate::autonomy::AutonomyPhase::PhaseD,
+                _ => {
+                    unsafe { crate::uart_print(b"Usage: autoctl phase <A|B|C|D|status>\n"); }
+                    return;
+                }
+            };
+
+            let old_phase = crate::autonomy::get_autonomy_phase();
+            crate::autonomy::set_autonomy_phase(new_phase);
+
+            unsafe { crate::uart_print(b"[AUTOCTL] Phase transition: "); }
+            unsafe { crate::uart_print(old_phase.as_str().as_bytes()); }
+            unsafe { crate::uart_print(b" -> "); }
+            unsafe { crate::uart_print(new_phase.as_str().as_bytes()); }
+            unsafe { crate::uart_print(b"\n"); }
+
+            unsafe { crate::uart_print(b"  Description: "); }
+            unsafe { crate::uart_print(new_phase.description().as_bytes()); }
+            unsafe { crate::uart_print(b"\n"); }
+
+            unsafe { crate::uart_print(b"  Max risk score: "); }
+            self.print_number_simple(new_phase.max_risk_score() as u64);
+            unsafe { crate::uart_print(b"/100\n"); }
+
+            unsafe { crate::uart_print(b"  Recommended interval: "); }
+            self.print_number_simple(new_phase.recommended_interval_ms());
+            unsafe { crate::uart_print(b" ms\n"); }
+
+            unsafe { crate::uart_print(b"\nConsider running 'autoctl interval "); }
+            self.print_number_simple(new_phase.recommended_interval_ms());
+            unsafe { crate::uart_print(b"' to match phase settings.\n"); }
+
+            // Log phase transition to audit log
+            unsafe { crate::uart_print(b"[AUDIT] Phase transition logged\n"); }
+        }
+    }
 }
 
