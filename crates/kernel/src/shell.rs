@@ -361,7 +361,7 @@ impl Shell {
             crate::uart_print(b"  mladvdemo - Demo advanced ML features (experience replay, TD learning, topology)\n");
             crate::uart_print(b"  actorctl - Actor-critic: status | policy | sample | lambda N | natural on/off | kl N | on | off\n");
             crate::uart_print(b"  actorcriticdemo - Demo actor-critic with policy gradients and eligibility traces\n");
-            crate::uart_print(b"  autoctl  - Autonomous control: on | off | status | interval N | conf-threshold [N] | preview [N] | phase [A|B|C|D] | attention | limits | audit last N | rewards --breakdown | explain ID | dashboard | tick\n");
+            crate::uart_print(b"  autoctl  - Autonomous control: on | off | reset | status | interval N | conf-threshold [N] | preview [N] | phase [A|B|C|D] | attention | limits | audit last N | rewards --breakdown | explain ID | dashboard | tick\n");
             crate::uart_print(b"  learnctl - Prediction tracking: stats | train | feedback good|bad|verybad ID\n");
             crate::uart_print(b"  memctl   - Memory neural agent: status | predict | stress [N] | query-mode on/off | approval on/off\n");
             crate::uart_print(b"  schedctl - Scheduling control: workload | priorities | affinity | shadow on|off|compare | feature enable|disable|list NAME\n");
@@ -803,52 +803,94 @@ impl Shell {
 
     fn cmd_autoctl(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|limits|audit last N|rewards --breakdown|anomalies|verify|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck>\n"); }
+            unsafe { crate::uart_print(b"Usage: autoctl <on|off|reset|status|interval N|limits|audit last N|rewards --breakdown|anomalies|verify|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck>\n"); }
             return;
         }
 
         match args[0] {
             "on" => {
+                use core::sync::atomic::Ordering;
+                // If already enabled and timer armed, skip re-arm to be idempotent
+                let already_enabled = crate::autonomy::AUTONOMOUS_CONTROL.is_enabled();
+                let mut timer_enabled: u64;
+                #[cfg(target_arch = "aarch64")]
+                unsafe {
+                    core::arch::asm!("mrs {x}, cntp_ctl_el0", x = out(reg) timer_enabled);
+                }
+
+                if already_enabled && (timer_enabled & 1) == 1 {
+                    unsafe { crate::uart_print(b"[AUTOCTL] Already enabled; skip re-arm (use 'autoctl reset' to force)\n"); }
+                    return;
+                }
+
                 crate::autonomy::AUTONOMOUS_CONTROL.enable();
                 unsafe { crate::uart_print(b"[AUTOCTL] Autonomous mode ENABLED\n"); }
 
-                // Reset timer tick counter to prevent issues with rapid fire detection
+                // Reset timer tick counter and last decision timestamp
                 #[cfg(target_arch = "aarch64")]
                 unsafe {
-                    // Access the TIMER_TICK_COUNT from main.rs and reset it
-                    extern "C" {
-                        static mut TIMER_TICK_COUNT: u32;
-                    }
+                    extern "C" { static mut TIMER_TICK_COUNT: u32; }
                     TIMER_TICK_COUNT = 0;
                     crate::uart_print(b"[AUTOCTL] Timer tick counter reset\n");
                 }
+                crate::autonomy::AUTONOMOUS_CONTROL
+                    .last_decision_timestamp
+                    .store(crate::time::get_timestamp_us(), Ordering::Relaxed);
 
-                // Arm the EL1 PHYSICAL timer (not virtual!) to match our IRQ handler which uses PPI 30
+                // Arm the EL1 PHYSICAL timer: disable, clear event, then set interval and enable
                 #[cfg(target_arch = "aarch64")]
                 unsafe {
+                    // Disable timer first and clear any pending ISTATUS
+                    let ctl_off: u64 = 0;
+                    core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl_off);
+                    core::arch::asm!("dsb sy; isb");
+                    let clear_val: u64 = 1;
+                    core::arch::asm!("msr cntp_tval_el0, {x}", x = in(reg) clear_val);
+                    core::arch::asm!("isb");
+
+                    // Compute absolute compare value: now + cycles
                     let mut frq: u64; core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
                     let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL
                         .decision_interval_ms
                         .load(core::sync::atomic::Ordering::Relaxed)
                         .clamp(100, 60_000);
                     let cycles = if frq > 0 { (frq / 1000).saturating_mul(interval_ms) } else { (62_500u64).saturating_mul(interval_ms) };
+                    let mut now: u64; core::arch::asm!("mrs {x}, cntpct_el0", x = out(reg) now);
+                    let next = now.saturating_add(cycles);
 
-                    crate::uart_print(b"[AUTOCTL] Starting EL1 physical timer with ");
+                    crate::uart_print(b"[AUTOCTL] Arming EL1 physical timer with ");
                     self.print_number_simple(interval_ms);
                     crate::uart_print(b"ms interval (");
                     self.print_number_simple(cycles);
                     crate::uart_print(b" cycles)\n");
 
-                    // Use PHYSICAL timer (cntp_*) not virtual (cntv_*)!
-                    core::arch::asm!("msr cntp_tval_el0, {x}", x = in(reg) cycles);
+                    // Program absolute compare value while disabled
+                    core::arch::asm!("msr cntp_cval_el0, {x}", x = in(reg) next);
+                    core::arch::asm!("isb");
+
                     // Enable EL1 physical timer, unmask
-                    let ctl: u64 = 1; // ENABLE=1, IMASK=0
-                    core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl);
+                    let ctl_on: u64 = 1; // ENABLE=1, IMASK=0
+                    core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl_on);
+                    core::arch::asm!("isb");
                 }
             }
             "off" => {
                 crate::autonomy::AUTONOMOUS_CONTROL.disable();
                 unsafe { crate::uart_print(b"[AUTOCTL] Autonomous mode DISABLED\n"); }
+
+                // Clear pending operations queue to prevent stale state on restart
+                {
+                    let mut pending = crate::predictive_memory::PENDING_OPERATIONS.lock();
+                    let count = pending.len();
+                    if count > 0 {
+                        pending.reject_all();
+                        unsafe {
+                            crate::uart_print(b"[AUTOCTL] Cleared ");
+                            self.print_number_simple(count as u64);
+                            crate::uart_print(b" pending operation(s) from queue\n");
+                        }
+                    }
+                }
 
                 // Re-enable metrics when exiting autonomous mode
                 crate::trace::metrics_set_enabled(true);
@@ -858,8 +900,54 @@ impl Shell {
                 unsafe {
                     let ctl: u64 = 0; // ENABLE=0, IMASK=0 - disable timer
                     core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl);
-                    crate::uart_print(b"[AUTOCTL] EL1 physical timer stopped\n");
+                    core::arch::asm!("dsb sy; isb");
+                    // Clear any pending event to avoid immediate fire on re-enable later
+                    let clear_val: u64 = 1;
+                    core::arch::asm!("msr cntp_tval_el0, {x}", x = in(reg) clear_val);
+                    core::arch::asm!("isb");
+                    crate::uart_print(b"[AUTOCTL] EL1 physical timer stopped and cleared\n");
                     crate::uart_print(b"[AUTOCTL] Metrics re-enabled for manual testing\n");
+                }
+            }
+            "reset" => {
+                // Force re-arm regardless of current state
+                crate::autonomy::AUTONOMOUS_CONTROL.enable();
+                unsafe { crate::uart_print(b"[AUTOCTL] Forcing timer re-arm (reset)\n"); }
+                // Reset counters and timestamp
+                #[cfg(target_arch = "aarch64")]
+                unsafe {
+                    extern "C" { static mut TIMER_TICK_COUNT: u32; }
+                    TIMER_TICK_COUNT = 0;
+                }
+                crate::autonomy::AUTONOMOUS_CONTROL
+                    .last_decision_timestamp
+                    .store(crate::time::get_timestamp_us(), core::sync::atomic::Ordering::Relaxed);
+
+                #[cfg(target_arch = "aarch64")]
+                unsafe {
+                    // Disable timer
+                    let ctl_off: u64 = 0;
+                    core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl_off);
+                    core::arch::asm!("dsb sy; isb");
+                    // Clear pending
+                    let clear_val: u64 = 1;
+                    core::arch::asm!("msr cntp_tval_el0, {x}", x = in(reg) clear_val);
+                    core::arch::asm!("isb");
+                    // Program absolute next event
+                    let mut frq: u64; core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
+                    let mut now: u64; core::arch::asm!("mrs {x}, cntpct_el0", x = out(reg) now);
+                    let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL
+                        .decision_interval_ms
+                        .load(core::sync::atomic::Ordering::Relaxed)
+                        .clamp(100, 60_000);
+                    let cycles = if frq > 0 { (frq / 1000).saturating_mul(interval_ms) } else { (62_500u64).saturating_mul(interval_ms) };
+                    let next = now.saturating_add(cycles);
+                    core::arch::asm!("msr cntp_cval_el0, {x}", x = in(reg) next);
+                    core::arch::asm!("isb");
+                    // Enable
+                    let ctl_on: u64 = 1;
+                    core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl_on);
+                    core::arch::asm!("isb");
                 }
             }
             "status" => { self.print_autoctl_status(); }
@@ -1535,7 +1623,7 @@ impl Shell {
                     self.autoctl_conf_threshold(None);
                 }
             }
-            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|status|interval N|limits|audit last N|rewards --breakdown|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck|rollout|circuit-breaker|preview [N]|phase [A|B|C|D]|attention|conf-threshold [N]>\n"); }
+            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|reset|status|interval N|limits|audit last N|rewards --breakdown|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck|rollout|circuit-breaker|preview [N]|phase [A|B|C|D]|attention|conf-threshold [N]>\n"); }
         }
     }
 
