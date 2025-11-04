@@ -415,7 +415,7 @@ pub fn execute_predictive_compaction_verbose(verbose: bool) -> bool {
 
     if should_compact && verbose {
         unsafe {
-            crate::uart_print(b"[PRED_MEM] Triggering predictive compaction\n");
+            crate::uart_print(b"[PRED_MEM] Compaction recommended (decision pending autonomy)\n");
             crate::uart_print(b"  Predicted frag in 5s: ");
             crate::shell::print_number_simple(predicted_frag as u64);
             crate::uart_print(b"%\n  Confidence: ");
