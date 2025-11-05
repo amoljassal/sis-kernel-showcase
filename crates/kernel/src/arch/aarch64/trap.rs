@@ -150,15 +150,36 @@ fn handle_page_fault(frame: &mut TrapFrame, fault_addr: u64, write: bool, esr: u
 /// Handle IRQ
 #[no_mangle]
 pub extern "C" fn handle_irq(frame: &mut TrapFrame) {
-    // Read interrupt number from GIC
-    // For now, assume timer interrupt (PPI 30 for AArch64 generic timer)
+    // 1. Read ICC_IAR1_EL1 to acknowledge and get interrupt ID
+    let intid: u64;
+    unsafe {
+        core::arch::asm!(
+            "mrs {intid}, icc_iar1_el1",
+            intid = out(reg) intid,
+            options(nostack, preserves_flags)
+        );
+    }
 
-    // Call scheduler timer tick
-    crate::process::scheduler::timer_tick();
+    // Extract interrupt ID (lower 24 bits)
+    let irq_num = (intid & 0xFFFFFF) as u32;
 
-    // TODO: ACK/EOI the interrupt via GIC
+    // 2. Dispatch to appropriate handler
+    // PPI 30 = EL1 physical timer (ID 30)
+    // Spurious interrupt = 1023
+    if irq_num == 1023 {
+        // Spurious interrupt, just return
+        return;
+    }
 
-    // Check if reschedule is needed
+    if irq_num == 30 {
+        // Timer interrupt - call scheduler tick
+        crate::process::scheduler::timer_tick();
+    } else {
+        // Unknown interrupt
+        crate::warn!("Unexpected IRQ: {}", irq_num);
+    }
+
+    // 3. Check if reschedule is needed (before EOI so we can handle it)
     if crate::process::scheduler::need_resched() {
         // Save current task's trap frame
         if let Some(pid) = crate::process::scheduler::current_pid() {
@@ -175,6 +196,25 @@ pub extern "C" fn handle_irq(frame: &mut TrapFrame) {
 
         // Load next task's trap frame (already set by scheduler via set_elr/spsr/sp_el0)
         // When we return via ERET, we'll enter the new task
+    }
+
+    // 4. Write ICC_EOIR1_EL1 to signal End Of Interrupt
+    unsafe {
+        core::arch::asm!(
+            "msr icc_eoir1_el1, {intid}",
+            intid = in(reg) intid,
+            options(nostack, preserves_flags)
+        );
+    }
+
+    // 5. Write ICC_DIR_EL1 to deactivate the interrupt
+    // (Required when EOImode==1, which separates EOI and deactivation)
+    unsafe {
+        core::arch::asm!(
+            "msr icc_dir_el1, {intid}",
+            intid = in(reg) intid,
+            options(nostack, preserves_flags)
+        );
     }
 }
 
