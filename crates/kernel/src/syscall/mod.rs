@@ -26,14 +26,32 @@ pub fn syscall_dispatcher(nr: usize, args: &[u64; 6]) -> isize {
         // Process management
         93 => sys_exit(args[0] as i32),
         172 => sys_getpid(),
+        173 => sys_getppid(),
         220 => sys_fork(),
         221 => sys_execve(args[0] as *const u8, args[1] as *const *const u8, args[2] as *const *const u8),
         260 => sys_wait4(args[0] as i32, args[1] as *mut i32, args[2] as i32, args[3] as *mut u8),
+
+        // Signal handling
+        129 => sys_kill(args[0] as i32, args[1] as i32),
+        134 => sys_sigaction(args[0] as i32, args[1] as *const u8, args[2] as *mut u8),
+        139 => sys_sigreturn(),
 
         // Memory management
         214 => sys_brk(args[0] as *const u8),
         222 => sys_mmap(args[0] as *mut u8, args[1] as usize, args[2] as i32, args[3] as i32, args[4] as i32, args[5] as i64),
         215 => sys_munmap(args[0] as *mut u8, args[1] as usize),
+
+        // File operations
+        34 => sys_mkdir(args[0] as *const u8, args[1] as u32),
+        35 => sys_rmdir(args[0] as *const u8),
+        10 => sys_unlink(args[0] as *const u8),
+        59 => sys_pipe(args[0] as *mut i32),
+        23 => sys_dup(args[0] as i32),
+        24 => sys_dup2(args[0] as i32, args[1] as i32),
+
+        // Working directory
+        17 => sys_getcwd(args[0] as *mut u8, args[1] as usize),
+        49 => sys_chdir(args[0] as *const u8),
 
         // Unimplemented
         _ => {
@@ -520,6 +538,281 @@ pub fn sys_munmap(addr: *mut u8, length: usize) -> Result<isize> {
     let task = table.get_mut(pid).ok_or(Errno::ESRCH)?;
 
     task.mm.do_munmap(addr as u64, length as u64)?;
+    Ok(0)
+}
+
+/// sys_getppid - Get parent process ID
+pub fn sys_getppid() -> Result<isize> {
+    let pid = crate::process::current_pid();
+    let table = crate::process::get_process_table();
+    let table = table.as_ref().ok_or(Errno::ESRCH)?;
+    let task = table.get(&pid).ok_or(Errno::ESRCH)?;
+    Ok(task.ppid as isize)
+}
+
+/// sys_kill - Send signal to a process
+pub fn sys_kill(pid: i32, sig: i32) -> Result<isize> {
+    use crate::process::signal::Signal;
+
+    // Validate signal number
+    let signal = Signal::from_u32(sig as u32).ok_or(Errno::EINVAL)?;
+
+    // Validate PID
+    if pid <= 0 {
+        // TODO: Phase A2 - support process groups (negative PIDs)
+        return Err(Errno::EINVAL);
+    }
+
+    // Send signal
+    crate::process::send_signal(pid as u32, signal)?;
+    Ok(0)
+}
+
+/// sys_sigaction - Set signal handler
+pub fn sys_sigaction(sig: i32, act: *const u8, oldact: *mut u8) -> Result<isize> {
+    use crate::process::signal::{Signal, SignalAction, SigAction, SIG_DFL, SIG_IGN};
+
+    // Validate signal number
+    let signal = Signal::from_u32(sig as u32).ok_or(Errno::EINVAL)?;
+
+    // Cannot change SIGKILL or SIGSTOP
+    if !signal.is_catchable() {
+        return Err(Errno::EINVAL);
+    }
+
+    let pid = crate::process::current_pid();
+    let mut table = crate::process::get_process_table();
+    let table = table.as_mut().ok_or(Errno::ESRCH)?;
+    let task = table.get_mut(pid).ok_or(Errno::ESRCH)?;
+
+    // Get old action if requested
+    if !oldact.is_null() {
+        let old_action = task.signals.get_handler(signal);
+        let old_act = SigAction {
+            sa_handler: match old_action {
+                SignalAction::Ignore => SIG_IGN,
+                SignalAction::Terminate => SIG_DFL,
+                SignalAction::Stop => SIG_DFL,
+                SignalAction::Continue => SIG_DFL,
+                SignalAction::Handler(addr) => addr,
+            },
+            sa_mask: 0,
+            sa_flags: 0,
+            sa_restorer: 0,
+        };
+
+        // Copy to userspace
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                &old_act as *const SigAction as *const u8,
+                oldact,
+                core::mem::size_of::<SigAction>(),
+            );
+        }
+    }
+
+    // Set new action if provided
+    if !act.is_null() {
+        // Copy from userspace
+        let new_act: SigAction = unsafe {
+            let mut act_buf = core::mem::MaybeUninit::<SigAction>::uninit();
+            core::ptr::copy_nonoverlapping(
+                act,
+                act_buf.as_mut_ptr() as *mut u8,
+                core::mem::size_of::<SigAction>(),
+            );
+            act_buf.assume_init()
+        };
+
+        // Convert to SignalAction
+        let action = if new_act.sa_handler == SIG_DFL {
+            signal.default_action()
+        } else if new_act.sa_handler == SIG_IGN {
+            SignalAction::Ignore
+        } else {
+            SignalAction::Handler(new_act.sa_handler)
+        };
+
+        task.signals.set_handler(signal, action);
+    }
+
+    Ok(0)
+}
+
+/// sys_sigreturn - Return from signal handler
+pub fn sys_sigreturn() -> Result<isize> {
+    // Phase A1: Minimal implementation
+    // TODO: Restore saved context from signal frame on stack
+    crate::warn!("sigreturn not fully implemented in Phase A1");
+    Ok(0)
+}
+
+/// sys_pipe - Create a pipe
+pub fn sys_pipe(fds: *mut i32) -> Result<isize> {
+    if fds.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // TODO: Implement pipe infrastructure
+    // For now, return ENOSYS
+    crate::warn!("pipe not yet implemented in Phase A1");
+    Err(Errno::ENOSYS)
+}
+
+/// sys_dup - Duplicate file descriptor
+pub fn sys_dup(oldfd: i32) -> Result<isize> {
+    let pid = crate::process::current_pid();
+    let mut table = crate::process::get_process_table();
+    let table = table.as_mut().ok_or(Errno::ESRCH)?;
+    let task = table.get_mut(pid).ok_or(Errno::ESRCH)?;
+
+    // Get the file from oldfd
+    let file = task.files.get(oldfd).ok_or(Errno::EBADF)?;
+
+    // Allocate new FD
+    let newfd = task.files.alloc_fd(file.clone())?;
+    Ok(newfd as isize)
+}
+
+/// sys_dup2 - Duplicate file descriptor to specific FD number
+pub fn sys_dup2(oldfd: i32, newfd: i32) -> Result<isize> {
+    if newfd < 0 || newfd >= 1024 {
+        return Err(Errno::EBADF);
+    }
+
+    let pid = crate::process::current_pid();
+    let mut table = crate::process::get_process_table();
+    let table = table.as_mut().ok_or(Errno::ESRCH)?;
+    let task = table.get_mut(pid).ok_or(Errno::ESRCH)?;
+
+    // If oldfd == newfd, just validate and return
+    if oldfd == newfd {
+        task.files.get(oldfd).ok_or(Errno::EBADF)?;
+        return Ok(newfd as isize);
+    }
+
+    // Get the file from oldfd
+    let file = task.files.get(oldfd).ok_or(Errno::EBADF)?;
+
+    // Close newfd if it's open
+    let _ = task.files.close(newfd);
+
+    // Set newfd to point to the same file
+    task.files.set(newfd, file.clone())?;
+    Ok(newfd as isize)
+}
+
+/// sys_mkdir - Create a directory
+pub fn sys_mkdir(pathname: *const u8, mode: u32) -> Result<isize> {
+    if pathname.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // Copy pathname from userspace
+    let path = unsafe {
+        let mut len = 0;
+        while len < 4096 && *pathname.add(len) != 0 {
+            len += 1;
+        }
+        let bytes = core::slice::from_raw_parts(pathname, len);
+        core::str::from_utf8(bytes).map_err(|_| Errno::EINVAL)?
+    };
+
+    // Create directory through VFS
+    let root = crate::vfs::get_root().ok_or(Errno::ENOENT)?;
+    crate::vfs::mkdir(path, mode)?;
+    Ok(0)
+}
+
+/// sys_rmdir - Remove a directory
+pub fn sys_rmdir(pathname: *const u8) -> Result<isize> {
+    if pathname.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // Copy pathname from userspace
+    let path = unsafe {
+        let mut len = 0;
+        while len < 4096 && *pathname.add(len) != 0 {
+            len += 1;
+        }
+        let bytes = core::slice::from_raw_parts(pathname, len);
+        core::str::from_utf8(bytes).map_err(|_| Errno::EINVAL)?
+    };
+
+    // Remove directory through VFS
+    crate::vfs::rmdir(path)?;
+    Ok(0)
+}
+
+/// sys_unlink - Remove a file
+pub fn sys_unlink(pathname: *const u8) -> Result<isize> {
+    if pathname.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // Copy pathname from userspace
+    let path = unsafe {
+        let mut len = 0;
+        while len < 4096 && *pathname.add(len) != 0 {
+            len += 1;
+        }
+        let bytes = core::slice::from_raw_parts(pathname, len);
+        core::str::from_utf8(bytes).map_err(|_| Errno::EINVAL)?
+    };
+
+    // Remove file through VFS
+    crate::vfs::unlink(path)?;
+    Ok(0)
+}
+
+/// sys_getcwd - Get current working directory
+pub fn sys_getcwd(buf: *mut u8, size: usize) -> Result<isize> {
+    if buf.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // Phase A1: Always return "/" (absolute paths only)
+    let cwd = b"/\0";
+    if size < cwd.len() {
+        return Err(Errno::ERANGE);
+    }
+
+    unsafe {
+        core::ptr::copy_nonoverlapping(cwd.as_ptr(), buf, cwd.len());
+    }
+
+    Ok(buf as isize)
+}
+
+/// sys_chdir - Change current working directory
+pub fn sys_chdir(pathname: *const u8) -> Result<isize> {
+    if pathname.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // Copy pathname from userspace
+    let path = unsafe {
+        let mut len = 0;
+        while len < 4096 && *pathname.add(len) != 0 {
+            len += 1;
+        }
+        let bytes = core::slice::from_raw_parts(pathname, len);
+        core::str::from_utf8(bytes).map_err(|_| Errno::EINVAL)?
+    };
+
+    // Phase A1: Verify path exists but don't actually change CWD
+    // (all paths must be absolute in A1)
+    let root = crate::vfs::get_root().ok_or(Errno::ENOENT)?;
+    let inode = crate::vfs::path_lookup(&root, path)?;
+
+    // Verify it's a directory
+    let meta = inode.getattr()?;
+    if (meta.mode & crate::vfs::S_IFMT) != crate::vfs::S_IFDIR {
+        return Err(Errno::ENOTDIR);
+    }
+
+    // TODO: Phase A2 - actually store CWD in task
     Ok(0)
 }
 
