@@ -14,7 +14,9 @@
   "paths": {
     "/health": {
       "get": {
-        "tags": ["health"],
+        "tags": [
+          "health"
+        ],
         "summary": "Health check",
         "operationId": "health",
         "responses": {
@@ -33,7 +35,9 @@
     },
     "/api/v1/config": {
       "get": {
-        "tags": ["config"],
+        "tags": [
+          "config"
+        ],
         "summary": "Get daemon configuration",
         "operationId": "getConfig",
         "responses": {
@@ -52,7 +56,9 @@
     },
     "/api/v1/qemu/run": {
       "post": {
-        "tags": ["qemu"],
+        "tags": [
+          "qemu"
+        ],
         "summary": "Run QEMU with configuration",
         "operationId": "qemuRun",
         "requestBody": {
@@ -101,7 +107,9 @@
     },
     "/api/v1/qemu/stop": {
       "post": {
-        "tags": ["qemu"],
+        "tags": [
+          "qemu"
+        ],
         "summary": "Stop QEMU",
         "operationId": "qemuStop",
         "responses": {
@@ -130,7 +138,9 @@
     },
     "/api/v1/qemu/status": {
       "get": {
-        "tags": ["qemu"],
+        "tags": [
+          "qemu"
+        ],
         "summary": "Get QEMU status",
         "operationId": "qemuStatus",
         "responses": {
@@ -149,7 +159,9 @@
     },
     "/api/v1/shell/exec": {
       "post": {
-        "tags": ["shell"],
+        "tags": [
+          "shell"
+        ],
         "summary": "Execute a shell command",
         "operationId": "shellExec",
         "requestBody": {
@@ -226,7 +238,9 @@
     },
     "/api/v1/shell/selfcheck": {
       "post": {
-        "tags": ["shell"],
+        "tags": [
+          "shell"
+        ],
         "summary": "Run self-check tests",
         "operationId": "shellSelfcheck",
         "responses": {
@@ -282,7 +296,9 @@
     },
     "/api/v1/shell/selfcheck/cancel": {
       "post": {
-        "tags": ["shell"],
+        "tags": [
+          "shell"
+        ],
         "summary": "Cancel running self-check",
         "operationId": "shellSelfcheckCancel",
         "responses": {
@@ -321,7 +337,9 @@
     },
     "/api/v1/replay": {
       "post": {
-        "tags": ["replay"],
+        "tags": [
+          "replay"
+        ],
         "summary": "Start replay from log file",
         "operationId": "replayStart",
         "requestBody": {
@@ -380,7 +398,9 @@
     },
     "/api/v1/replay/stop": {
       "post": {
-        "tags": ["replay"],
+        "tags": [
+          "replay"
+        ],
         "summary": "Stop running replay",
         "operationId": "replayStop",
         "responses": {
@@ -409,7 +429,9 @@
     },
     "/api/v1/replay/status": {
       "get": {
-        "tags": ["replay"],
+        "tags": [
+          "replay"
+        ],
         "summary": "Get replay status",
         "operationId": "replayStatus",
         "responses": {
@@ -428,7 +450,9 @@
     },
     "/api/v1/metrics/streams": {
       "get": {
-        "tags": ["metrics"],
+        "tags": [
+          "metrics"
+        ],
         "summary": "List all metric series",
         "operationId": "listStreams",
         "parameters": [
@@ -461,7 +485,9 @@
     },
     "/api/v1/metrics/query": {
       "get": {
-        "tags": ["metrics"],
+        "tags": [
+          "metrics"
+        ],
         "summary": "Query a specific metric series",
         "operationId": "querySeries",
         "parameters": [
@@ -555,12 +581,430 @@
     },
     "/events": {
       "get": {
-        "tags": ["websocket"],
+        "tags": [
+          "websocket"
+        ],
         "summary": "WebSocket event stream",
         "description": "Upgrade to WebSocket for real-time event streaming",
         "responses": {
           "101": {
             "description": "Switching Protocols"
+          }
+        }
+      }
+    },
+    "/api/v1/autonomy/on": {
+      "post": {
+        "tags": [
+          "autonomy"
+        ],
+        "summary": "Enable autonomy",
+        "operationId": "autonomyOn",
+        "responses": {
+          "200": {
+            "description": "Autonomy enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutonomyStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/autonomy/off": {
+      "post": {
+        "tags": [
+          "autonomy"
+        ],
+        "summary": "Disable autonomy",
+        "operationId": "autonomyOff",
+        "responses": {
+          "200": {
+            "description": "Autonomy disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutonomyStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/autonomy/reset": {
+      "post": {
+        "tags": [
+          "autonomy"
+        ],
+        "summary": "Reset autonomy state",
+        "operationId": "autonomyReset",
+        "responses": {
+          "200": {
+            "description": "Autonomy reset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutonomyStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/autonomy/interval": {
+      "post": {
+        "tags": [
+          "autonomy"
+        ],
+        "summary": "Set autonomy interval",
+        "operationId": "autonomySetInterval",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "interval_ms": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "interval_ms"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Interval updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutonomyStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/autonomy/conf-threshold": {
+      "post": {
+        "tags": [
+          "autonomy"
+        ],
+        "summary": "Set confidence threshold",
+        "operationId": "autonomySetThreshold",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "threshold": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "threshold"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Threshold updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutonomyStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/autonomy/status": {
+      "get": {
+        "tags": [
+          "autonomy"
+        ],
+        "summary": "Get autonomy status",
+        "operationId": "autonomyStatus",
+        "responses": {
+          "200": {
+            "description": "Autonomy status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutonomyStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/autonomy/audit": {
+      "get": {
+        "tags": [
+          "autonomy"
+        ],
+        "summary": "Get autonomy audit log",
+        "operationId": "autonomyAudit",
+        "parameters": [
+          {
+            "name": "last",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AutonomyDecision"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/autonomy/explain": {
+      "get": {
+        "tags": [
+          "autonomy"
+        ],
+        "summary": "Explain a decision",
+        "operationId": "autonomyExplain",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Decision explanation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplainResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/autonomy/preview": {
+      "post": {
+        "tags": [
+          "autonomy"
+        ],
+        "summary": "Preview next decisions",
+        "operationId": "autonomyPreview",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preview results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/autonomy/whatif": {
+      "post": {
+        "tags": [
+          "autonomy"
+        ],
+        "summary": "What-if scenario analysis",
+        "operationId": "autonomyWhatIf",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatIfRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "What-if results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatIfResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/mem/approvals": {
+      "get": {
+        "tags": [
+          "memory"
+        ],
+        "summary": "Get pending approvals",
+        "operationId": "memGetApprovals",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pending operations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PendingOperation"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/mem/approval": {
+      "post": {
+        "tags": [
+          "memory"
+        ],
+        "summary": "Toggle approval mode",
+        "operationId": "memApprovalToggle",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalToggleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Approval mode updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryApprovalStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/mem/approve": {
+      "post": {
+        "tags": [
+          "memory"
+        ],
+        "summary": "Approve N operations",
+        "operationId": "memApprove",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Operations approved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryApprovalStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/mem/reject": {
+      "post": {
+        "tags": [
+          "memory"
+        ],
+        "summary": "Reject operation(s)",
+        "operationId": "memReject",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Operations rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryApprovalStatus"
+                }
+              }
+            }
           }
         }
       }
@@ -584,7 +1028,10 @@
             "example": 3600
           }
         },
-        "required": ["status", "version"]
+        "required": [
+          "status",
+          "version"
+        ]
       },
       "DaemonConfig": {
         "type": "object",
@@ -701,11 +1148,22 @@
             "format": "int64"
           }
         },
-        "required": ["state", "features", "lines_processed", "events_emitted"]
+        "required": [
+          "state",
+          "features",
+          "lines_processed",
+          "events_emitted"
+        ]
       },
       "QemuState": {
         "type": "string",
-        "enum": ["idle", "starting", "running", "stopping", "failed"]
+        "enum": [
+          "idle",
+          "starting",
+          "running",
+          "stopping",
+          "failed"
+        ]
       },
       "ShellCommandRequest": {
         "type": "object",
@@ -719,7 +1177,9 @@
             "nullable": true
           }
         },
-        "required": ["command"]
+        "required": [
+          "command"
+        ]
       },
       "ShellCommandResponse": {
         "type": "object",
@@ -745,7 +1205,12 @@
             "format": "int64"
           }
         },
-        "required": ["command", "output", "success", "execution_time_ms"]
+        "required": [
+          "command",
+          "output",
+          "success",
+          "execution_time_ms"
+        ]
       },
       "SelfCheckResponse": {
         "type": "object",
@@ -773,7 +1238,14 @@
             "format": "int64"
           }
         },
-        "required": ["tests", "total", "passed", "failed", "success", "execution_time_ms"]
+        "required": [
+          "tests",
+          "total",
+          "passed",
+          "failed",
+          "success",
+          "execution_time_ms"
+        ]
       },
       "TestResultEntry": {
         "type": "object",
@@ -789,14 +1261,21 @@
             "format": "int64"
           }
         },
-        "required": ["name", "passed", "timestamp"]
+        "required": [
+          "name",
+          "passed",
+          "timestamp"
+        ]
       },
       "ReplayRequest": {
         "type": "object",
         "properties": {
           "mode": {
             "type": "string",
-            "enum": ["sample", "upload"],
+            "enum": [
+              "sample",
+              "upload"
+            ],
             "default": "sample",
             "description": "Log source mode"
           },
@@ -810,7 +1289,11 @@
           },
           "speed": {
             "type": "string",
-            "enum": ["instant", "fast", "realtime"],
+            "enum": [
+              "instant",
+              "fast",
+              "realtime"
+            ],
             "default": "realtime",
             "description": "Replay speed"
           },
@@ -831,7 +1314,10 @@
             "type": "integer"
           }
         },
-        "required": ["message", "lines_processed"]
+        "required": [
+          "message",
+          "lines_processed"
+        ]
       },
       "ReplayStatus": {
         "type": "object",
@@ -854,11 +1340,17 @@
             "description": "Progress percentage"
           }
         },
-        "required": ["state", "progress"]
+        "required": [
+          "state",
+          "progress"
+        ]
       },
       "ReplayState": {
         "type": "string",
-        "enum": ["idle", "running"]
+        "enum": [
+          "idle",
+          "running"
+        ]
       },
       "MetricPoint": {
         "type": "object",
@@ -875,7 +1367,10 @@
             "description": "Metric value"
           }
         },
-        "required": ["ts", "value"]
+        "required": [
+          "ts",
+          "value"
+        ]
       },
       "SeriesStats": {
         "type": "object",
@@ -906,7 +1401,13 @@
             "description": "Most recent value"
           }
         },
-        "required": ["count", "min", "max", "mean", "last_value"]
+        "required": [
+          "count",
+          "min",
+          "max",
+          "mean",
+          "last_value"
+        ]
       },
       "SeriesMetadata": {
         "type": "object",
@@ -929,7 +1430,12 @@
             "$ref": "#/components/schemas/SeriesStats"
           }
         },
-        "required": ["name", "count", "lastTs", "stats"]
+        "required": [
+          "name",
+          "count",
+          "lastTs",
+          "stats"
+        ]
       },
       "QueryResult": {
         "type": "object",
@@ -961,7 +1467,13 @@
             "description": "End timestamp (ms)"
           }
         },
-        "required": ["name", "points", "downsampled", "from", "to"]
+        "required": [
+          "name",
+          "points",
+          "downsampled",
+          "from",
+          "to"
+        ]
       },
       "ErrorResponse": {
         "type": "object",
@@ -996,7 +1508,12 @@
             "description": "Error message (legacy field)"
           }
         },
-        "required": ["title", "status", "detail", "error"]
+        "required": [
+          "title",
+          "status",
+          "detail",
+          "error"
+        ]
       },
       "SuccessResponse": {
         "type": "object",
@@ -1005,7 +1522,265 @@
             "type": "string"
           }
         },
-        "required": ["message"]
+        "required": [
+          "message"
+        ]
+      },
+      "AutonomyStatus": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "safe_mode": {
+            "type": "boolean"
+          },
+          "learning_frozen": {
+            "type": "boolean"
+          },
+          "interval_ms": {
+            "type": "integer"
+          },
+          "threshold": {
+            "type": "integer"
+          },
+          "total_decisions": {
+            "type": "integer"
+          },
+          "accepted": {
+            "type": "integer"
+          },
+          "deferred": {
+            "type": "integer"
+          },
+          "watchdog_low_reward": {
+            "type": "integer"
+          },
+          "watchdog_high_td_error": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "interval_ms",
+          "threshold",
+          "total_decisions"
+        ]
+      },
+      "AutonomyDecision": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "timestamp_us": {
+            "type": "integer"
+          },
+          "action": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "integer"
+          },
+          "reward": {
+            "type": "number",
+            "format": "float"
+          },
+          "executed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "timestamp_us",
+          "action",
+          "confidence"
+        ]
+      },
+      "AttentionWeight": {
+        "type": "object",
+        "properties": {
+          "feature": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "number",
+            "format": "float"
+          }
+        },
+        "required": [
+          "feature",
+          "weight"
+        ]
+      },
+      "ExplainResponse": {
+        "type": "object",
+        "properties": {
+          "decision_id": {
+            "type": "string"
+          },
+          "explanation": {
+            "type": "string"
+          },
+          "reasoning": {
+            "type": "string"
+          },
+          "attention": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttentionWeight"
+            }
+          },
+          "context": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "decision_id",
+          "explanation"
+        ]
+      },
+      "PreviewRequest": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ]
+      },
+      "PreviewResponse": {
+        "type": "object",
+        "properties": {
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AutonomyDecision"
+            }
+          },
+          "would_execute": {
+            "type": "boolean"
+          },
+          "confidence": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "decisions"
+        ]
+      },
+      "WhatIfRequest": {
+        "type": "object",
+        "properties": {
+          "overrides": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "overrides"
+        ]
+      },
+      "WhatIfResponse": {
+        "type": "object",
+        "properties": {
+          "scenario": {
+            "$ref": "#/components/schemas/PreviewResponse"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "scenario"
+        ]
+      },
+      "MemoryApprovalStatus": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "pending_count": {
+            "type": "integer"
+          },
+          "total_approved": {
+            "type": "integer"
+          },
+          "total_rejected": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "pending_count"
+        ]
+      },
+      "PendingOperation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "operation_type": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "integer"
+          },
+          "risk_score": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "timestamp_us": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "operation_type"
+        ]
+      },
+      "ApprovalToggleRequest": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "on",
+              "off",
+              "status"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "ApproveRequest": {
+        "type": "object",
+        "properties": {
+          "n": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n"
+        ]
+      },
+      "RejectRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
       }
     }
   },

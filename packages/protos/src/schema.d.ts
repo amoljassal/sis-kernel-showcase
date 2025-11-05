@@ -71,6 +71,62 @@ export interface paths {
       };
     };
   };
+  "/api/v1/autonomy/on": {
+    /** Enable autonomy */
+    post: operations["autonomyOn"];
+  };
+  "/api/v1/autonomy/off": {
+    /** Disable autonomy */
+    post: operations["autonomyOff"];
+  };
+  "/api/v1/autonomy/reset": {
+    /** Reset autonomy state */
+    post: operations["autonomyReset"];
+  };
+  "/api/v1/autonomy/interval": {
+    /** Set autonomy interval */
+    post: operations["autonomySetInterval"];
+  };
+  "/api/v1/autonomy/conf-threshold": {
+    /** Set confidence threshold */
+    post: operations["autonomySetThreshold"];
+  };
+  "/api/v1/autonomy/status": {
+    /** Get autonomy status */
+    get: operations["autonomyStatus"];
+  };
+  "/api/v1/autonomy/audit": {
+    /** Get autonomy audit log */
+    get: operations["autonomyAudit"];
+  };
+  "/api/v1/autonomy/explain": {
+    /** Explain a decision */
+    get: operations["autonomyExplain"];
+  };
+  "/api/v1/autonomy/preview": {
+    /** Preview next decisions */
+    post: operations["autonomyPreview"];
+  };
+  "/api/v1/autonomy/whatif": {
+    /** What-if scenario analysis */
+    post: operations["autonomyWhatIf"];
+  };
+  "/api/v1/mem/approvals": {
+    /** Get pending approvals */
+    get: operations["memGetApprovals"];
+  };
+  "/api/v1/mem/approval": {
+    /** Toggle approval mode */
+    post: operations["memApprovalToggle"];
+  };
+  "/api/v1/mem/approve": {
+    /** Approve N operations */
+    post: operations["memApprove"];
+  };
+  "/api/v1/mem/reject": {
+    /** Reject operation(s) */
+    post: operations["memReject"];
+  };
 }
 
 export type webhooks = Record<string, never>;
@@ -296,6 +352,78 @@ export interface components {
     };
     SuccessResponse: {
       message: string;
+    };
+    AutonomyStatus: {
+      enabled: boolean;
+      safe_mode?: boolean;
+      learning_frozen?: boolean;
+      interval_ms: number;
+      threshold: number;
+      total_decisions: number;
+      accepted?: number;
+      deferred?: number;
+      watchdog_low_reward?: number;
+      watchdog_high_td_error?: number;
+    };
+    AutonomyDecision: {
+      id: string;
+      timestamp_us: number;
+      action: string;
+      confidence: number;
+      /** Format: float */
+      reward?: number;
+      executed?: boolean;
+    };
+    AttentionWeight: {
+      feature: string;
+      /** Format: float */
+      weight: number;
+    };
+    ExplainResponse: {
+      decision_id: string;
+      explanation: string;
+      reasoning?: string;
+      attention?: components["schemas"]["AttentionWeight"][];
+      context?: Record<string, never>;
+    };
+    PreviewRequest: {
+      count: number;
+    };
+    PreviewResponse: {
+      decisions: components["schemas"]["AutonomyDecision"][];
+      would_execute?: boolean;
+      confidence?: number;
+    };
+    WhatIfRequest: {
+      overrides: Record<string, never>;
+    };
+    WhatIfResponse: {
+      scenario: components["schemas"]["PreviewResponse"];
+      warnings?: string[];
+    };
+    MemoryApprovalStatus: {
+      enabled: boolean;
+      pending_count: number;
+      total_approved?: number;
+      total_rejected?: number;
+    };
+    PendingOperation: {
+      id: string;
+      operation_type: string;
+      confidence?: number;
+      risk_score?: string;
+      reason?: string;
+      timestamp_us?: number;
+    };
+    ApprovalToggleRequest: {
+      /** @enum {string} */
+      action: "on" | "off" | "status";
+    };
+    ApproveRequest: {
+      n: number;
+    };
+    RejectRequest: {
+      id?: string;
     };
   };
   responses: never;
@@ -598,6 +726,214 @@ export interface operations {
       404: {
         content: {
           "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  /** Enable autonomy */
+  autonomyOn: {
+    responses: {
+      /** @description Autonomy enabled */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AutonomyStatus"];
+        };
+      };
+    };
+  };
+  /** Disable autonomy */
+  autonomyOff: {
+    responses: {
+      /** @description Autonomy disabled */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AutonomyStatus"];
+        };
+      };
+    };
+  };
+  /** Reset autonomy state */
+  autonomyReset: {
+    responses: {
+      /** @description Autonomy reset */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AutonomyStatus"];
+        };
+      };
+    };
+  };
+  /** Set autonomy interval */
+  autonomySetInterval: {
+    requestBody: {
+      content: {
+        "application/json": {
+          interval_ms: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Interval updated */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AutonomyStatus"];
+        };
+      };
+    };
+  };
+  /** Set confidence threshold */
+  autonomySetThreshold: {
+    requestBody: {
+      content: {
+        "application/json": {
+          threshold: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Threshold updated */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AutonomyStatus"];
+        };
+      };
+    };
+  };
+  /** Get autonomy status */
+  autonomyStatus: {
+    responses: {
+      /** @description Autonomy status */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AutonomyStatus"];
+        };
+      };
+    };
+  };
+  /** Get autonomy audit log */
+  autonomyAudit: {
+    parameters: {
+      query?: {
+        last?: number;
+      };
+    };
+    responses: {
+      /** @description Audit entries */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AutonomyDecision"][];
+        };
+      };
+    };
+  };
+  /** Explain a decision */
+  autonomyExplain: {
+    parameters: {
+      query: {
+        id: string;
+      };
+    };
+    responses: {
+      /** @description Decision explanation */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ExplainResponse"];
+        };
+      };
+    };
+  };
+  /** Preview next decisions */
+  autonomyPreview: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PreviewRequest"];
+      };
+    };
+    responses: {
+      /** @description Preview results */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PreviewResponse"];
+        };
+      };
+    };
+  };
+  /** What-if scenario analysis */
+  autonomyWhatIf: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WhatIfRequest"];
+      };
+    };
+    responses: {
+      /** @description What-if results */
+      200: {
+        content: {
+          "application/json": components["schemas"]["WhatIfResponse"];
+        };
+      };
+    };
+  };
+  /** Get pending approvals */
+  memGetApprovals: {
+    parameters: {
+      query?: {
+        limit?: number;
+      };
+    };
+    responses: {
+      /** @description Pending operations */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PendingOperation"][];
+        };
+      };
+    };
+  };
+  /** Toggle approval mode */
+  memApprovalToggle: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ApprovalToggleRequest"];
+      };
+    };
+    responses: {
+      /** @description Approval mode updated */
+      200: {
+        content: {
+          "application/json": components["schemas"]["MemoryApprovalStatus"];
+        };
+      };
+    };
+  };
+  /** Approve N operations */
+  memApprove: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ApproveRequest"];
+      };
+    };
+    responses: {
+      /** @description Operations approved */
+      200: {
+        content: {
+          "application/json": components["schemas"]["MemoryApprovalStatus"];
+        };
+      };
+    };
+  };
+  /** Reject operation(s) */
+  memReject: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RejectRequest"];
+      };
+    };
+    responses: {
+      /** @description Operations rejected */
+      200: {
+        content: {
+          "application/json": components["schemas"]["MemoryApprovalStatus"];
         };
       };
     };
