@@ -89,6 +89,13 @@ impl Default for SupervisorState {
     }
 }
 
+/// Reason for busy state
+#[derive(Debug, Clone)]
+enum BusyReason {
+    SelfCheck,
+    Command(String),
+}
+
 /// QEMU supervisor manages QEMU process lifecycle
 #[derive(Debug, Clone)]
 pub struct QemuSupervisor {
@@ -96,6 +103,7 @@ pub struct QemuSupervisor {
     event_tx: broadcast::Sender<QemuEvent>,
     shell_executor: Arc<Mutex<Option<ShellExecutor>>>,
     busy: Arc<AtomicBool>,
+    busy_reason: Arc<Mutex<Option<BusyReason>>>,
 }
 
 impl QemuSupervisor {
@@ -107,6 +115,7 @@ impl QemuSupervisor {
             event_tx,
             shell_executor: Arc::new(Mutex::new(None)),
             busy: Arc::new(AtomicBool::new(false)),
+            busy_reason: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -398,12 +407,26 @@ impl QemuSupervisor {
         });
     }
 
+    /// Check if system is busy and return reason
+    pub async fn check_busy(&self) -> Option<String> {
+        if self.busy.load(Ordering::SeqCst) {
+            let reason = self.busy_reason.lock().await;
+            Some(match reason.as_ref() {
+                Some(BusyReason::SelfCheck) => "self-check is currently running".to_string(),
+                Some(BusyReason::Command(cmd)) => format!("command '{}' is currently executing", cmd),
+                None => "another operation is in progress".to_string(),
+            })
+        } else {
+            None
+        }
+    }
+
     /// Execute a shell command
     #[tracing::instrument(skip(self), fields(command = %request.command, timeout_ms = request.timeout_ms))]
     pub async fn execute_command(&self, request: ShellCommandRequest) -> Result<ShellCommandResponse> {
         // Check if busy (e.g., running self-check)
-        if self.busy.load(Ordering::SeqCst) {
-            anyhow::bail!("System busy: another operation is in progress");
+        if let Some(reason) = self.check_busy().await {
+            anyhow::bail!("System busy: {}", reason);
         }
 
         let executor = self.shell_executor.lock().await;
@@ -429,8 +452,14 @@ impl QemuSupervisor {
     pub async fn run_self_check(&self) -> Result<ShellCommandResponse> {
         // Set busy flag
         if self.busy.swap(true, Ordering::SeqCst) {
+            if let Some(reason) = self.check_busy().await {
+                anyhow::bail!("System busy: {}", reason);
+            }
             anyhow::bail!("System busy: another operation is in progress");
         }
+
+        // Set busy reason
+        *self.busy_reason.lock().await = Some(BusyReason::SelfCheck);
 
         // Emit started event
         let _ = self.event_tx.send(QemuEvent::SelfCheckStarted {
@@ -487,8 +516,9 @@ impl QemuSupervisor {
             });
         }
 
-        // Clear busy flag
+        // Clear busy flag and reason
         self.busy.store(false, Ordering::SeqCst);
+        *self.busy_reason.lock().await = None;
 
         result
     }
