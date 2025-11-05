@@ -37,6 +37,27 @@ pub enum QemuEvent {
         #[serde(with = "chrono::serde::ts_milliseconds")]
         timestamp: chrono::DateTime<chrono::Utc>,
     },
+    /// Self-check started
+    SelfCheckStarted {
+        #[serde(with = "chrono::serde::ts_milliseconds")]
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
+    /// Self-check test result
+    SelfCheckTest {
+        name: String,
+        passed: bool,
+        #[serde(with = "chrono::serde::ts_milliseconds")]
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
+    /// Self-check completed
+    SelfCheckCompleted {
+        total: usize,
+        passed: usize,
+        failed: usize,
+        success: bool,
+        #[serde(with = "chrono::serde::ts_milliseconds")]
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
 }
 
 /// Shared QEMU supervisor state
@@ -387,6 +408,11 @@ impl QemuSupervisor {
             anyhow::bail!("System busy: another operation is in progress");
         }
 
+        // Emit started event
+        let _ = self.event_tx.send(QemuEvent::SelfCheckStarted {
+            timestamp: chrono::Utc::now(),
+        });
+
         // Execute self-check command
         let request = ShellCommandRequest {
             command: "self_check".to_string(),
@@ -400,6 +426,42 @@ impl QemuSupervisor {
                 None => Err(anyhow::anyhow!("Shell not ready or QEMU not running")),
             }
         };
+
+        // Parse and emit test results
+        if let Ok(ref response) = result {
+            let mut total = 0;
+            let mut passed_count = 0;
+
+            for line in &response.output {
+                if line.contains("[PASS]") {
+                    let test_name = line.replace("[PASS]", "").trim().to_string();
+                    total += 1;
+                    passed_count += 1;
+                    let _ = self.event_tx.send(QemuEvent::SelfCheckTest {
+                        name: test_name,
+                        passed: true,
+                        timestamp: chrono::Utc::now(),
+                    });
+                } else if line.contains("[FAIL]") {
+                    let test_name = line.replace("[FAIL]", "").trim().to_string();
+                    total += 1;
+                    let _ = self.event_tx.send(QemuEvent::SelfCheckTest {
+                        name: test_name,
+                        passed: false,
+                        timestamp: chrono::Utc::now(),
+                    });
+                }
+            }
+
+            // Emit completed event
+            let _ = self.event_tx.send(QemuEvent::SelfCheckCompleted {
+                total,
+                passed: passed_count,
+                failed: total - passed_count,
+                success: total > 0 && passed_count == total,
+                timestamp: chrono::Utc::now(),
+            });
+        }
 
         // Clear busy flag
         self.busy.store(false, Ordering::SeqCst);
