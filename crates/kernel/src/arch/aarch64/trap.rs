@@ -36,6 +36,12 @@ impl TrapFrame {
     }
 }
 
+impl Default for TrapFrame {
+    fn default() -> Self {
+        Self::new_zeroed()
+    }
+}
+
 /// Exception Syndrome Register (ESR_EL1) bits
 const ESR_EC_MASK: u64 = 0xFC000000;
 const ESR_EC_SHIFT: u64 = 26;
@@ -113,9 +119,9 @@ fn handle_syscall(frame: &mut TrapFrame) {
     frame.pc += 4;
 }
 
-/// Handle page fault (stub for Phase A0)
+/// Handle page fault
 fn handle_page_fault(frame: &mut TrapFrame, fault_addr: u64, write: bool, esr: u64) {
-    crate::error!(
+    crate::debug!(
         "Page fault at {:#x} ({}), ESR={:#x}, PC={:#x}",
         fault_addr,
         if write { "write" } else { "read" },
@@ -123,8 +129,22 @@ fn handle_page_fault(frame: &mut TrapFrame, fault_addr: u64, write: bool, esr: u
         frame.pc
     );
 
-    // Phase A0: No page fault handling yet, just panic
-    panic!("Page fault handling not implemented in Phase A0");
+    // Call mm page fault handler
+    match crate::mm::handle_page_fault(frame, fault_addr, esr) {
+        Ok(()) => {
+            // Fault handled successfully
+            crate::debug!("Page fault handled successfully");
+        }
+        Err(e) => {
+            // Unhandled page fault - terminate process
+            crate::error!(
+                "Unhandled page fault at {:#x}: {:?}",
+                fault_addr, e
+            );
+            // For now, panic. In full impl, would send SIGSEGV to process
+            panic!("Unhandled page fault");
+        }
+    }
 }
 
 /// Handle IRQ (stub for Phase A0)

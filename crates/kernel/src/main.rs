@@ -18,6 +18,8 @@ pub mod lib;
 pub mod syscall;
 // Process management
 pub mod process;
+// Memory management
+pub mod mm;
 // Userspace test module
 pub mod userspace_test;
 // Interactive shell module
