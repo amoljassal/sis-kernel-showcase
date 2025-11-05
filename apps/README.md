@@ -444,13 +444,60 @@ pnpm format:check
   - Error boundaries with graceful fallbacks
   - Responsive design for all screen sizes
 
-## Next Steps (Milestone 8+)
+### Milestone 8 (M8) Deliverables ✅
+
+**Testing & Packaging Infrastructure**
+
+- [x] **Playwright E2E Tests** - Comprehensive end-to-end testing
+  - Test suite covering all major features (tests/e2e/app.spec.ts)
+  - Application launch and connection tests
+  - Tab navigation and routing tests
+  - QEMU profile selector tests
+  - API Explorer functionality tests
+  - Settings panel tests
+  - Accessibility tests (ARIA labels, keyboard nav)
+  - Responsive design tests (mobile/tablet/desktop)
+  - Test artifacts and reporting
+
+- [x] **GitHub Actions CI/CD** - Automated build and release pipeline
+  - Multi-stage workflow (lint, test, build, release)
+  - Lint and unit test jobs
+  - E2E test execution with Playwright
+  - Multi-platform Tauri builds (Linux/macOS/Windows)
+  - Automated GitHub releases for tagged versions
+  - Artifact uploads and retention
+  - Matrix strategy for parallel builds
+
+- [x] **Deployment Documentation** - Comprehensive deployment guide
+  - Prerequisites and setup instructions
+  - Local development workflow
+  - Testing procedures (unit, E2E, lint)
+  - Production build commands
+  - Platform-specific packaging (.dmg, .AppImage, .deb, .msi)
+  - Code signing instructions
+  - CI/CD workflow documentation
+  - Deployment strategies
+  - Troubleshooting guide
+  - Performance optimization tips
+  - Security considerations
+
+- [x] **Build Infrastructure** - Ready for production
+  - Tauri configuration for all platforms
+  - Rust release optimizations (LTO, strip, size optimization)
+  - Frontend build optimization (Vite)
+  - Bundle configuration (icons, resources)
+  - Platform-specific installers
+
+## Next Steps (Future Enhancements)
 
 - [x] Replay authoring guide documentation (see docs/guides/REPLAY-AUTHORING-GUIDE.md)
-- [ ] i18n support
-- [ ] Playwright E2E tests
-- [ ] CI/CD packaging (macOS/Linux/Windows)
+- [ ] i18n support (internationalization for multiple languages)
+- [ ] Tauri updater integration (in-app updates)
+- [ ] Package manager submissions (Homebrew, winget, snap)
 - [ ] Hardware deployment workflows
+- [ ] Monitoring and analytics integration
+- [ ] Advanced metrics dashboards
+- [ ] Plugin system for extensions
 
 ## Troubleshooting
 
