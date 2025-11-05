@@ -127,6 +127,98 @@ export interface paths {
     /** Reject operation(s) */
     post: operations["memReject"];
   };
+  "/api/v1/graph/create": {
+    /** Create a new graph */
+    post: operations["graphCreate"];
+  };
+  "/api/v1/graph/add-channel": {
+    /** Add a channel to a graph */
+    post: operations["graphAddChannel"];
+  };
+  "/api/v1/graph/add-operator": {
+    /** Add an operator to a graph */
+    post: operations["graphAddOperator"];
+  };
+  "/api/v1/graph/start": {
+    /** Start a graph execution */
+    post: operations["graphStart"];
+  };
+  "/api/v1/graph/predict": {
+    /** Predict operator performance */
+    post: operations["graphPredict"];
+  };
+  "/api/v1/graph/feedback": {
+    /** Submit feedback for operator */
+    post: operations["graphFeedback"];
+  };
+  "/api/v1/graph/state": {
+    /** Get graph state */
+    get: operations["graphState"];
+  };
+  "/api/v1/graph/export": {
+    /** Export graph as JSON */
+    post: operations["graphExport"];
+  };
+  "/api/v1/sched/workloads": {
+    /** Get list of workloads */
+    get: operations["schedWorkloads"];
+  };
+  "/api/v1/sched/priorities": {
+    /** Set workload priority */
+    post: operations["schedSetPriority"];
+  };
+  "/api/v1/sched/affinity": {
+    /** Set workload CPU affinity */
+    post: operations["schedSetAffinity"];
+  };
+  "/api/v1/sched/feature": {
+    /** Toggle scheduling feature */
+    post: operations["schedSetFeature"];
+  };
+  "/api/v1/sched/circuit-breaker": {
+    /** Get circuit breaker state */
+    get: operations["schedCircuitBreakerStatus"];
+  };
+  "/api/v1/sched/circuit-breaker/reset": {
+    /** Reset circuit breaker */
+    post: operations["schedCircuitBreakerReset"];
+  };
+  "/api/v1/llm/load": {
+    /** Load LLM model */
+    post: operations["llmLoad"];
+  };
+  "/api/v1/llm/infer": {
+    /** Submit inference request */
+    post: operations["llmInfer"];
+  };
+  "/api/v1/llm/audit": {
+    /** Get inference audit log */
+    get: operations["llmAudit"];
+  };
+  "/api/v1/llm/status": {
+    /** Get LLM status */
+    get: operations["llmStatus"];
+  };
+  "/api/v1/logs/tail": {
+    /** Tail logs with optional filters */
+    get: operations["logsTail"];
+  };
+  "/api/v1/runs/start": {
+    /** Start a new run */
+    post: operations["runsStart"];
+  };
+  "/api/v1/runs/stop": {
+    /** Stop current run */
+    post: operations["runsStop"];
+  };
+  "/api/v1/runs/list": {
+    /** List run history */
+    get: operations["runsList"];
+  };
+  "/api/v1/runs/{runId}/export": {
+    /** Export run logs and metrics */
+    get: operations["runsExport"];
+  };
 }
 
 export type webhooks = Record<string, never>;
@@ -424,6 +516,170 @@ export interface components {
     };
     RejectRequest: {
       id?: string;
+    };
+    CreateGraphResponse: {
+      graphId: string;
+    };
+    AddChannelRequest: {
+      graphId: string;
+      cap: number;
+    };
+    AddChannelResponse: {
+      channelId: string;
+    };
+    AddOperatorRequest: {
+      graphId: string;
+      opId: string;
+      in?: string;
+      out?: string;
+      prio?: number;
+      stage?: string;
+      inSchema?: string;
+      outSchema?: string;
+    };
+    AddOperatorResponse: {
+      operatorId: string;
+    };
+    StartGraphRequest: {
+      graphId: string;
+      steps: number;
+    };
+    StartGraphResponse: {
+      started: boolean;
+    };
+    PredictRequest: {
+      opId: string;
+      latency_us: number;
+      depth: number;
+      prio?: number;
+    };
+    PredictResponse: {
+      predicted?: number;
+      conf?: number;
+    };
+    FeedbackRequest: {
+      opId: string;
+      verdict: string;
+    };
+    FeedbackResponse: {
+      recorded: boolean;
+    };
+    GraphOperator: {
+      id?: string;
+      stage?: string;
+      prio?: number;
+      state?: string;
+    };
+    GraphChannel: {
+      id?: string;
+      cap?: number;
+      depth?: number;
+    };
+    GraphStats: {
+      operator_count?: number;
+      channel_count?: number;
+      total_executions?: number;
+    };
+    GraphState: {
+      operators?: components["schemas"]["GraphOperator"][];
+      channels?: components["schemas"]["GraphChannel"][];
+      stats?: components["schemas"]["GraphStats"];
+    };
+    ExportGraphRequest: {
+      graphId: string;
+      format: string;
+    };
+    ExportGraphResponse: {
+      json: string;
+    };
+    Workload: {
+      pid?: number;
+      name?: string;
+      prio?: number;
+      cpu?: number;
+      state?: string;
+    };
+    SetPriorityRequest: {
+      pid: number;
+      prio: number;
+    };
+    SetAffinityRequest: {
+      pid: number;
+      cpuMask: string;
+    };
+    SetFeatureRequest: {
+      name: string;
+      enable: boolean;
+    };
+    SchedResponse: {
+      ok: boolean;
+    };
+    CircuitBreakerState: {
+      state?: string;
+      consecutive_failures?: number;
+      failure_threshold?: number;
+      reset_timeout_us?: number;
+    };
+    LoadModelRequest: {
+      modelId: string;
+      wcetCycles?: number;
+      ctx?: number;
+      vocab?: number;
+      quant?: string;
+      hash?: string;
+      sig?: string;
+    };
+    LoadModelResponse: {
+      loaded: boolean;
+    };
+    InferRequest: {
+      text: string;
+      maxTokens?: number;
+    };
+    InferResponse: {
+      requestId: string;
+    };
+    AuditEntry: {
+      id?: string;
+      modelId?: string;
+      tokens?: number;
+      done?: boolean;
+      ts?: number;
+    };
+    LlmStatus: {
+      budget?: number;
+      wcetCycles?: number;
+      periodNs?: number;
+      maxTokensPerPeriod?: number;
+      queueDepth?: number;
+      lastInferUs?: number;
+    };
+    LogEntry: {
+      ts?: number;
+      level?: string;
+      source?: string;
+      msg?: string;
+    };
+    RunProfile: {
+      features?: string[];
+      bringup?: boolean;
+    };
+    StartRunRequest: {
+      profile: components["schemas"]["RunProfile"];
+      note?: string;
+    };
+    StartRunResponse: {
+      runId: string;
+    };
+    StopRunResponse: {
+      ok: boolean;
+    };
+    RunHistoryEntry: {
+      runId?: string;
+      profile?: components["schemas"]["RunProfile"];
+      startedAt?: number;
+      stoppedAt?: number;
+      markers?: string[];
     };
   };
   responses: never;
@@ -934,6 +1190,336 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["MemoryApprovalStatus"];
+        };
+      };
+    };
+  };
+  /** Create a new graph */
+  graphCreate: {
+    responses: {
+      /** @description Graph created */
+      200: {
+        content: {
+          "application/json": components["schemas"]["CreateGraphResponse"];
+        };
+      };
+    };
+  };
+  /** Add a channel to a graph */
+  graphAddChannel: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AddChannelRequest"];
+      };
+    };
+    responses: {
+      /** @description Channel added */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AddChannelResponse"];
+        };
+      };
+    };
+  };
+  /** Add an operator to a graph */
+  graphAddOperator: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AddOperatorRequest"];
+      };
+    };
+    responses: {
+      /** @description Operator added */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AddOperatorResponse"];
+        };
+      };
+    };
+  };
+  /** Start a graph execution */
+  graphStart: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StartGraphRequest"];
+      };
+    };
+    responses: {
+      /** @description Graph started */
+      200: {
+        content: {
+          "application/json": components["schemas"]["StartGraphResponse"];
+        };
+      };
+    };
+  };
+  /** Predict operator performance */
+  graphPredict: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PredictRequest"];
+      };
+    };
+    responses: {
+      /** @description Prediction result */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PredictResponse"];
+        };
+      };
+    };
+  };
+  /** Submit feedback for operator */
+  graphFeedback: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FeedbackRequest"];
+      };
+    };
+    responses: {
+      /** @description Feedback recorded */
+      200: {
+        content: {
+          "application/json": components["schemas"]["FeedbackResponse"];
+        };
+      };
+    };
+  };
+  /** Get graph state */
+  graphState: {
+    parameters: {
+      query: {
+        graphId: string;
+      };
+    };
+    responses: {
+      /** @description Graph state */
+      200: {
+        content: {
+          "application/json": components["schemas"]["GraphState"];
+        };
+      };
+    };
+  };
+  /** Export graph as JSON */
+  graphExport: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ExportGraphRequest"];
+      };
+    };
+    responses: {
+      /** @description Graph exported */
+      200: {
+        content: {
+          "application/json": components["schemas"]["ExportGraphResponse"];
+        };
+      };
+    };
+  };
+  /** Get list of workloads */
+  schedWorkloads: {
+    responses: {
+      /** @description List of workloads */
+      200: {
+        content: {
+          "application/json": components["schemas"]["Workload"][];
+        };
+      };
+    };
+  };
+  /** Set workload priority */
+  schedSetPriority: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SetPriorityRequest"];
+      };
+    };
+    responses: {
+      /** @description Priority updated */
+      200: {
+        content: {
+          "application/json": components["schemas"]["SchedResponse"];
+        };
+      };
+    };
+  };
+  /** Set workload CPU affinity */
+  schedSetAffinity: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SetAffinityRequest"];
+      };
+    };
+    responses: {
+      /** @description Affinity updated */
+      200: {
+        content: {
+          "application/json": components["schemas"]["SchedResponse"];
+        };
+      };
+    };
+  };
+  /** Toggle scheduling feature */
+  schedSetFeature: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SetFeatureRequest"];
+      };
+    };
+    responses: {
+      /** @description Feature toggled */
+      200: {
+        content: {
+          "application/json": components["schemas"]["SchedResponse"];
+        };
+      };
+    };
+  };
+  /** Get circuit breaker state */
+  schedCircuitBreakerStatus: {
+    responses: {
+      /** @description Circuit breaker state */
+      200: {
+        content: {
+          "application/json": components["schemas"]["CircuitBreakerState"];
+        };
+      };
+    };
+  };
+  /** Reset circuit breaker */
+  schedCircuitBreakerReset: {
+    responses: {
+      /** @description Circuit breaker reset */
+      200: {
+        content: {
+          "application/json": components["schemas"]["SchedResponse"];
+        };
+      };
+    };
+  };
+  /** Load LLM model */
+  llmLoad: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LoadModelRequest"];
+      };
+    };
+    responses: {
+      /** @description Model loaded */
+      200: {
+        content: {
+          "application/json": components["schemas"]["LoadModelResponse"];
+        };
+      };
+    };
+  };
+  /** Submit inference request */
+  llmInfer: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["InferRequest"];
+      };
+    };
+    responses: {
+      /** @description Inference started */
+      200: {
+        content: {
+          "application/json": components["schemas"]["InferResponse"];
+        };
+      };
+    };
+  };
+  /** Get inference audit log */
+  llmAudit: {
+    responses: {
+      /** @description Audit log entries */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AuditEntry"][];
+        };
+      };
+    };
+  };
+  /** Get LLM status */
+  llmStatus: {
+    responses: {
+      /** @description LLM status */
+      200: {
+        content: {
+          "application/json": components["schemas"]["LlmStatus"];
+        };
+      };
+    };
+  };
+  /** Tail logs with optional filters */
+  logsTail: {
+    parameters: {
+      query?: {
+        limit?: number;
+        level?: string;
+        source?: string;
+      };
+    };
+    responses: {
+      /** @description Log entries */
+      200: {
+        content: {
+          "application/json": components["schemas"]["LogEntry"][];
+        };
+      };
+    };
+  };
+  /** Start a new run */
+  runsStart: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StartRunRequest"];
+      };
+    };
+    responses: {
+      /** @description Run started */
+      200: {
+        content: {
+          "application/json": components["schemas"]["StartRunResponse"];
+        };
+      };
+    };
+  };
+  /** Stop current run */
+  runsStop: {
+    responses: {
+      /** @description Run stopped */
+      200: {
+        content: {
+          "application/json": components["schemas"]["StopRunResponse"];
+        };
+      };
+    };
+  };
+  /** List run history */
+  runsList: {
+    responses: {
+      /** @description Run history */
+      200: {
+        content: {
+          "application/json": components["schemas"]["RunHistoryEntry"][];
+        };
+      };
+    };
+  };
+  /** Export run logs and metrics */
+  runsExport: {
+    parameters: {
+      path: {
+        runId: string;
+      };
+    };
+    responses: {
+      /** @description Run snapshot exported */
+      200: {
+        content: {
+          "application/json": unknown;
         };
       };
     };
