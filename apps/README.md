@@ -393,7 +393,23 @@ pnpm format:check
   - CSV/JSON export
   - Backpressure detection
 
-## Next Steps (Milestone 6+)
+### Milestone 6 (M6) Deliverables ✅
+
+**Settings & Customization**
+
+- [x] **Settings Panel** - Application configuration interface
+  - Multi-tab layout (Appearance, Shortcuts, Daemon)
+  - Theme selection (light/dark/system) with live preview
+  - System theme detection and auto-switching
+  - Keyboard shortcuts reference display
+  - Daemon connection configuration (REST + WebSocket URLs)
+  - Auto-reconnect settings with interval control
+  - Settings persistence with localStorage
+  - Save/reset functionality with change detection
+  - Warning messages for critical changes
+  - Responsive two-column layout
+
+## Next Steps (Milestone 7+)
 
 - [x] Replay authoring guide documentation (see docs/guides/REPLAY-AUTHORING-GUIDE.md)
 - [ ] i18n support
