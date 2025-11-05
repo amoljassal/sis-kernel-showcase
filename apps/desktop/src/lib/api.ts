@@ -426,3 +426,176 @@ export const memoryApi = {
     return response.data;
   },
 };
+
+// ============================================================================
+// M4 APIs
+// ============================================================================
+
+// Graph types (from OpenAPI schema)
+export type GraphState = components['schemas']['GraphState'];
+export type CreateGraphResponse = components['schemas']['CreateGraphResponse'];
+export type AddChannelRequest = components['schemas']['AddChannelRequest'];
+export type AddChannelResponse = components['schemas']['AddChannelResponse'];
+export type AddOperatorRequest = components['schemas']['AddOperatorRequest'];
+export type AddOperatorResponse = components['schemas']['AddOperatorResponse'];
+export type StartGraphRequest = components['schemas']['StartGraphRequest'];
+export type StartGraphResponse = components['schemas']['StartGraphResponse'];
+export type PredictRequest = components['schemas']['PredictRequest'];
+export type PredictResponse = components['schemas']['PredictResponse'];
+export type FeedbackRequest = components['schemas']['FeedbackRequest'];
+export type FeedbackResponse = components['schemas']['FeedbackResponse'];
+export type ExportGraphRequest = components['schemas']['ExportGraphRequest'];
+export type ExportGraphResponse = components['schemas']['ExportGraphResponse'];
+
+// Scheduling types
+export type Workload = components['schemas']['Workload'];
+export type SetPriorityRequest = components['schemas']['SetPriorityRequest'];
+export type SetAffinityRequest = components['schemas']['SetAffinityRequest'];
+export type SetFeatureRequest = components['schemas']['SetFeatureRequest'];
+export type SchedResponse = components['schemas']['SchedResponse'];
+export type CircuitBreakerState = components['schemas']['CircuitBreakerState'];
+
+// LLM types
+export type LoadModelRequest = components['schemas']['LoadModelRequest'];
+export type LoadModelResponse = components['schemas']['LoadModelResponse'];
+export type InferRequest = components['schemas']['InferRequest'];
+export type InferResponse = components['schemas']['InferResponse'];
+export type AuditEntry = components['schemas']['AuditEntry'];
+export type LlmStatus = components['schemas']['LlmStatus'];
+
+// Logs types
+export type LogEntry = components['schemas']['LogEntry'];
+export type RunProfile = components['schemas']['RunProfile'];
+export type StartRunRequest = components['schemas']['StartRunRequest'];
+export type StartRunResponse = components['schemas']['StartRunResponse'];
+export type StopRunResponse = components['schemas']['StopRunResponse'];
+export type RunHistoryEntry = components['schemas']['RunHistoryEntry'];
+
+// Graph API
+export const graphApi = {
+  async create(): Promise<CreateGraphResponse> {
+    const response = await api.post<CreateGraphResponse>('/api/v1/graph/create');
+    return response.data;
+  },
+
+  async addChannel(req: AddChannelRequest): Promise<AddChannelResponse> {
+    const response = await api.post<AddChannelResponse>('/api/v1/graph/add-channel', req);
+    return response.data;
+  },
+
+  async addOperator(req: AddOperatorRequest): Promise<AddOperatorResponse> {
+    const response = await api.post<AddOperatorResponse>('/api/v1/graph/add-operator', req);
+    return response.data;
+  },
+
+  async start(req: StartGraphRequest): Promise<StartGraphResponse> {
+    const response = await api.post<StartGraphResponse>('/api/v1/graph/start', req);
+    return response.data;
+  },
+
+  async predict(req: PredictRequest): Promise<PredictResponse> {
+    const response = await api.post<PredictResponse>('/api/v1/graph/predict', req);
+    return response.data;
+  },
+
+  async feedback(req: FeedbackRequest): Promise<FeedbackResponse> {
+    const response = await api.post<FeedbackResponse>('/api/v1/graph/feedback', req);
+    return response.data;
+  },
+
+  async state(graphId: string): Promise<GraphState> {
+    const response = await api.get<GraphState>('/api/v1/graph/state', {
+      params: { graphId },
+    });
+    return response.data;
+  },
+
+  async export(req: ExportGraphRequest): Promise<ExportGraphResponse> {
+    const response = await api.post<ExportGraphResponse>('/api/v1/graph/export', req);
+    return response.data;
+  },
+};
+
+// Scheduling API
+export const schedApi = {
+  async workloads(): Promise<Workload[]> {
+    const response = await api.get<Workload[]>('/api/v1/sched/workloads');
+    return response.data;
+  },
+
+  async setPriority(req: SetPriorityRequest): Promise<SchedResponse> {
+    const response = await api.post<SchedResponse>('/api/v1/sched/priorities', req);
+    return response.data;
+  },
+
+  async setAffinity(req: SetAffinityRequest): Promise<SchedResponse> {
+    const response = await api.post<SchedResponse>('/api/v1/sched/affinity', req);
+    return response.data;
+  },
+
+  async setFeature(req: SetFeatureRequest): Promise<SchedResponse> {
+    const response = await api.post<SchedResponse>('/api/v1/sched/feature', req);
+    return response.data;
+  },
+
+  async circuitBreakerStatus(): Promise<CircuitBreakerState> {
+    const response = await api.get<CircuitBreakerState>('/api/v1/sched/circuit-breaker');
+    return response.data;
+  },
+
+  async circuitBreakerReset(): Promise<SchedResponse> {
+    const response = await api.post<SchedResponse>('/api/v1/sched/circuit-breaker/reset');
+    return response.data;
+  },
+};
+
+// LLM API
+export const llmApi = {
+  async load(req: LoadModelRequest): Promise<LoadModelResponse> {
+    const response = await api.post<LoadModelResponse>('/api/v1/llm/load', req);
+    return response.data;
+  },
+
+  async infer(req: InferRequest): Promise<InferResponse> {
+    const response = await api.post<InferResponse>('/api/v1/llm/infer', req);
+    return response.data;
+  },
+
+  async audit(): Promise<AuditEntry[]> {
+    const response = await api.get<AuditEntry[]>('/api/v1/llm/audit');
+    return response.data;
+  },
+
+  async status(): Promise<LlmStatus> {
+    const response = await api.get<LlmStatus>('/api/v1/llm/status');
+    return response.data;
+  },
+};
+
+// Logs API
+export const logsApi = {
+  async tail(params?: { limit?: number; level?: string; source?: string }): Promise<LogEntry[]> {
+    const response = await api.get<LogEntry[]>('/api/v1/logs/tail', { params });
+    return response.data;
+  },
+
+  async startRun(req: StartRunRequest): Promise<StartRunResponse> {
+    const response = await api.post<StartRunResponse>('/api/v1/runs/start', req);
+    return response.data;
+  },
+
+  async stopRun(): Promise<StopRunResponse> {
+    const response = await api.post<StopRunResponse>('/api/v1/runs/stop');
+    return response.data;
+  },
+
+  async listRuns(): Promise<RunHistoryEntry[]> {
+    const response = await api.get<RunHistoryEntry[]>('/api/v1/runs/list');
+    return response.data;
+  },
+
+  async exportRun(runId: string): Promise<any> {
+    const response = await api.get(`/api/v1/runs/${runId}/export`);
+    return response.data;
+  },
+};
