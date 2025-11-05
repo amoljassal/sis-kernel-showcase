@@ -22,6 +22,7 @@ async fn handle_socket(mut socket: WebSocket, supervisor: Arc<QemuSupervisor>) {
 
     // Subscribe to events
     let mut rx = supervisor.subscribe();
+    let mut dropped_count: usize = 0;
 
     // Event streaming loop
     loop {
@@ -30,6 +31,19 @@ async fn handle_socket(mut socket: WebSocket, supervisor: Arc<QemuSupervisor>) {
             event = rx.recv() => {
                 match event {
                     Ok(event) => {
+                        // If we had dropped events, send a notification first
+                        if dropped_count > 0 {
+                            let dropped_event = serde_json::json!({
+                                "type": "backpressure",
+                                "droppedCount": dropped_count,
+                                "ts": chrono::Utc::now().timestamp_millis(),
+                            });
+                            if let Ok(json) = serde_json::to_string(&dropped_event) {
+                                let _ = socket.send(axum::extract::ws::Message::Text(json)).await;
+                            }
+                            dropped_count = 0;
+                        }
+
                         // Serialize event to JSON
                         match serde_json::to_string(&event) {
                             Ok(json) => {
@@ -43,6 +57,12 @@ async fn handle_socket(mut socket: WebSocket, supervisor: Arc<QemuSupervisor>) {
                                 error!("Failed to serialize event: {}", e);
                             }
                         }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                        // Client is lagging, accumulate dropped count
+                        dropped_count += n as usize;
+                        debug!("Client lagging, dropped {} events (total: {})", n, dropped_count);
+                        // Continue processing, don't break
                     }
                     Err(e) => {
                         error!("Event channel error: {}", e);

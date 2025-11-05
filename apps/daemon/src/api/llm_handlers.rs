@@ -153,6 +153,11 @@ pub async fn llm_infer(
 
     cmd.push_str(" --json");
 
+    // TODO: Implement streaming LlmTokens event emission
+    // The actual llmctl wrapper should read output line-by-line and emit:
+    // - QemuEvent::LlmTokens { request_id, chunk, done: false, ts } for each token chunk
+    // - QemuEvent::LlmTokens { request_id, chunk: "", done: true, ts } when complete
+
     exec_and_parse::<InferResponse>(&supervisor, cmd)
         .await
         .map(|resp| Json(resp).into_response())

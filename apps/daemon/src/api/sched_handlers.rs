@@ -3,7 +3,7 @@
 //! Wraps `schedctl` shell commands with REST API.
 
 use super::handlers::{exec_and_parse, ErrorResponse};
-use crate::qemu::{QemuSupervisor, ReplayManager};
+use crate::qemu::{QemuEvent, QemuSupervisor, ReplayManager};
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
@@ -102,10 +102,20 @@ pub async fn sched_set_priority(
         "schedctl set-priority --pid {} --prio {} --json",
         req.pid, req.prio
     );
-    exec_and_parse::<SchedResponse>(&supervisor, cmd)
-        .await
-        .map(|resp| Json(resp).into_response())
-        .unwrap_or_else(|r| r)
+    match exec_and_parse::<SchedResponse>(&supervisor, cmd).await {
+        Ok(resp) => {
+            // Emit SchedEvent
+            let payload = serde_json::json!({ "pid": req.pid, "prio": req.prio });
+            let event = QemuEvent::SchedEvent {
+                event: "prio_change".to_string(),
+                payload,
+                ts: chrono::Utc::now().timestamp_millis(),
+            };
+            supervisor.broadcast_event(event);
+            Json(resp).into_response()
+        }
+        Err(r) => r,
+    }
 }
 
 /// Set workload CPU affinity
@@ -129,10 +139,20 @@ pub async fn sched_set_affinity(
         "schedctl set-affinity --pid {} --mask {} --json",
         req.pid, req.cpu_mask
     );
-    exec_and_parse::<SchedResponse>(&supervisor, cmd)
-        .await
-        .map(|resp| Json(resp).into_response())
-        .unwrap_or_else(|r| r)
+    match exec_and_parse::<SchedResponse>(&supervisor, cmd).await {
+        Ok(resp) => {
+            // Emit SchedEvent
+            let payload = serde_json::json!({ "pid": req.pid, "cpuMask": req.cpu_mask });
+            let event = QemuEvent::SchedEvent {
+                event: "affinity_change".to_string(),
+                payload,
+                ts: chrono::Utc::now().timestamp_millis(),
+            };
+            supervisor.broadcast_event(event);
+            Json(resp).into_response()
+        }
+        Err(r) => r,
+    }
 }
 
 /// Toggle scheduling feature
@@ -156,10 +176,20 @@ pub async fn sched_set_feature(
         "schedctl feature --name {} --action {} --json",
         req.name, action
     );
-    exec_and_parse::<SchedResponse>(&supervisor, cmd)
-        .await
-        .map(|resp| Json(resp).into_response())
-        .unwrap_or_else(|r| r)
+    match exec_and_parse::<SchedResponse>(&supervisor, cmd).await {
+        Ok(resp) => {
+            // Emit SchedEvent
+            let payload = serde_json::json!({ "name": req.name, "enable": req.enable });
+            let event = QemuEvent::SchedEvent {
+                event: "feature_toggle".to_string(),
+                payload,
+                ts: chrono::Utc::now().timestamp_millis(),
+            };
+            supervisor.broadcast_event(event);
+            Json(resp).into_response()
+        }
+        Err(r) => r,
+    }
 }
 
 /// Get circuit breaker state

@@ -89,6 +89,70 @@ pub enum QemuEvent {
         #[serde(with = "chrono::serde::ts_milliseconds")]
         timestamp: chrono::DateTime<chrono::Utc>,
     },
+    /// M4: Graph state update
+    GraphState {
+        #[serde(rename = "graphId")]
+        graph_id: String,
+        state: GraphStateData,
+        ts: i64,
+    },
+    /// M4: Scheduling event
+    SchedEvent {
+        event: String,
+        payload: serde_json::Value,
+        ts: i64,
+    },
+    /// M4: LLM token chunk
+    LlmTokens {
+        #[serde(rename = "requestId")]
+        request_id: String,
+        chunk: String,
+        done: bool,
+        ts: i64,
+    },
+    /// M4: Log line
+    LogLine {
+        level: String,
+        source: String,
+        msg: String,
+        ts: i64,
+    },
+}
+
+/// Graph state data for GraphState event
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GraphStateData {
+    pub operators: Vec<GraphOperator>,
+    pub channels: Vec<GraphChannel>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GraphOperator {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prio: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stats: Option<GraphOperatorStats>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GraphOperatorStats {
+    #[serde(rename = "execCount")]
+    pub exec_count: u64,
+    #[serde(rename = "avgUs")]
+    pub avg_us: u64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GraphChannel {
+    pub id: String,
+    pub cap: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depth: Option<u32>,
 }
 
 /// Shared QEMU supervisor state
@@ -172,6 +236,12 @@ impl QemuSupervisor {
     /// Subscribe to QEMU events
     pub fn subscribe(&self) -> broadcast::Receiver<QemuEvent> {
         self.event_tx.subscribe()
+    }
+
+    /// Broadcast an event to all subscribers (non-blocking)
+    pub fn broadcast_event(&self, event: QemuEvent) {
+        // Send returns Err if no receivers, which is fine
+        let _ = self.event_tx.send(event);
     }
 
     /// Get metrics store reference
