@@ -7,7 +7,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { graphApi, type GraphState } from '../lib/api';
 import { type GraphStateEvent } from '../lib/useWebSocket';
-import { Plus, Play, TrendingUp, MessageSquare, Download, AlertTriangle } from 'lucide-react';
+import { copyJSONToClipboard } from '../lib/clipboard';
+import { Plus, Play, TrendingUp, MessageSquare, Download, AlertTriangle, Copy } from 'lucide-react';
 
 interface GraphPanelProps {
   onGraphStateEvent?: (event: GraphStateEvent) => void;
@@ -399,13 +400,35 @@ export function GraphPanel({ onGraphStateEvent }: GraphPanelProps) {
                 <Download className="h-4 w-4" />
                 Export
               </h3>
-              <button
-                onClick={() => exportGraph.mutate()}
-                disabled={exportGraph.isPending}
-                className="w-full px-3 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
-              >
-                {exportGraph.isPending ? 'Exporting...' : 'Export JSON'}
-              </button>
+              <div className="space-y-2">
+                <button
+                  onClick={() => exportGraph.mutate()}
+                  disabled={exportGraph.isPending}
+                  className="w-full px-3 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  {exportGraph.isPending ? 'Exporting...' : 'Export JSON'}
+                </button>
+                <button
+                  onClick={async () => {
+                    if (graphState) {
+                      await copyJSONToClipboard(graphState, 'Graph state copied to clipboard');
+                    }
+                  }}
+                  disabled={!graphState}
+                  className="w-full px-3 py-2 bg-muted-foreground/10 hover:bg-muted-foreground/20 rounded-md disabled:opacity-50 flex items-center justify-center gap-2"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.currentTarget.click();
+                    }
+                  }}
+                  tabIndex={0}
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy to Clipboard
+                </button>
+              </div>
             </div>
           </div>
 

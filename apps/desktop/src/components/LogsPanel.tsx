@@ -6,8 +6,9 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { logsApi, type LogEntry, type RunHistoryEntry, type StartRunRequest } from '../lib/api';
-import { FileText, Play, Square, Download, CheckCircle2, Filter } from 'lucide-react';
+import { FileText, Play, Square, Download, CheckCircle2, Filter, Copy } from 'lucide-react';
 import { useWebSocket, type LogLineEvent } from '../lib/useWebSocket';
+import { copyJSONToClipboard } from '../lib/clipboard';
 
 const MAX_LOG_BUFFER = 10000; // Ring buffer size
 
@@ -189,6 +190,22 @@ export function LogsPanel() {
           >
             <Download className="h-4 w-4" />
             CSV
+          </button>
+          <button
+            onClick={async () => {
+              await copyJSONToClipboard(filteredLogs, 'Logs copied to clipboard');
+            }}
+            className="px-3 py-1.5 bg-muted hover:bg-muted-foreground/10 rounded-md text-sm flex items-center gap-2"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.currentTarget.click();
+              }
+            }}
+            tabIndex={0}
+          >
+            <Copy className="h-4 w-4" />
+            Copy
           </button>
         </div>
       </div>
