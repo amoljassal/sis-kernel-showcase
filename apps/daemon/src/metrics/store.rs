@@ -151,8 +151,14 @@ impl MetricsStore {
             if !ds_points.is_empty() && ds_points.len() <= max_points {
                 (ds_points, true)
             } else {
-                // Fallback: simple min/max bucketing
-                (self.downsample_minmax(&points, max_points), true)
+                // Use LTTB for downsampling (fallback to min/max if LTTB fails)
+                let lttb_result = crate::metrics::downsample_lttb(&points, max_points);
+                if lttb_result.len() <= max_points && !lttb_result.is_empty() {
+                    (lttb_result, true)
+                } else {
+                    // Fallback: simple min/max bucketing
+                    (self.downsample_minmax(&points, max_points), true)
+                }
             }
         } else {
             (points, false)
