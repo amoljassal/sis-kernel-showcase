@@ -1,8 +1,9 @@
 //! API routing
 
-use super::{handlers, replay_handlers, shell_handlers, ws};
+use super::{handlers, middleware, replay_handlers, shell_handlers, ws};
 use crate::qemu::QemuSupervisor;
 use axum::{
+    middleware as axum_middleware,
     routing::{get, post},
     Router,
 };
@@ -89,6 +90,8 @@ pub fn create_router(supervisor: Arc<QemuSupervisor>) -> Router {
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
         // State
         .with_state(supervisor)
+        // Request ID middleware
+        .layer(axum_middleware::from_fn(middleware::request_id_middleware))
         // CORS for local development
         .layer(CorsLayer::permissive())
 }
