@@ -53,6 +53,14 @@ pub fn syscall_dispatcher(nr: usize, args: &[u64; 6]) -> isize {
         17 => sys_getcwd(args[0] as *mut u8, args[1] as usize),
         49 => sys_chdir(args[0] as *const u8),
 
+        // I/O operations
+        29 => sys_ioctl(args[0] as i32, args[1] as u64, args[2] as u64),
+        73 => sys_ppoll(args[0] as *mut u8, args[1] as usize, args[2] as *const u8, args[3] as *const u8),
+
+        // Time operations
+        113 => sys_clock_gettime(args[0] as i32, args[1] as *mut u8),
+        101 => sys_nanosleep(args[0] as *const u8, args[1] as *mut u8),
+
         // Unimplemented
         _ => {
             crate::warn!("Unimplemented syscall: {}", nr);
@@ -843,6 +851,135 @@ pub fn sys_chdir(pathname: *const u8) -> Result<isize> {
     }
 
     // TODO: Phase A2 - actually store CWD in task
+    Ok(0)
+}
+
+/// sys_ioctl - I/O control operations
+pub fn sys_ioctl(fd: i32, cmd: u64, arg: u64) -> Result<isize> {
+    let pid = crate::process::current_pid();
+    let table = crate::process::get_process_table();
+    let table = table.as_ref().ok_or(Errno::ESRCH)?;
+    let task = table.get(&pid).ok_or(Errno::ESRCH)?;
+
+    // Get file
+    let file = task.files.get(fd).ok_or(Errno::EBADF)?;
+
+    // Call file's ioctl
+    file.ioctl(cmd as u32, arg as usize)
+}
+
+/// sys_ppoll - Poll for I/O events (simplified for Phase A1)
+pub fn sys_ppoll(fds: *mut u8, nfds: usize, timeout: *const u8, sigmask: *const u8) -> Result<isize> {
+    // Phase A1: Simplified implementation - just check if FDs are valid
+    // Always return ready for read/write (no actual polling)
+
+    if fds.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    if nfds > 1024 {
+        return Err(Errno::EINVAL);
+    }
+
+    let pid = crate::process::current_pid();
+    let table = crate::process::get_process_table();
+    let table = table.as_ref().ok_or(Errno::ESRCH)?;
+    let task = table.get(&pid).ok_or(Errno::ESRCH)?;
+
+    // pollfd structure: fd (4 bytes), events (2 bytes), revents (2 bytes) = 8 bytes
+    let mut ready_count = 0;
+
+    for i in 0..nfds {
+        unsafe {
+            let pollfd_ptr = fds.add(i * 8);
+            let fd = *(pollfd_ptr as *const i32);
+            let events = *(pollfd_ptr.add(4) as *const u16);
+            let revents_ptr = pollfd_ptr.add(6) as *mut u16;
+
+            // Check if FD is valid
+            if fd < 0 {
+                *revents_ptr = 0;
+                continue;
+            }
+
+            if task.files.get(fd).is_none() {
+                // Invalid FD
+                *revents_ptr = 0x0020; // POLLNVAL
+                ready_count += 1;
+                continue;
+            }
+
+            // Phase A1: Always mark as ready for requested events
+            // Real implementation would check file readiness
+            *revents_ptr = events & 0x0007; // POLLIN | POLLOUT | POLLERR
+            if events != 0 {
+                ready_count += 1;
+            }
+        }
+    }
+
+    Ok(ready_count as isize)
+}
+
+/// sys_clock_gettime - Get time from clock
+pub fn sys_clock_gettime(clk_id: i32, tp: *mut u8) -> Result<isize> {
+    if tp.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // Clock IDs
+    const CLOCK_REALTIME: i32 = 0;
+    const CLOCK_MONOTONIC: i32 = 1;
+
+    // For Phase A1, return dummy time (TODO: get actual time from timer)
+    // timespec structure: tv_sec (8 bytes), tv_nsec (8 bytes)
+    let seconds: i64 = 100; // Dummy value
+    let nanoseconds: i64 = 0;
+
+    match clk_id {
+        CLOCK_REALTIME | CLOCK_MONOTONIC => {
+            unsafe {
+                *(tp as *mut i64) = seconds;
+                *(tp.add(8) as *mut i64) = nanoseconds;
+            }
+            Ok(0)
+        }
+        _ => Err(Errno::EINVAL),
+    }
+}
+
+/// sys_nanosleep - Sleep for specified time
+pub fn sys_nanosleep(req: *const u8, rem: *mut u8) -> Result<isize> {
+    if req.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // Read requested time
+    let seconds: i64;
+    let nanoseconds: i64;
+    unsafe {
+        seconds = *(req as *const i64);
+        nanoseconds = *(req.add(8) as *const i64);
+    }
+
+    // Validate
+    if seconds < 0 || nanoseconds < 0 || nanoseconds >= 1_000_000_000 {
+        return Err(Errno::EINVAL);
+    }
+
+    // Phase A1: Minimal sleep implementation
+    // TODO: Implement proper sleep with timer and scheduler wakeup
+    // For now, just yield CPU
+    crate::process::scheduler::yield_now();
+
+    // If rem is not null, write remaining time (always 0 for Phase A1)
+    if !rem.is_null() {
+        unsafe {
+            *(rem as *mut i64) = 0;
+            *(rem.add(8) as *mut i64) = 0;
+        }
+    }
+
     Ok(0)
 }
 
