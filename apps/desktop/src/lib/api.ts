@@ -79,6 +79,12 @@ export interface SelfCheckCanceledEvent {
   timestamp: number;
 }
 
+export interface QemuExitedEvent {
+  type: 'qemu_exited';
+  code: number | null;
+  timestamp: number;
+}
+
 export type QemuEvent =
   | { type: 'state_changed'; state: QemuState; timestamp: number }
   | { type: 'parsed'; event: ParsedEvent }
@@ -86,7 +92,8 @@ export type QemuEvent =
   | SelfCheckStartedEvent
   | SelfCheckTestEvent
   | SelfCheckCompletedEvent
-  | SelfCheckCanceledEvent;
+  | SelfCheckCanceledEvent
+  | QemuExitedEvent;
 
 export interface ShellCommandRequest {
   command: string;

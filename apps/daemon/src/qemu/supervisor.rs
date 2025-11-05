@@ -64,6 +64,12 @@ pub enum QemuEvent {
         #[serde(with = "chrono::serde::ts_milliseconds")]
         timestamp: chrono::DateTime<chrono::Utc>,
     },
+    /// QEMU process exited unexpectedly
+    QemuExited {
+        code: Option<i32>,
+        #[serde(with = "chrono::serde::ts_milliseconds")]
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
 }
 
 /// Shared QEMU supervisor state
@@ -394,6 +400,9 @@ impl QemuSupervisor {
     fn spawn_process_monitor(&self) {
         let state = Arc::clone(&self.state);
         let event_tx = self.event_tx.clone();
+        let shell_executor = Arc::clone(&self.shell_executor);
+        let busy = Arc::clone(&self.busy);
+        let busy_reason = Arc::clone(&self.busy_reason);
 
         tokio::spawn(async move {
             loop {
@@ -405,10 +414,31 @@ impl QemuSupervisor {
                 if let Some(child) = s.child.as_mut() {
                     match child.try_wait() {
                         Ok(Some(status)) => {
-                            error!("QEMU process exited: {:?}", status);
+                            let exit_code = status.code();
+                            error!("QEMU process exited unexpectedly: code={:?}", exit_code);
+
+                            // Emit QemuExited event
+                            let _ = event_tx.send(QemuEvent::QemuExited {
+                                code: exit_code,
+                                timestamp: chrono::Utc::now(),
+                            });
+
+                            // Update state
                             s.state = QemuState::Failed;
-                            s.last_error = Some(format!("Process exited: {:?}", status));
+                            s.last_error = Some(format!(
+                                "QEMU exited unexpectedly (code: {})",
+                                exit_code.map(|c| c.to_string()).unwrap_or_else(|| "unknown".to_string())
+                            ));
                             s.child = None;
+                            s.run_id = None;
+                            s.transport = "none".to_string();
+
+                            // Clear shell executor
+                            *shell_executor.lock().await = None;
+
+                            // Clear busy state
+                            busy.store(false, std::sync::atomic::Ordering::SeqCst);
+                            *busy_reason.lock().await = None;
 
                             let _ = event_tx.send(QemuEvent::StateChanged {
                                 state: QemuState::Failed,
