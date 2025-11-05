@@ -22,6 +22,8 @@ export function LogsPanel() {
   const [searchText, setSearchText] = useState<string>('');
   const [runNote, setRunNote] = useState<string>('');
   const [selfCheckPassed, setSelfCheckPassed] = useState<boolean>(false);
+  const [droppedCount, setDroppedCount] = useState<number>(0);
+  const [lastDropTime, setLastDropTime] = useState<number>(0);
 
   // Virtualization refs
   const logsRef = useRef<HTMLDivElement>(null);
@@ -53,7 +55,31 @@ export function LogsPanel() {
     if (event.type === 'self_check_completed') {
       setSelfCheckPassed((event as any).success);
     }
+
+    // Backpressure detection
+    if (event.type === 'backpressure') {
+      const count = (event as any).droppedCount;
+      if (count > 0) {
+        setDroppedCount((prev) => prev + count);
+        setLastDropTime(Date.now());
+      }
+    }
   });
+
+  // Auto-reset dropped count after 10s of no new drops
+  useEffect(() => {
+    if (droppedCount > 0 && lastDropTime > 0) {
+      const timeoutId = setTimeout(() => {
+        const elapsed = Date.now() - lastDropTime;
+        if (elapsed >= 10000) {
+          setDroppedCount(0);
+          setLastDropTime(0);
+        }
+      }, 10000);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [droppedCount, lastDropTime]);
 
   // Fetch run history
   const { data: runHistory = [] } = useQuery({
@@ -176,7 +202,16 @@ export function LogsPanel() {
           <FileText className="h-6 w-6" />
           Logs & Runs
         </h2>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          {droppedCount > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 text-red-500 rounded-md border border-red-500/20">
+              <div className="flex-shrink-0 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <span className="text-xs font-semibold">
+                Dropped: {droppedCount}
+              </span>
+            </div>
+          )}
+          <div className="flex gap-2">
           <button
             onClick={exportLogsJSON}
             className="px-3 py-1.5 bg-muted hover:bg-muted-foreground/10 rounded-md text-sm flex items-center gap-2"
@@ -207,6 +242,7 @@ export function LogsPanel() {
             <Copy className="h-4 w-4" />
             Copy
           </button>
+          </div>
         </div>
       </div>
 
