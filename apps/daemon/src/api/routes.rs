@@ -1,6 +1,9 @@
 //! API routing
 
-use super::{handlers, metrics_handlers, middleware, replay_handlers, shell_handlers, ws};
+use super::{
+    autonomy_handlers, handlers, memory_handlers, metrics_handlers, middleware, replay_handlers,
+    shell_handlers, ws,
+};
 use crate::qemu::{QemuSupervisor, ReplayManager};
 use axum::{
     middleware as axum_middleware,
@@ -29,6 +32,20 @@ use utoipa_swagger_ui::SwaggerUi;
         replay_handlers::replay_status,
         metrics_handlers::list_streams,
         metrics_handlers::query_series,
+        autonomy_handlers::autonomy_on,
+        autonomy_handlers::autonomy_off,
+        autonomy_handlers::autonomy_reset,
+        autonomy_handlers::autonomy_set_interval,
+        autonomy_handlers::autonomy_set_threshold,
+        autonomy_handlers::autonomy_status,
+        autonomy_handlers::autonomy_audit,
+        autonomy_handlers::autonomy_explain,
+        autonomy_handlers::autonomy_preview,
+        autonomy_handlers::autonomy_whatif,
+        memory_handlers::mem_get_approvals,
+        memory_handlers::mem_approval_toggle,
+        memory_handlers::mem_approve,
+        memory_handlers::mem_reject,
     ),
     components(
         schemas(
@@ -51,6 +68,19 @@ use utoipa_swagger_ui::SwaggerUi;
             handlers::HealthResponse,
             replay_handlers::ReplayRequest,
             replay_handlers::ReplayResponse,
+            autonomy_handlers::AutonomyStatus,
+            autonomy_handlers::AutonomyDecision,
+            autonomy_handlers::ExplainResponse,
+            autonomy_handlers::AttentionWeight,
+            autonomy_handlers::PreviewRequest,
+            autonomy_handlers::PreviewResponse,
+            autonomy_handlers::WhatIfRequest,
+            autonomy_handlers::WhatIfResponse,
+            memory_handlers::MemoryApprovalStatus,
+            memory_handlers::PendingOperation,
+            memory_handlers::ApproveRequest,
+            memory_handlers::RejectRequest,
+            memory_handlers::ApprovalToggleRequest,
         )
     ),
     tags(
@@ -59,7 +89,9 @@ use utoipa_swagger_ui::SwaggerUi;
         (name = "qemu", description = "QEMU control endpoints"),
         (name = "shell", description = "Shell command execution"),
         (name = "replay", description = "Replay log files for offline testing"),
-        (name = "metrics", description = "Metrics collection and querying")
+        (name = "metrics", description = "Metrics collection and querying"),
+        (name = "autonomy", description = "Autonomy control and decision management"),
+        (name = "memory", description = "Memory approval management")
     ),
     info(
         title = "SIS Kernel Control Daemon (sisctl)",
@@ -103,6 +135,22 @@ pub fn create_router(supervisor: Arc<QemuSupervisor>, replay_manager: Arc<Replay
         // Metrics endpoints
         .route("/api/v1/metrics/streams", get(metrics_handlers::list_streams))
         .route("/api/v1/metrics/query", get(metrics_handlers::query_series))
+        // Autonomy endpoints
+        .route("/api/v1/autonomy/on", post(autonomy_handlers::autonomy_on))
+        .route("/api/v1/autonomy/off", post(autonomy_handlers::autonomy_off))
+        .route("/api/v1/autonomy/reset", post(autonomy_handlers::autonomy_reset))
+        .route("/api/v1/autonomy/interval", post(autonomy_handlers::autonomy_set_interval))
+        .route("/api/v1/autonomy/conf-threshold", post(autonomy_handlers::autonomy_set_threshold))
+        .route("/api/v1/autonomy/status", get(autonomy_handlers::autonomy_status))
+        .route("/api/v1/autonomy/audit", get(autonomy_handlers::autonomy_audit))
+        .route("/api/v1/autonomy/explain", get(autonomy_handlers::autonomy_explain))
+        .route("/api/v1/autonomy/preview", post(autonomy_handlers::autonomy_preview))
+        .route("/api/v1/autonomy/whatif", post(autonomy_handlers::autonomy_whatif))
+        // Memory approval endpoints
+        .route("/api/v1/mem/approvals", get(memory_handlers::mem_get_approvals))
+        .route("/api/v1/mem/approval", post(memory_handlers::mem_approval_toggle))
+        .route("/api/v1/mem/approve", post(memory_handlers::mem_approve))
+        .route("/api/v1/mem/reject", post(memory_handlers::mem_reject))
         // WebSocket events
         .route("/events", get(ws::events_handler))
         // State
