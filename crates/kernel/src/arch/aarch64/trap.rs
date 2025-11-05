@@ -147,11 +147,35 @@ fn handle_page_fault(frame: &mut TrapFrame, fault_addr: u64, write: bool, esr: u
     }
 }
 
-/// Handle IRQ (stub for Phase A0)
+/// Handle IRQ
 #[no_mangle]
-pub extern "C" fn handle_irq(_frame: &mut TrapFrame) {
-    // Phase A0: No IRQ handling yet
-    crate::warn!("IRQ received but not handled in Phase A0");
+pub extern "C" fn handle_irq(frame: &mut TrapFrame) {
+    // Read interrupt number from GIC
+    // For now, assume timer interrupt (PPI 30 for AArch64 generic timer)
+
+    // Call scheduler timer tick
+    crate::process::scheduler::timer_tick();
+
+    // TODO: ACK/EOI the interrupt via GIC
+
+    // Check if reschedule is needed
+    if crate::process::scheduler::need_resched() {
+        // Save current task's trap frame
+        if let Some(pid) = crate::process::scheduler::current_pid() {
+            let mut table = crate::process::get_process_table();
+            if let Some(ref mut t) = *table {
+                if let Some(task) = t.get_mut(pid) {
+                    task.trap_frame = *frame;
+                }
+            }
+        }
+
+        // Schedule next task
+        crate::process::scheduler::schedule();
+
+        // Load next task's trap frame (already set by scheduler via set_elr/spsr/sp_el0)
+        // When we return via ERET, we'll enter the new task
+    }
 }
 
 /// Handle FIQ (stub for Phase A0)

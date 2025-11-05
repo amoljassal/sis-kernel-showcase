@@ -274,6 +274,11 @@ mod bringup {
         crate::process::init_process_table();
         super::uart_print(b"PROCESS: TABLE READY\n");
 
+        // Initialize scheduler
+        super::uart_print(b"SCHEDULER: INIT\n");
+        crate::process::scheduler::init();
+        super::uart_print(b"SCHEDULER: READY\n");
+
         // Initialize VFS
         super::uart_print(b"VFS: INIT\n");
         crate::vfs::init().expect("Failed to initialize VFS");
@@ -298,12 +303,23 @@ mod bringup {
         // crate::initramfs::unpack_initramfs(initramfs_data).expect("Failed to unpack initramfs");
         // super::uart_print(b"INITRAMFS: READY\n");
 
-        // TODO: Create PID 1 and execute /sbin/init
-        // super::uart_print(b"INIT: CREATING PID 1\n");
-        // let mut init_task = crate::process::Task::new_init();
-        // crate::process::insert_task(init_task).expect("Failed to insert init task");
+        // Create PID 1 (init process)
+        super::uart_print(b"INIT: CREATING PID 1\n");
+        let init_task = crate::process::Task::new_init();
+        crate::process::insert_task(init_task).expect("Failed to insert init task");
+        super::uart_print(b"INIT: PID 1 CREATED\n");
+
+        // Enqueue PID 1 to scheduler
+        super::uart_print(b"SCHEDULER: ENQUEUE PID 1\n");
+        crate::process::scheduler::enqueue(1);
+        crate::process::scheduler::set_current(1);
+        super::uart_print(b"SCHEDULER: PID 1 RUNNING\n");
+
+        // TODO: Execute /sbin/init when initramfs is available
         // super::uart_print(b"INIT: EXEC /sbin/init\n");
-        // crate::process::exec::elf::load_elf(&mut init_task, elf_data, argv, envp).expect("Failed to exec init");
+        // let argv = vec![b"/sbin/init\0".as_ref()];
+        // let envp = vec![];
+        // crate::syscall::sys_execve(b"/sbin/init\0", &argv, &envp).expect("Failed to exec init");
 
         super::uart_print(b"PHASE A1: BOOT WIRING COMPLETE\n");
 
