@@ -8,6 +8,8 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { graphApi, type GraphState } from '../lib/api';
 import { type GraphStateEvent } from '../lib/useWebSocket';
 import { copyJSONToClipboard } from '../lib/clipboard';
+import { parseErrorWithCTAs, type EnhancedError } from '../lib/errorUtils';
+import { ErrorBanner } from './ErrorBanner';
 import { Plus, Play, TrendingUp, MessageSquare, Download, AlertTriangle, Copy } from 'lucide-react';
 
 interface GraphPanelProps {
@@ -30,7 +32,7 @@ export function GraphPanel({ onGraphStateEvent }: GraphPanelProps) {
   const [feedbackOpId, setFeedbackOpId] = useState<string>('');
   const [feedbackVerdict, setFeedbackVerdict] = useState<'helpful' | 'not_helpful' | 'expected'>('helpful');
   const [predictionResult, setPredictionResult] = useState<string>('');
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState<EnhancedError | null>(null);
 
   // Virtualization refs
   const operatorsRef = useRef<HTMLDivElement>(null);
@@ -58,11 +60,16 @@ export function GraphPanel({ onGraphStateEvent }: GraphPanelProps) {
     mutationFn: () => graphApi.create(),
     onSuccess: (data) => {
       setGraphId(data.graphId);
-      setError('');
+      setError(null);
       queryClient.invalidateQueries({ queryKey: ['graph'] });
     },
     onError: (err: any) => {
-      setError(err.response?.data?.detail || 'Failed to create graph');
+      setError(parseErrorWithCTAs(err, {
+        onStopReplay: () => {
+          // TODO: Implement stop replay action
+          console.log('Stop replay requested');
+        },
+      }));
     },
   });
 
@@ -198,16 +205,7 @@ export function GraphPanel({ onGraphStateEvent }: GraphPanelProps) {
 
       {/* Error Display */}
       {error && (
-        <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-md flex items-start gap-2">
-          <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="font-semibold">Error</p>
-            <p className="text-sm">{error}</p>
-          </div>
-          <button onClick={() => setError('')} className="text-sm hover:underline">
-            Dismiss
-          </button>
-        </div>
+        <ErrorBanner error={error} onDismiss={() => setError(null)} />
       )}
 
       {/* Create Graph */}
