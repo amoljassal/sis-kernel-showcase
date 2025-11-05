@@ -18,6 +18,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 const MAX_EVENT_SUBSCRIBERS: usize = 100;
 const MAX_PARSED_EVENT_BUFFER: usize = 1000;
 const MAX_OUTPUT_LINES: u64 = 50_000; // Backpressure: cap at 50k lines
+const METRIC_BATCH_INTERVAL_MS: u64 = 100; // Batch metrics every 100ms
+const MAX_METRICS_PER_BATCH: usize = 1000; // Max points per batch
+
+/// Batched metric point for WebSocket streaming
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BatchedMetricPoint {
+    pub name: String,
+    pub ts: i64,
+    pub value: i64,
+}
 
 /// Event broadcast to subscribers
 #[derive(Debug, Clone, serde::Serialize)]
@@ -38,6 +48,14 @@ pub enum QemuEvent {
         line: String,
         #[serde(with = "chrono::serde::ts_milliseconds")]
         timestamp: chrono::DateTime<chrono::Utc>,
+    },
+    /// Batched metrics (emitted every 100ms)
+    MetricBatch {
+        points: Vec<BatchedMetricPoint>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        dropped_count: Option<usize>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        seq: Option<u64>,
     },
     /// Self-check started
     SelfCheckStarted {
@@ -287,6 +305,9 @@ impl QemuSupervisor {
         // Spawn process monitor
         self.spawn_process_monitor();
 
+        // Spawn metrics batch emitter
+        self.spawn_metrics_emitter();
+
         Ok(())
     }
 
@@ -494,6 +515,82 @@ impl QemuSupervisor {
                     // No child process, exit monitor
                     break;
                 }
+            }
+        });
+    }
+
+    /// Spawn metrics batch emitter (every 100ms)
+    fn spawn_metrics_emitter(&self) {
+        let state = Arc::clone(&self.state);
+        let event_tx = self.event_tx.clone();
+        let metrics = Arc::clone(&self.metrics);
+
+        tokio::spawn(async move {
+            let mut seq = 0_u64;
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(METRIC_BATCH_INTERVAL_MS));
+
+            loop {
+                interval.tick().await;
+
+                // Check if QEMU is still running
+                {
+                    let s = state.read().await;
+                    if s.state != QemuState::Running {
+                        // Stop emitting when not running
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+                }
+
+                // Get all series
+                let series_list = metrics.list_series().await;
+                if series_list.is_empty() {
+                    continue;
+                }
+
+                // Collect recent points from all series
+                let mut batch: Vec<BatchedMetricPoint> = Vec::new();
+                let now_ms = chrono::Utc::now().timestamp_millis();
+                let window_start = now_ms - (METRIC_BATCH_INTERVAL_MS * 2) as i64; // 2x interval window
+
+                for series_meta in series_list {
+                    // Query last few points from each series
+                    if let Ok(result) = metrics.query(&series_meta.name, window_start, now_ms, 100).await {
+                        for point in result.points {
+                            // Only include recent points
+                            if point.ts >= window_start {
+                                batch.push(BatchedMetricPoint {
+                                    name: series_meta.name.clone(),
+                                    ts: point.ts,
+                                    value: point.value,
+                                });
+                            }
+                        }
+                    }
+                }
+
+                if batch.is_empty() {
+                    continue;
+                }
+
+                // Apply backpressure: limit to MAX_METRICS_PER_BATCH
+                let (points, dropped_count) = if batch.len() > MAX_METRICS_PER_BATCH {
+                    let dropped = batch.len() - MAX_METRICS_PER_BATCH;
+                    // Drop oldest points (beginning of vec)
+                    batch.drain(0..dropped);
+                    (batch, Some(dropped))
+                } else {
+                    (batch, None)
+                };
+
+                seq += 1;
+
+                // Emit batch
+                let _ = event_tx.send(QemuEvent::MetricBatch {
+                    points,
+                    dropped_count,
+                    seq: Some(seq),
+                });
             }
         });
     }
