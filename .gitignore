@@ -28,6 +28,7 @@ qemu-serial.log
 
 # Build artifacts
 bootimage-*.bin
+build/
 # Conversation logs and unrelated projects
 docs/chatgpt-*.md
 Projects/
