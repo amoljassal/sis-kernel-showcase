@@ -12,8 +12,12 @@ extern crate alloc;
 #[no_mangle]
 pub static mut DTB_PTR: *const u8 = core::ptr::null();
 
+// Core library (error handling, logging, etc.)
+pub mod lib;
 // System call interface module
 pub mod syscall;
+// Process management
+pub mod process;
 // Userspace test module
 pub mod userspace_test;
 // Interactive shell module
@@ -74,7 +78,8 @@ pub mod llm;
 // Architecture-specific modules
 #[cfg(target_arch = "aarch64")]
 pub mod arch {
-    // ARM64 implementation would go here
+    pub mod aarch64;
+    pub use aarch64::*;
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -176,9 +181,13 @@ mod bringup {
             else { super::uart_print(b"PLATFORM: qemu_virt\n"); }
         }
 
-        // 2) Install exception vectors
-        install_vectors();
+        // 2) Install exception vectors (Phase A0)
+        crate::arch::trap::init_exception_vectors();
         super::uart_print(b"VECTORS OK\n");
+
+        // 2.5) Initialize Phase A0 timer (optional, can be enabled in A1)
+        // crate::arch::timer::init_timer(1000);  // 1000ms interval
+        // Note: GIC timer init happens later in boot sequence
 
         // 3) Enable MMU (EL1 only). If not EL1, skip with message.
         let current_el: u64;
