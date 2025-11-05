@@ -139,15 +139,23 @@ pub enum ParsedEvent {
 static METRIC_PATTERN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"METRIC\s+([a-zA-Z_][a-zA-Z0-9_]*)=([0-9.eE+-]+)").unwrap());
 
-static PROMPT_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"^sis>\s*$").unwrap());
+static PROMPT_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^\s*sis>\s*$").unwrap());
 
 static TEST_RESULT_PATTERN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\[(PASS|FAIL)\]\s+(.+)").unwrap());
+
+static ANSI_ESCAPE_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\x1B\[[0-9;]*[a-zA-Z]").unwrap());
+
+/// Strip ANSI escape sequences from a string
+fn strip_ansi(text: &str) -> String {
+    ANSI_ESCAPE_PATTERN.replace_all(text, "").to_string()
+}
 
 /// Line parser for SIS kernel UART output
 #[derive(Debug)]
 pub struct LineParser {
     shell_active: bool,
+    saw_launching_shell: bool,
 }
 
 impl Default for LineParser {
@@ -161,26 +169,35 @@ impl LineParser {
     pub fn new() -> Self {
         Self {
             shell_active: false,
+            saw_launching_shell: false,
         }
     }
 
     /// Parse a single line of kernel output
     pub fn parse_line(&mut self, line: &str) -> Option<ParsedEvent> {
-        let line = line.trim();
+        let line = line.trim_end_matches(|c| c == '\r' || c == '\n').trim();
         if line.is_empty() {
             return None;
         }
 
         let timestamp = chrono::Utc::now();
 
-        // Check for shell prompt (sis>)
-        if PROMPT_PATTERN.is_match(line) {
-            self.shell_active = true;
-            return Some(ParsedEvent::Prompt { timestamp });
+        // Strip ANSI escapes before checking prompt
+        let clean_line = strip_ansi(line);
+
+        // Check for shell prompt (sis>) - only activate if saw LAUNCHING SHELL first
+        if PROMPT_PATTERN.is_match(&clean_line) {
+            if self.saw_launching_shell {
+                self.shell_active = true;
+                return Some(ParsedEvent::Prompt { timestamp });
+            }
         }
 
         // Check for boot markers first (highest priority)
-        if let Some(marker) = BootMarker::from_line(line) {
+        if let Some(marker) = BootMarker::from_line(&clean_line) {
+            if marker == BootMarker::LaunchingShell {
+                self.saw_launching_shell = true;
+            }
             if marker == BootMarker::ShellReady {
                 self.shell_active = true;
             }
@@ -251,6 +268,7 @@ impl LineParser {
     /// Reset parser state (e.g., when QEMU restarts)
     pub fn reset(&mut self) {
         self.shell_active = false;
+        self.saw_launching_shell = false;
     }
 }
 

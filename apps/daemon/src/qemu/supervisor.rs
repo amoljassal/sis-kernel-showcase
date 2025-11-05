@@ -12,6 +12,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
 use tracing::{debug, error, info, warn};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const MAX_EVENT_SUBSCRIBERS: usize = 100;
 const MAX_PARSED_EVENT_BUFFER: usize = 1000;
@@ -72,6 +73,7 @@ pub struct QemuSupervisor {
     state: Arc<RwLock<SupervisorState>>,
     event_tx: broadcast::Sender<QemuEvent>,
     shell_executor: Arc<Mutex<Option<ShellExecutor>>>,
+    busy: Arc<AtomicBool>,
 }
 
 impl QemuSupervisor {
@@ -82,6 +84,7 @@ impl QemuSupervisor {
             state: Arc::new(RwLock::new(SupervisorState::default())),
             event_tx,
             shell_executor: Arc::new(Mutex::new(None)),
+            busy: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -359,6 +362,11 @@ impl QemuSupervisor {
 
     /// Execute a shell command
     pub async fn execute_command(&self, request: ShellCommandRequest) -> Result<ShellCommandResponse> {
+        // Check if busy (e.g., running self-check)
+        if self.busy.load(Ordering::SeqCst) {
+            anyhow::bail!("System busy: another operation is in progress");
+        }
+
         let executor = self.shell_executor.lock().await;
         match executor.as_ref() {
             Some(exec) => exec.execute(request).await,
@@ -370,6 +378,33 @@ impl QemuSupervisor {
     pub async fn is_shell_ready(&self) -> bool {
         let executor = self.shell_executor.lock().await;
         executor.as_ref().map(|e| e.is_available()).unwrap_or(false)
+    }
+
+    /// Run self-check tests
+    pub async fn run_self_check(&self) -> Result<ShellCommandResponse> {
+        // Set busy flag
+        if self.busy.swap(true, Ordering::SeqCst) {
+            anyhow::bail!("System busy: another operation is in progress");
+        }
+
+        // Execute self-check command
+        let request = ShellCommandRequest {
+            command: "self_check".to_string(),
+            timeout_ms: 60000, // 60 seconds for self-check
+        };
+
+        let result = {
+            let executor = self.shell_executor.lock().await;
+            match executor.as_ref() {
+                Some(exec) => exec.execute(request).await,
+                None => Err(anyhow::anyhow!("Shell not ready or QEMU not running")),
+            }
+        };
+
+        // Clear busy flag
+        self.busy.store(false, Ordering::SeqCst);
+
+        result
     }
 }
 
