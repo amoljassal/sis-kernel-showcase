@@ -295,6 +295,12 @@ mod bringup {
         // Note: Actual mount point linking deferred to when mount syscall is available
         crate::vfs::set_root(root.clone()); // Re-set root to ensure consistency
 
+        // Mount procfs at /proc
+        super::uart_print(b"VFS: MOUNT PROCFS AT /proc\n");
+        let proc_inode = crate::vfs::mount_procfs().expect("Failed to mount procfs");
+        root.create("proc", crate::vfs::S_IFDIR | 0o555).expect("Failed to create /proc");
+        crate::vfs::set_root(root.clone()); // Re-set root to ensure consistency
+
         super::uart_print(b"VFS: READY\n");
 
         // TODO: Unpack initramfs (when INITRAMFS_DATA is available)
