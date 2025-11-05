@@ -5,7 +5,10 @@
 # Cargo lock file (keep for binary projects)
 # Cargo.lock
 
-# IDE files  
+# Node modules
+node_modules/
+
+# IDE files
 .vscode/
 .idea/
 *.swp
