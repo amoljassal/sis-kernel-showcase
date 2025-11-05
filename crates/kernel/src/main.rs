@@ -20,6 +20,8 @@ pub mod syscall;
 pub mod process;
 // Memory management
 pub mod mm;
+// Virtual File System
+pub mod vfs;
 // Userspace test module
 pub mod userspace_test;
 // Interactive shell module
