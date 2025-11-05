@@ -312,7 +312,7 @@ pnpm format:check
 
 ## Next Steps (Milestone 6+)
 
-- [ ] Replay authoring guide documentation
+- [x] Replay authoring guide documentation (see docs/guides/REPLAY-AUTHORING-GUIDE.md)
 - [ ] i18n support
 - [ ] Playwright E2E tests
 - [ ] CI/CD packaging (macOS/Linux/Windows)
