@@ -13,6 +13,12 @@ pub enum PipeEnd {
     Writer(super::pipe::PipeWriter),
 }
 
+// PTY ends (master or slave)
+pub enum PtyEnd {
+    Master(crate::drivers::char::pty::PtyMaster),
+    Slave(crate::drivers::char::pty::PtySlave),
+}
+
 bitflags::bitflags! {
     /// File open flags
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,6 +86,7 @@ pub struct File {
     pub flags: OpenFlags,
     pub fops: &'static dyn FileOps,
     pub pipe: Option<PipeEnd>,
+    pub pty: Option<PtyEnd>,
 }
 
 impl File {
@@ -93,6 +100,7 @@ impl File {
             flags,
             fops: &DefaultFileOps,
             pipe: None,
+            pty: None,
         }
     }
 
@@ -104,6 +112,7 @@ impl File {
             flags,
             fops,
             pipe: None,
+            pty: None,
         }
     }
 
@@ -115,6 +124,7 @@ impl File {
             flags: OpenFlags::O_RDONLY,
             fops: &PipeFileOps,
             pipe: Some(PipeEnd::Reader(reader)),
+            pty: None,
         }
     }
 
@@ -126,6 +136,31 @@ impl File {
             flags: OpenFlags::O_WRONLY,
             fops: &PipeFileOps,
             pipe: Some(PipeEnd::Writer(writer)),
+            pty: None,
+        }
+    }
+
+    /// Create a file from a PTY master
+    pub fn from_pty_master(master: crate::drivers::char::pty::PtyMaster) -> Self {
+        Self {
+            inode: None,
+            offset: AtomicU64::new(0),
+            flags: OpenFlags::O_RDWR,
+            fops: &PtyFileOps,
+            pipe: None,
+            pty: Some(PtyEnd::Master(master)),
+        }
+    }
+
+    /// Create a file from a PTY slave
+    pub fn from_pty_slave(slave: crate::drivers::char::pty::PtySlave) -> Self {
+        Self {
+            inode: None,
+            offset: AtomicU64::new(0),
+            flags: OpenFlags::O_RDWR,
+            fops: &PtyFileOps,
+            pipe: None,
+            pty: Some(PtyEnd::Slave(slave)),
         }
     }
 
@@ -178,6 +213,8 @@ impl core::fmt::Debug for File {
             d.field("inode", &inode.ino());
         } else if self.pipe.is_some() {
             d.field("type", &"pipe");
+        } else if self.pty.is_some() {
+            d.field("type", &"pty");
         }
         d.field("offset", &self.offset())
             .field("flags", &self.flags)
@@ -251,5 +288,90 @@ impl FileOps for PipeFileOps {
 
     fn lseek(&self, _file: &File, _offset: i64, _whence: i32) -> Result<u64, Errno> {
         Err(Errno::ESPIPE) // Pipes are not seekable
+    }
+}
+
+/// PTY file operations
+struct PtyFileOps;
+
+impl FileOps for PtyFileOps {
+    fn read(&self, file: &File, buf: &mut [u8]) -> Result<usize, Errno> {
+        match &file.pty {
+            Some(PtyEnd::Master(master)) => master.read(buf),
+            Some(PtyEnd::Slave(slave)) => slave.read(buf),
+            None => Err(Errno::EBADF),
+        }
+    }
+
+    fn write(&self, file: &File, buf: &[u8]) -> Result<usize, Errno> {
+        match &file.pty {
+            Some(PtyEnd::Master(master)) => master.write(buf),
+            Some(PtyEnd::Slave(slave)) => slave.write(buf),
+            None => Err(Errno::EBADF),
+        }
+    }
+
+    fn lseek(&self, _file: &File, _offset: i64, _whence: i32) -> Result<u64, Errno> {
+        Err(Errno::ESPIPE) // PTYs are not seekable
+    }
+
+    fn ioctl(&self, file: &File, cmd: u32, arg: usize) -> Result<isize, Errno> {
+        use crate::drivers::char::pty::{TCGETS, TCSETS, TCSETSW, TCSETSF, TIOCGPTN, TIOCSPTLCK, Termios};
+
+        match &file.pty {
+            Some(PtyEnd::Master(master)) => {
+                match cmd {
+                    TCGETS => {
+                        // Get termios
+                        let termios = master.get_termios();
+                        let user_ptr = arg as *mut Termios;
+                        unsafe {
+                            core::ptr::write(user_ptr, termios);
+                        }
+                        Ok(0)
+                    }
+                    TCSETS | TCSETSW | TCSETSF => {
+                        // Set termios (all three treated the same in Phase A2)
+                        let user_ptr = arg as *const Termios;
+                        let termios = unsafe { core::ptr::read(user_ptr) };
+                        master.set_termios(termios);
+                        Ok(0)
+                    }
+                    TIOCGPTN => {
+                        // Get PTY number
+                        let user_ptr = arg as *mut u32;
+                        unsafe {
+                            core::ptr::write(user_ptr, master.pty_num() as u32);
+                        }
+                        Ok(0)
+                    }
+                    TIOCSPTLCK => {
+                        // Lock/unlock PTY (Phase A2: no-op, always unlocked)
+                        Ok(0)
+                    }
+                    _ => Err(Errno::ENOTTY),
+                }
+            }
+            Some(PtyEnd::Slave(slave)) => {
+                match cmd {
+                    TCGETS => {
+                        let termios = slave.get_termios();
+                        let user_ptr = arg as *mut Termios;
+                        unsafe {
+                            core::ptr::write(user_ptr, termios);
+                        }
+                        Ok(0)
+                    }
+                    TCSETS | TCSETSW | TCSETSF => {
+                        let user_ptr = arg as *const Termios;
+                        let termios = unsafe { core::ptr::read(user_ptr) };
+                        slave.set_termios(termios);
+                        Ok(0)
+                    }
+                    _ => Err(Errno::ENOTTY),
+                }
+            }
+            None => Err(Errno::EBADF),
+        }
     }
 }

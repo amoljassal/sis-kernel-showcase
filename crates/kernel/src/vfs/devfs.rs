@@ -56,6 +56,22 @@ impl DevfsRoot {
 
         Ok(())
     }
+
+    /// Add a subdirectory
+    pub fn add_directory(&self, name: &str, inode: Arc<Inode>) -> Result<(), Errno> {
+        let mut meta = self.meta.write();
+
+        // Check if already exists
+        if meta.children.contains_key(name) {
+            return Err(Errno::EEXIST);
+        }
+
+        meta.children.insert(name.into(), inode);
+
+        crate::debug!("devfs: added subdirectory '{}'", name);
+
+        Ok(())
+    }
 }
 
 impl InodeOps for DevfsRoot {
@@ -206,6 +222,13 @@ pub fn mount_devfs() -> Result<Arc<Inode>, Errno> {
     root.add_char_device("random", &crate::drivers::char::console::RANDOM_OPS, 0o444)?;
     root.add_char_device("urandom", &crate::drivers::char::console::RANDOM_OPS, 0o444)?;
 
+    // Add PTY master multiplexer (Phase A2)
+    root.add_char_device("ptmx", &super::ptmx::PTMX_OPS, 0o666)?;
+
+    // Add /dev/pts directory for PTY slaves (Phase A2)
+    let pts_inode = super::ptsfs::mount_ptsfs()?;
+    root.add_directory("pts", pts_inode)?;
+
     let root_ops: &'static DevfsRoot = Box::leak(Box::new(root));
 
     let root_inode = Arc::new(Inode::new(
@@ -214,7 +237,7 @@ pub fn mount_devfs() -> Result<Arc<Inode>, Errno> {
         root_ops as &'static dyn InodeOps,
     ));
 
-    crate::info!("devfs: mounted at /dev with console, tty, null, zero, random, urandom");
+    crate::info!("devfs: mounted at /dev with console, tty, null, zero, random, urandom, ptmx, pts/");
 
     Ok(root_inode)
 }

@@ -96,8 +96,11 @@ pub fn sys_openat(dirfd: i32, pathname: *const u8, flags: i32, mode: u32) -> Res
     // Convert flags to OpenFlags
     let open_flags = crate::vfs::OpenFlags::from_bits_truncate(flags as u32);
 
-    // Open or create file
-    let file = if open_flags.contains(crate::vfs::OpenFlags::O_CREAT) {
+    // Special handling for /dev/ptmx (Phase A2)
+    let file = if path == "/dev/ptmx" {
+        // Opening /dev/ptmx creates a new PTY pair and returns the master
+        alloc::sync::Arc::new(crate::vfs::open_ptmx()?)
+    } else if open_flags.contains(crate::vfs::OpenFlags::O_CREAT) {
         // Create new file if doesn't exist
         match crate::vfs::open(path, open_flags) {
             Ok(f) => f,

@@ -4,6 +4,9 @@
 /// - tmpfs (in-memory filesystem)
 /// - devfs (device nodes)
 /// - procfs (process information)
+/// Phase A2 additions:
+/// - ptmx (/dev/ptmx for PTY allocation)
+/// - ptsfs (/dev/pts for PTY slave devices)
 
 pub mod inode;
 pub mod file;
@@ -12,12 +15,16 @@ pub mod tmpfs;
 pub mod devfs;
 pub mod pipe;
 pub mod procfs;
+pub mod ptmx;
+pub mod ptsfs;
 
 pub use inode::{Inode, InodeType, InodeOps, Ino, DirEntry, alloc_ino};
-pub use file::{File, FileOps, OpenFlags, PipeEnd};
+pub use file::{File, FileOps, OpenFlags, PipeEnd, PtyEnd};
 pub use mount::{Mount, init_vfs, mount, get_root, get_mounts};
 pub use pipe::{create_pipe, PipeReader, PipeWriter};
 pub use procfs::mount_procfs;
+pub use ptmx::open_ptmx;
+pub use ptsfs::mount_ptsfs;
 
 use crate::lib::error::Errno;
 use alloc::sync::Arc;

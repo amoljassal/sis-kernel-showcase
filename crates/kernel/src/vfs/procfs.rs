@@ -44,6 +44,15 @@ impl InodeOps for ProcfsRoot {
                 InodeType::File,
                 Box::new(MountsFile),
             ))),
+            "self" => {
+                // /proc/self symlink to current process (Phase A2)
+                let pid = crate::process::current_pid();
+                Ok(Arc::new(Inode::new(
+                    alloc_ino(),
+                    InodeType::Directory,
+                    Box::new(ProcPidDir { pid }),
+                )))
+            }
             _ => {
                 // Check if it's a PID directory (numeric)
                 if let Ok(pid) = name.parse::<u32>() {
@@ -284,6 +293,11 @@ impl InodeOps for ProcPidDir {
                 InodeType::File,
                 Box::new(ProcPidStatus { pid: self.pid }),
             ))),
+            "maps" => Ok(Arc::new(Inode::new(
+                alloc_ino(),
+                InodeType::File,
+                Box::new(ProcPidMaps { pid: self.pid }),
+            ))),
             _ => Err(Errno::ENOENT),
         }
     }
@@ -295,6 +309,7 @@ impl InodeOps for ProcPidDir {
             ("cmdline", 200 + self.pid as u64),
             ("stat", 300 + self.pid as u64),
             ("status", 400 + self.pid as u64),
+            ("maps", 500 + self.pid as u64),
         ];
 
         if offset >= entries.len() {
@@ -456,6 +471,71 @@ impl InodeOps for ProcPidStatus {
             task.cred.uid, task.cred.euid, task.cred.suid, task.cred.fsuid,
             task.cred.gid, task.cred.egid, task.cred.sgid, task.cred.fsgid,
         );
+
+        let bytes = content.as_bytes();
+        if offset >= bytes.len() as u64 {
+            return Ok(0);
+        }
+
+        let start = offset as usize;
+        let to_copy = (bytes.len() - start).min(buf.len());
+        buf[..to_copy].copy_from_slice(&bytes[start..start + to_copy]);
+        Ok(to_copy)
+    }
+
+    fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
+        Err(Errno::EACCES)
+    }
+}
+
+/// /proc/[pid]/maps file
+struct ProcPidMaps {
+    pid: u32,
+}
+
+impl InodeOps for ProcPidMaps {
+    fn getattr(&self) -> Result<super::inode::InodeMeta> {
+        Ok(super::inode::InodeMeta {
+            ino: 500 + self.pid as u64,
+            size: 0,
+            mode: crate::vfs::S_IFREG | 0o444,
+            nlink: 1,
+        })
+    }
+
+    fn read(&self, offset: u64, buf: &mut [u8]) -> Result<usize> {
+        // Get process VMAs
+        let table = crate::process::get_process_table();
+        let table = table.as_ref().ok_or(Errno::ESRCH)?;
+        let task = table.get(&self.pid).ok_or(Errno::ESRCH)?;
+
+        // Format maps (Phase A2: simplified, no actual VMA iteration yet)
+        // Format: address perms offset dev:inode pathname
+        // Example: 00400000-00500000 r-xp 00000000 00:00 0  /bin/sh
+
+        let mut content = String::new();
+
+        // Text segment (executable)
+        content.push_str(&format!(
+            "00400000-00500000 r-xp 00000000 00:00 0          [text]\n"
+        ));
+
+        // Data segment (read-write)
+        content.push_str(&format!(
+            "00600000-00700000 rw-p 00000000 00:00 0          [data]\n"
+        ));
+
+        // Heap (if allocated)
+        content.push_str(&format!(
+            "00800000-00900000 rw-p 00000000 00:00 0          [heap]\n"
+        ));
+
+        // Stack
+        content.push_str(&format!(
+            "007ffffff00000-007fffff00000 rw-p 00000000 00:00 0          [stack]\n"
+        ));
+
+        // TODO Phase B: Iterate actual VMAs from task.mm
 
         let bytes = content.as_bytes();
         if offset >= bytes.len() as u64 {
