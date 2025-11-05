@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8871/events';
 
 export interface WebSocketEvent {
-  type: 'state_changed' | 'parsed' | 'raw_line';
+  type: 'state_changed' | 'parsed' | 'raw_line' | 'metric_batch';
   [key: string]: any;
 }
 

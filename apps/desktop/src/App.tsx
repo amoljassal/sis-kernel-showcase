@@ -2,7 +2,7 @@
  * Main application component
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/tauri';
 import { qemuApi, QemuConfig, QemuState, QemuStatus } from './lib/api';
@@ -12,23 +12,23 @@ import { StatusBadge } from './components/StatusBadge';
 import { Terminal } from './components/Terminal';
 import { BootMarkers } from './components/BootMarkers';
 import { QemuProfileSelector } from './components/QemuProfileSelector';
-import { MetricsSparkline } from './components/MetricsSparkline';
+import { MetricsPanel } from './components/MetricsPanel';
 import { ShellCommandInput } from './components/ShellCommandInput';
 import { SelfCheckRunner } from './components/SelfCheckRunner';
 import { ReplayControls } from './components/ReplayControls';
 import { AlertCircle, Activity, Terminal as TerminalIcon } from 'lucide-react';
+import type { BatchedMetricPoint } from './lib/api';
 import './App.css';
-
-interface MetricPoint {
-  timestamp: number;
-  value: number;
-}
 
 function App() {
   const queryClient = useQueryClient();
   const [daemonHealthy, setDaemonHealthy] = useState(false);
   const [bootMarkers, setBootMarkers] = useState<Record<string, boolean>>({});
-  const [metrics, setMetrics] = useState<Record<string, MetricPoint[]>>({});
+  const [currentMetricBatch, setCurrentMetricBatch] = useState<{
+    points: BatchedMetricPoint[];
+    seq?: number;
+    droppedCount?: number;
+  } | null>(null);
 
   // Check daemon health
   const { data: daemonStatus } = useQuery({
@@ -69,7 +69,6 @@ function App() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['qemu-status'] });
       setBootMarkers({});
-      setMetrics({});
     },
   });
 
@@ -99,20 +98,15 @@ function App() {
           [parsed.marker]: true,
         }));
       }
+    }
 
-      // Update metrics
-      if (parsed.type === 'metric') {
-        setMetrics((prev) => ({
-          ...prev,
-          [parsed.name]: [
-            ...(prev[parsed.name] || []),
-            {
-              timestamp: parsed.timestamp,
-              value: parsed.value,
-            },
-          ],
-        }));
-      }
+    // Handle metric batch events
+    if (event.type === 'metric_batch') {
+      setCurrentMetricBatch({
+        points: event.points,
+        seq: event.seq,
+        droppedCount: event.dropped_count,
+      });
     }
 
     // Handle state changes
@@ -216,29 +210,8 @@ function App() {
             </div>
 
             {/* Right Column - Metrics */}
-            <div className="space-y-4 overflow-y-auto">
-              <h3 className="text-lg font-semibold px-4">Live Metrics</h3>
-
-              {Object.keys(metrics).length === 0 ? (
-                <div className="bg-card rounded-lg border p-8 text-center text-muted-foreground">
-                  No metrics yet. Start QEMU to see live data.
-                </div>
-              ) : (
-                Object.entries(metrics).map(([name, data]) => (
-                  <MetricsSparkline
-                    key={name}
-                    title={name}
-                    metrics={data}
-                    color={
-                      name.includes('latency')
-                        ? '#ef4444'
-                        : name.includes('memory')
-                        ? '#3b82f6'
-                        : '#10b981'
-                    }
-                  />
-                ))
-              )}
+            <div className="flex flex-col h-full">
+              <MetricsPanel metricBatch={currentMetricBatch} />
             </div>
           </div>
         )}
