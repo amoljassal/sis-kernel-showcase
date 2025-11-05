@@ -81,17 +81,67 @@ bitflags::bitflags! {
     }
 }
 
-/// File descriptor table (stub)
-#[derive(Debug)]
+/// File descriptor table
 pub struct FileTable {
-    /// File descriptors (stub - will be expanded with VFS)
-    pub fds: Vec<Option<FileDescriptor>>,
+    /// File descriptors (Arc<File> for shared references)
+    pub fds: Vec<Option<alloc::sync::Arc<crate::vfs::File>>>,
 }
 
-#[derive(Debug, Clone)]
-pub struct FileDescriptor {
-    pub flags: u32,
-    pub offset: u64,
+impl FileTable {
+    /// Create a new empty FD table
+    pub fn new() -> Self {
+        Self {
+            fds: vec![None; 256], // Start with 256 FD slots
+        }
+    }
+
+    /// Allocate a new FD
+    pub fn alloc_fd(&mut self, file: alloc::sync::Arc<crate::vfs::File>) -> Result<i32, Errno> {
+        for (i, slot) in self.fds.iter_mut().enumerate() {
+            if slot.is_none() {
+                *slot = Some(file);
+                return Ok(i as i32);
+            }
+        }
+        Err(Errno::EMFILE) // Too many open files
+    }
+
+    /// Get file by FD
+    pub fn get(&self, fd: i32) -> Result<alloc::sync::Arc<crate::vfs::File>, Errno> {
+        if fd < 0 || fd as usize >= self.fds.len() {
+            return Err(Errno::EBADF);
+        }
+        self.fds[fd as usize].clone().ok_or(Errno::EBADF)
+    }
+
+    /// Close an FD
+    pub fn close(&mut self, fd: i32) -> Result<(), Errno> {
+        if fd < 0 || fd as usize >= self.fds.len() {
+            return Err(Errno::EBADF);
+        }
+        if self.fds[fd as usize].is_none() {
+            return Err(Errno::EBADF);
+        }
+        self.fds[fd as usize] = None;
+        Ok(())
+    }
+
+    /// Duplicate FD (for dup/dup2)
+    pub fn dup(&mut self, oldfd: i32) -> Result<i32, Errno> {
+        let file = self.get(oldfd)?;
+        self.alloc_fd(file)
+    }
+}
+
+impl core::fmt::Debug for FileTable {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let open_fds: Vec<i32> = self.fds.iter().enumerate()
+            .filter_map(|(i, slot)| if slot.is_some() { Some(i as i32) } else { None })
+            .collect();
+        f.debug_struct("FileTable")
+            .field("open_fds", &open_fds)
+            .finish()
+    }
 }
 
 /// Main task structure
@@ -133,9 +183,7 @@ impl Task {
                 stack_top: 0x0000_7FFF_FFFF_F000, // User stack top
                 vmas: Vec::new(),
             },
-            files: FileTable {
-                fds: vec![None; 256], // Start with 256 fd slots
-            },
+            files: FileTable::new(),
             cred: Credentials::default(),
             trap_frame: TrapFrame::default(),
             name: String::from("init"),
