@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { shellApi, SelfCheckResponse, TestResultEntry, QemuEvent } from '@/lib/api';
-import { PlayCircle, CheckCircle, XCircle, Loader2, Clock } from 'lucide-react';
+import { PlayCircle, CheckCircle, XCircle, Loader2, Clock, X } from 'lucide-react';
 
 interface SelfCheckRunnerProps {
   disabled?: boolean;
@@ -16,6 +16,7 @@ export function SelfCheckRunner({ disabled, wsEvents }: SelfCheckRunnerProps) {
   const [lastResult, setLastResult] = useState<SelfCheckResponse | null>(null);
   const [liveTests, setLiveTests] = useState<TestResultEntry[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [wasCanceled, setWasCanceled] = useState(false);
 
   // Listen for WebSocket events
   useEffect(() => {
@@ -27,6 +28,7 @@ export function SelfCheckRunner({ disabled, wsEvents }: SelfCheckRunnerProps) {
       case 'self_check_started':
         setIsRunning(true);
         setLiveTests([]);
+        setWasCanceled(false);
         break;
 
       case 'self_check_test':
@@ -42,6 +44,7 @@ export function SelfCheckRunner({ disabled, wsEvents }: SelfCheckRunnerProps) {
 
       case 'self_check_completed':
         setIsRunning(false);
+        setWasCanceled(false);
         setLastResult((prev) => ({
           tests: prev?.tests || liveTests,
           total: latestEvent.total,
@@ -50,6 +53,11 @@ export function SelfCheckRunner({ disabled, wsEvents }: SelfCheckRunnerProps) {
           success: latestEvent.success,
           execution_time_ms: prev?.execution_time_ms || 0,
         }));
+        break;
+
+      case 'self_check_canceled':
+        setIsRunning(false);
+        setWasCanceled(true);
         break;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -66,34 +74,53 @@ export function SelfCheckRunner({ disabled, wsEvents }: SelfCheckRunnerProps) {
     },
   });
 
+  const cancelSelfCheck = useMutation({
+    mutationFn: () => shellApi.cancelSelfcheck(),
+    onSuccess: () => {
+      // State will be updated by WebSocket event
+    },
+    onError: () => {
+      setIsRunning(false);
+    },
+  });
+
   const handleRun = () => {
     if (disabled) return;
     setIsRunning(true);
     setLiveTests([]);
+    setWasCanceled(false);
     runSelfCheck.mutate();
+  };
+
+  const handleCancel = () => {
+    cancelSelfCheck.mutate();
   };
 
   return (
     <div className="bg-card rounded-lg border p-4">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold">Self-Check Tests</h3>
-        <button
-          onClick={handleRun}
-          disabled={disabled || isRunning}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
-        >
+        <div className="flex gap-2">
           {isRunning ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Running...
-            </>
+            <button
+              onClick={handleCancel}
+              disabled={cancelSelfCheck.isPending}
+              className="px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 disabled:opacity-50 flex items-center gap-2"
+            >
+              <X className="h-4 w-4" />
+              {cancelSelfCheck.isPending ? 'Canceling...' : 'Cancel'}
+            </button>
           ) : (
-            <>
+            <button
+              onClick={handleRun}
+              disabled={disabled}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+            >
               <PlayCircle className="h-4 w-4" />
               Run Self-Check
-            </>
+            </button>
           )}
-        </button>
+        </div>
       </div>
 
       {/* Live test results (streaming via WebSocket) */}
@@ -131,8 +158,25 @@ export function SelfCheckRunner({ disabled, wsEvents }: SelfCheckRunnerProps) {
         </div>
       )}
 
+      {/* Canceled message */}
+      {wasCanceled && !isRunning && (
+        <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-md border border-yellow-200 dark:border-yellow-800">
+          <div className="flex items-center gap-2">
+            <XCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+            <span className="font-semibold text-yellow-900 dark:text-yellow-100">
+              Self-check canceled
+            </span>
+          </div>
+          {liveTests.length > 0 && (
+            <p className="text-sm text-yellow-800 dark:text-yellow-200 mt-2">
+              {liveTests.length} test{liveTests.length !== 1 ? 's' : ''} completed before cancellation
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Final results summary */}
-      {lastResult && !isRunning && (
+      {lastResult && !isRunning && !wasCanceled && (
         <div className="space-y-4">
           {/* Summary */}
           <div
@@ -205,7 +249,7 @@ export function SelfCheckRunner({ disabled, wsEvents }: SelfCheckRunnerProps) {
         </div>
       )}
 
-      {!lastResult && !isRunning && (
+      {!lastResult && !isRunning && !wasCanceled && (
         <div className="text-center py-8 text-muted-foreground">
           <p className="text-sm">
             Click "Run Self-Check" to test kernel functionality
