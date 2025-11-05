@@ -53,6 +53,35 @@ export interface ParsedEvent {
   [key: string]: any;
 }
 
+export interface SelfCheckStartedEvent {
+  type: 'self_check_started';
+  timestamp: number;
+}
+
+export interface SelfCheckTestEvent {
+  type: 'self_check_test';
+  name: string;
+  passed: boolean;
+  timestamp: number;
+}
+
+export interface SelfCheckCompletedEvent {
+  type: 'self_check_completed';
+  total: number;
+  passed: number;
+  failed: number;
+  success: boolean;
+  timestamp: number;
+}
+
+export type QemuEvent =
+  | { type: 'state_changed'; state: QemuState; timestamp: number }
+  | { type: 'parsed'; event: ParsedEvent }
+  | { type: 'raw_line'; line: string; timestamp: number }
+  | SelfCheckStartedEvent
+  | SelfCheckTestEvent
+  | SelfCheckCompletedEvent;
+
 export interface ShellCommandRequest {
   command: string;
   timeout_ms?: number;

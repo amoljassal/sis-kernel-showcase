@@ -2,27 +2,74 @@
  * Self-check runner component
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { shellApi, SelfCheckResponse } from '@/lib/api';
+import { shellApi, SelfCheckResponse, TestResultEntry, QemuEvent } from '@/lib/api';
 import { PlayCircle, CheckCircle, XCircle, Loader2, Clock } from 'lucide-react';
 
 interface SelfCheckRunnerProps {
   disabled?: boolean;
+  wsEvents?: QemuEvent[];
 }
 
-export function SelfCheckRunner({ disabled }: SelfCheckRunnerProps) {
+export function SelfCheckRunner({ disabled, wsEvents }: SelfCheckRunnerProps) {
   const [lastResult, setLastResult] = useState<SelfCheckResponse | null>(null);
+  const [liveTests, setLiveTests] = useState<TestResultEntry[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
+
+  // Listen for WebSocket events
+  useEffect(() => {
+    if (!wsEvents || wsEvents.length === 0) return;
+
+    const latestEvent = wsEvents[wsEvents.length - 1];
+
+    switch (latestEvent.type) {
+      case 'self_check_started':
+        setIsRunning(true);
+        setLiveTests([]);
+        break;
+
+      case 'self_check_test':
+        setLiveTests((prev) => [
+          ...prev,
+          {
+            name: latestEvent.name,
+            passed: latestEvent.passed,
+            timestamp: latestEvent.timestamp,
+          },
+        ]);
+        break;
+
+      case 'self_check_completed':
+        setIsRunning(false);
+        setLastResult((prev) => ({
+          tests: prev?.tests || liveTests,
+          total: latestEvent.total,
+          passed: latestEvent.passed,
+          failed: latestEvent.failed,
+          success: latestEvent.success,
+          execution_time_ms: prev?.execution_time_ms || 0,
+        }));
+        break;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsEvents]);
 
   const runSelfCheck = useMutation({
     mutationFn: () => shellApi.selfcheck(),
     onSuccess: (response) => {
       setLastResult(response);
+      setIsRunning(false);
+    },
+    onError: () => {
+      setIsRunning(false);
     },
   });
 
   const handleRun = () => {
     if (disabled) return;
+    setIsRunning(true);
+    setLiveTests([]);
     runSelfCheck.mutate();
   };
 
@@ -32,10 +79,10 @@ export function SelfCheckRunner({ disabled }: SelfCheckRunnerProps) {
         <h3 className="text-lg font-semibold">Self-Check Tests</h3>
         <button
           onClick={handleRun}
-          disabled={disabled || runSelfCheck.isPending}
+          disabled={disabled || isRunning}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
         >
-          {runSelfCheck.isPending ? (
+          {isRunning ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
               Running...
@@ -49,7 +96,43 @@ export function SelfCheckRunner({ disabled }: SelfCheckRunnerProps) {
         </button>
       </div>
 
-      {lastResult && (
+      {/* Live test results (streaming via WebSocket) */}
+      {isRunning && liveTests.length > 0 && (
+        <div className="space-y-2 mb-4">
+          <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Running Tests ({liveTests.length} completed)
+          </h4>
+          {liveTests.map((test, index) => (
+            <div
+              key={index}
+              className={`flex items-center gap-3 p-2 rounded ${
+                test.passed
+                  ? 'bg-green-50 dark:bg-green-900/10'
+                  : 'bg-red-50 dark:bg-red-900/10'
+              }`}
+            >
+              {test.passed ? (
+                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+              ) : (
+                <XCircle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0" />
+              )}
+              <span
+                className={`text-sm flex-1 ${
+                  test.passed
+                    ? 'text-green-900 dark:text-green-100'
+                    : 'text-red-900 dark:text-red-100'
+                }`}
+              >
+                {test.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Final results summary */}
+      {lastResult && !isRunning && (
         <div className="space-y-4">
           {/* Summary */}
           <div
@@ -79,10 +162,12 @@ export function SelfCheckRunner({ disabled }: SelfCheckRunnerProps) {
               <span className="text-muted-foreground">
                 {lastResult.passed} / {lastResult.total} passed
               </span>
-              <span className="flex items-center gap-1 text-muted-foreground">
-                <Clock className="h-3 w-3" />
-                {lastResult.execution_time_ms}ms
-              </span>
+              {lastResult.execution_time_ms > 0 && (
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  {lastResult.execution_time_ms}ms
+                </span>
+              )}
             </div>
           </div>
 
@@ -120,7 +205,7 @@ export function SelfCheckRunner({ disabled }: SelfCheckRunnerProps) {
         </div>
       )}
 
-      {!lastResult && !runSelfCheck.isPending && (
+      {!lastResult && !isRunning && (
         <div className="text-center py-8 text-muted-foreground">
           <p className="text-sm">
             Click "Run Self-Check" to test kernel functionality
