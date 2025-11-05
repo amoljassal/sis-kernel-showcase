@@ -1,8 +1,9 @@
 //! API routing
 
 use super::{
-    autonomy_handlers, graph_handlers, handlers, llm_handlers, logs_handlers, memory_handlers,
-    metrics_handlers, middleware, replay_handlers, sched_handlers, shell_handlers, ws,
+    autonomy_handlers, crash_handlers, graph_handlers, handlers, llm_handlers, logs_handlers,
+    memory_handlers, metrics_handlers, middleware, replay_handlers, sched_handlers,
+    shell_handlers, ws,
 };
 use crate::qemu::{QemuSupervisor, ReplayManager};
 use axum::{
@@ -69,6 +70,10 @@ use utoipa_swagger_ui::SwaggerUi;
         logs_handlers::runs_stop,
         logs_handlers::runs_list,
         logs_handlers::runs_export,
+        crash_handlers::crash_ingest,
+        crash_handlers::crash_list,
+        crash_handlers::incident_create,
+        crash_handlers::incident_list,
     ),
     components(
         schemas(
@@ -139,6 +144,14 @@ use utoipa_swagger_ui::SwaggerUi;
             logs_handlers::StartRunResponse,
             logs_handlers::StopRunResponse,
             logs_handlers::RunHistoryEntry,
+            crash_handlers::CrashLog,
+            crash_handlers::IngestCrashRequest,
+            crash_handlers::IngestCrashResponse,
+            crash_handlers::CrashListResponse,
+            crash_handlers::Incident,
+            crash_handlers::CreateIncidentRequest,
+            crash_handlers::CreateIncidentResponse,
+            crash_handlers::IncidentListResponse,
         )
     ),
     tags(
@@ -154,7 +167,9 @@ use utoipa_swagger_ui::SwaggerUi;
         (name = "scheduling", description = "Workload scheduling and feature management"),
         (name = "llm", description = "LLM model loading and inference (feature-gated)"),
         (name = "logs", description = "Log tailing and filtering"),
-        (name = "runs", description = "Run history and troubleshooting")
+        (name = "runs", description = "Run history and troubleshooting"),
+        (name = "crashes", description = "Crash capture and querying"),
+        (name = "incidents", description = "Incident tracking and management")
     ),
     info(
         title = "SIS Kernel Control Daemon (sisctl)",
@@ -241,6 +256,12 @@ pub fn create_router(supervisor: Arc<QemuSupervisor>, replay_manager: Arc<Replay
         .route("/api/v1/runs/stop", post(logs_handlers::runs_stop))
         .route("/api/v1/runs/list", get(logs_handlers::runs_list))
         .route("/api/v1/runs/:runId/export", get(logs_handlers::runs_export))
+        // Crash capture endpoints
+        .route("/api/v1/crash", post(crash_handlers::crash_ingest))
+        .route("/api/v1/crashes", get(crash_handlers::crash_list))
+        // Incident tracking endpoints
+        .route("/api/v1/incidents", post(crash_handlers::incident_create))
+        .route("/api/v1/incidents", get(crash_handlers::incident_list))
         // WebSocket events
         .route("/events", get(ws::events_handler))
         // State

@@ -1,6 +1,7 @@
 //! REST API and WebSocket handlers
 
 pub mod autonomy_handlers;
+pub mod crash_handlers;
 pub mod graph_handlers;
 pub mod handlers;
 pub mod llm_handlers;
