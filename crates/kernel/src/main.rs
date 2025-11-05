@@ -22,6 +22,8 @@ pub mod process;
 pub mod mm;
 // Virtual File System
 pub mod vfs;
+// Block layer (Phase B)
+pub mod block;
 // Device drivers (Phase A1)
 pub mod drivers;
 // Initial RAM filesystem
