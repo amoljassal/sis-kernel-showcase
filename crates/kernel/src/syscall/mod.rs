@@ -13,9 +13,15 @@ use crate::lib::error::{Errno, Result};
 /// - Return value: x0 (negative for errno)
 pub fn syscall_dispatcher(nr: usize, args: &[u64; 6]) -> isize {
     let result = match nr {
-        // I/O syscalls
+        // File I/O syscalls
+        56 => sys_openat(args[0] as i32, args[1] as *const u8, args[2] as i32, args[3] as u32),
+        57 => sys_close(args[0] as i32),
+        62 => sys_lseek(args[0] as i32, args[1] as i64, args[2] as i32),
         63 => sys_read(args[0] as i32, args[1] as *mut u8, args[2] as usize),
         64 => sys_write(args[0] as i32, args[1] as *const u8, args[2] as usize),
+        78 => sys_readlinkat(args[0] as i32, args[1] as *const u8, args[2] as *mut u8, args[3] as usize),
+        80 => sys_fstat(args[0] as i32, args[1] as *mut u8),
+        61 => sys_getdents64(args[0] as i32, args[1] as *mut u8, args[2] as usize),
 
         // Process management
         93 => sys_exit(args[0] as i32),
@@ -42,40 +48,80 @@ pub fn syscall_dispatcher(nr: usize, args: &[u64; 6]) -> isize {
     }
 }
 
-/// sys_read - Read from file descriptor
-///
-/// Phase A0: Only supports fd 0 (stdin) reading from console
-pub fn sys_read(fd: i32, buf: *mut u8, count: usize) -> Result<isize> {
-    if fd != 0 {
-        return Err(Errno::EBADF); // Only stdin supported
-    }
+/// sys_openat - Open a file (Phase A1: treat as open for absolute paths)
+pub fn sys_openat(dirfd: i32, pathname: *const u8, flags: i32, mode: u32) -> Result<isize> {
+    // For Phase A1, only support absolute paths (dirfd is ignored if path is absolute)
+    let _ = dirfd;
 
-    if buf.is_null() {
+    if pathname.is_null() {
         return Err(Errno::EFAULT);
     }
 
-    if count == 0 {
-        return Ok(0);
-    }
+    // Copy pathname from userspace
+    let path = unsafe {
+        let mut len = 0;
+        while len < 4096 && *pathname.add(len) != 0 {
+            len += 1;
+        }
+        let bytes = core::slice::from_raw_parts(pathname, len);
+        core::str::from_utf8(bytes).map_err(|_| Errno::EINVAL)?
+    };
 
-    // Phase A0: Read from UART/console
-    // For now, return empty read (would block in real implementation)
-    // Full implementation with console buffering in Phase A1
+    // Convert flags to OpenFlags
+    let open_flags = crate::vfs::OpenFlags::from_bits_truncate(flags as u32);
 
-    crate::debug!("sys_read(fd={}, buf={:p}, count={})", fd, buf, count);
+    // Open or create file
+    let file = if open_flags.contains(crate::vfs::OpenFlags::O_CREAT) {
+        // Create new file if doesn't exist
+        match crate::vfs::open(path, open_flags) {
+            Ok(f) => f,
+            Err(Errno::ENOENT) => crate::vfs::create(path, mode, open_flags)?,
+            Err(e) => return Err(e),
+        }
+    } else {
+        crate::vfs::open(path, open_flags)?
+    };
 
-    // Stub: Return 0 (EOF) for now
+    // Get current process and allocate FD
+    let pid = crate::process::current_pid();
+    let mut table = crate::process::get_process_table();
+    let table = table.as_mut().ok_or(Errno::ESRCH)?;
+    let task = table.get_mut(pid).ok_or(Errno::ESRCH)?;
+
+    let fd = task.files.alloc_fd(file)?;
+
+    crate::debug!("sys_open({}) -> fd {}", path, fd);
+
+    Ok(fd as isize)
+}
+
+/// sys_close - Close a file descriptor
+pub fn sys_close(fd: i32) -> Result<isize> {
+    let pid = crate::process::current_pid();
+    let mut table = crate::process::get_process_table();
+    let table = table.as_mut().ok_or(Errno::ESRCH)?;
+    let task = table.get_mut(pid).ok_or(Errno::ESRCH)?;
+
+    task.files.close(fd)?;
+
     Ok(0)
 }
 
-/// sys_write - Write to file descriptor
-///
-/// Phase A0: Only supports fd 1 (stdout) and fd 2 (stderr) writing to console
-pub fn sys_write(fd: i32, buf: *const u8, count: usize) -> Result<isize> {
-    if fd != 1 && fd != 2 {
-        return Err(Errno::EBADF); // Only stdout/stderr supported
-    }
+/// sys_lseek - Reposition file offset
+pub fn sys_lseek(fd: i32, offset: i64, whence: i32) -> Result<isize> {
+    let pid = crate::process::current_pid();
+    let table = crate::process::get_process_table();
+    let table = table.as_ref().ok_or(Errno::ESRCH)?;
+    let task = table.get(pid).ok_or(Errno::ESRCH)?;
 
+    let file = task.files.get(fd)?;
+    let new_offset = file.lseek(offset, whence)?;
+
+    Ok(new_offset as isize)
+}
+
+/// sys_read - Read from file descriptor
+pub fn sys_read(fd: i32, buf: *mut u8, count: usize) -> Result<isize> {
     if buf.is_null() {
         return Err(Errno::EFAULT);
     }
@@ -84,19 +130,157 @@ pub fn sys_write(fd: i32, buf: *const u8, count: usize) -> Result<isize> {
         return Ok(0);
     }
 
-    // Copy data from user space (with validation)
-    let data = unsafe {
-        // Phase A0: Simple pointer access (no full uaccess yet)
-        // In Phase A1, this will use proper copy_from_user
-        core::slice::from_raw_parts(buf, count)
-    };
+    // Get file from FD table
+    let pid = crate::process::current_pid();
+    let table = crate::process::get_process_table();
+    let table = table.as_ref().ok_or(Errno::ESRCH)?;
+    let task = table.get(pid).ok_or(Errno::ESRCH)?;
 
-    // Write to UART/console
-    unsafe {
-        crate::uart::write_bytes(data);
+    let file = task.files.get(fd)?;
+
+    // Create buffer
+    let data = unsafe { core::slice::from_raw_parts_mut(buf, count) };
+
+    // Read from file
+    let n = file.read(data)?;
+
+    Ok(n as isize)
+}
+
+/// sys_write - Write to file descriptor
+pub fn sys_write(fd: i32, buf: *const u8, count: usize) -> Result<isize> {
+    if buf.is_null() {
+        return Err(Errno::EFAULT);
     }
 
-    Ok(count as isize)
+    if count == 0 {
+        return Ok(0);
+    }
+
+    // Get file from FD table
+    let pid = crate::process::current_pid();
+    let table = crate::process::get_process_table();
+    let table = table.as_ref().ok_or(Errno::ESRCH)?;
+    let task = table.get(pid).ok_or(Errno::ESRCH)?;
+
+    let file = task.files.get(fd)?;
+
+    // Create buffer
+    let data = unsafe { core::slice::from_raw_parts(buf, count) };
+
+    // Write to file
+    let n = file.write(data)?;
+
+    Ok(n as isize)
+}
+
+/// sys_fstat - Get file status
+pub fn sys_fstat(fd: i32, statbuf: *mut u8) -> Result<isize> {
+    if statbuf.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // Get file from FD table
+    let pid = crate::process::current_pid();
+    let table = crate::process::get_process_table();
+    let table = table.as_ref().ok_or(Errno::ESRCH)?;
+    let task = table.get(pid).ok_or(Errno::ESRCH)?;
+
+    let file = task.files.get(fd)?;
+    let meta = file.inode.getattr()?;
+
+    // Fill stat structure (simplified for Phase A1)
+    // struct stat is large, we'll fill the important fields
+    let stat = unsafe { core::slice::from_raw_parts_mut(statbuf, 128) };
+    stat.fill(0);
+
+    // Write fields (x86_64/aarch64 stat layout)
+    // st_dev: 8 bytes at offset 0
+    // st_ino: 8 bytes at offset 8
+    // st_mode: 4 bytes at offset 24
+    // st_nlink: 8 bytes at offset 16
+    // st_uid: 4 bytes at offset 28
+    // st_gid: 4 bytes at offset 32
+    // st_size: 8 bytes at offset 48
+
+    unsafe {
+        let p = statbuf as *mut u64;
+        *p.add(1) = meta.ino; // st_ino
+        let pm = statbuf.add(24) as *mut u32;
+        *pm = meta.mode; // st_mode
+        let ps = statbuf.add(48) as *mut u64;
+        *ps = meta.size; // st_size
+    }
+
+    Ok(0)
+}
+
+/// sys_getdents64 - Get directory entries
+pub fn sys_getdents64(fd: i32, dirp: *mut u8, count: usize) -> Result<isize> {
+    if dirp.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // Get file from FD table
+    let pid = crate::process::current_pid();
+    let table = crate::process::get_process_table();
+    let table = table.as_ref().ok_or(Errno::ESRCH)?;
+    let task = table.get(pid).ok_or(Errno::ESRCH)?;
+
+    let file = task.files.get(fd)?;
+
+    // Check if directory
+    if !file.inode.is_dir() {
+        return Err(Errno::ENOTDIR);
+    }
+
+    // Read directory entries
+    let entries = file.inode.readdir()?;
+
+    // Fill linux_dirent64 structures
+    let mut offset = 0usize;
+
+    for entry in entries {
+        // struct linux_dirent64 layout:
+        // u64 d_ino, i64 d_off, u16 d_reclen, u8 d_type, char d_name[]
+        let name_bytes = entry.name.as_bytes();
+        let reclen = ((19 + name_bytes.len() + 1 + 7) & !7) as u16; // Align to 8
+
+        if offset + reclen as usize > count {
+            break; // No more space
+        }
+
+        unsafe {
+            let p = dirp.add(offset);
+            // d_ino
+            *(p as *mut u64) = entry.ino;
+            // d_off (can be 0 for now)
+            *(p.add(8) as *mut i64) = 0;
+            // d_reclen
+            *(p.add(16) as *mut u16) = reclen;
+            // d_type
+            *p.add(18) = match entry.itype {
+                crate::vfs::InodeType::Regular => 8,    // DT_REG
+                crate::vfs::InodeType::Directory => 4,  // DT_DIR
+                crate::vfs::InodeType::CharDevice => 2, // DT_CHR
+                crate::vfs::InodeType::Symlink => 10,   // DT_LNK
+            };
+            // d_name
+            core::ptr::copy_nonoverlapping(name_bytes.as_ptr(), p.add(19), name_bytes.len());
+            *p.add(19 + name_bytes.len()) = 0; // Null terminator
+        }
+
+        offset += reclen as usize;
+    }
+
+    Ok(offset as isize)
+}
+
+/// sys_readlinkat - Read symbolic link (stub for Phase A1)
+pub fn sys_readlinkat(dirfd: i32, pathname: *const u8, buf: *mut u8, bufsiz: usize) -> Result<isize> {
+    let _ = (dirfd, pathname, buf, bufsiz);
+    // For Phase A1, return EINVAL (no symlinks yet)
+    Err(Errno::EINVAL)
 }
 
 /// sys_exit - Terminate current process
