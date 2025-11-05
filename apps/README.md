@@ -409,7 +409,42 @@ pnpm format:check
   - Warning messages for critical changes
   - Responsive two-column layout
 
-## Next Steps (Milestone 7+)
+### Milestone 7 (M7) Deliverables ✅
+
+**Polish & UX Enhancements**
+
+- [x] **Loading States** - Comprehensive loading indicators
+  - LoadingState component with size variants (sm/md/lg)
+  - Full-screen loading overlay option
+  - LoadingSkeleton for content placeholders
+  - LoadingSpinner for inline use
+  - ARIA live regions for screen reader announcements
+  - Smooth animations with Tailwind
+
+- [x] **Empty States** - User-friendly empty data displays
+  - EmptyState component with optional icon
+  - Title, description, and action button support
+  - Centered layout with proper spacing
+  - ARIA role="status" for accessibility
+  - Reusable across all panels
+
+- [x] **Accessibility Utilities** - ARIA and keyboard navigation
+  - Metric value ARIA label generator
+  - Status badge ARIA label helper
+  - Keyboard navigation handler (Enter/Space/Escape/Arrows)
+  - Focus trap for modals
+  - Screen reader announcement utility
+  - Keyboard-friendly components throughout
+
+- [x] **Existing UX Features** - Already implemented
+  - Smooth transitions on all interactive elements
+  - Hover states for buttons and links
+  - Color-coded status indicators
+  - Toast notifications for user feedback
+  - Error boundaries with graceful fallbacks
+  - Responsive design for all screen sizes
+
+## Next Steps (Milestone 8+)
 
 - [x] Replay authoring guide documentation (see docs/guides/REPLAY-AUTHORING-GUIDE.md)
 - [ ] i18n support
