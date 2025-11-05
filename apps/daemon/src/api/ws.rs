@@ -11,7 +11,7 @@ use tracing::{debug, error, info};
 /// WebSocket upgrade handler
 pub async fn events_handler(
     ws: WebSocketUpgrade,
-    State(supervisor): State<Arc<QemuSupervisor>>,
+    State((supervisor, _)): State<(Arc<QemuSupervisor>, Arc<crate::qemu::ReplayManager>)>,
 ) -> Response {
     ws.on_upgrade(|socket| handle_socket(socket, supervisor))
 }

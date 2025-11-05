@@ -93,7 +93,7 @@ pub async fn health() -> Json<HealthResponse> {
     tag = "qemu"
 )]
 pub async fn qemu_run(
-    State(supervisor): State<Arc<QemuSupervisor>>,
+    State((supervisor, _)): State<(Arc<QemuSupervisor>, Arc<crate::qemu::ReplayManager>)>,
     Json(config): Json<QemuConfig>,
 ) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
     supervisor
@@ -121,7 +121,7 @@ pub async fn qemu_run(
     tag = "qemu"
 )]
 pub async fn qemu_stop(
-    State(supervisor): State<Arc<QemuSupervisor>>,
+    State((supervisor, _)): State<(Arc<QemuSupervisor>, Arc<crate::qemu::ReplayManager>)>,
 ) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
     supervisor
         .stop()
@@ -147,7 +147,7 @@ pub async fn qemu_stop(
     tag = "qemu"
 )]
 pub async fn qemu_status(
-    State(supervisor): State<Arc<QemuSupervisor>>,
+    State((supervisor, _)): State<(Arc<QemuSupervisor>, Arc<crate::qemu::ReplayManager>)>,
 ) -> Json<QemuStatus> {
     Json(supervisor.status().await)
 }
