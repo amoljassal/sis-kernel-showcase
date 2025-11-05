@@ -186,6 +186,8 @@ pub struct Task {
     pub children: Vec<Pid>,
     /// Signal queue (pending signals and handlers)
     pub signals: crate::process::signal::SignalQueue,
+    /// Current working directory (Phase A2)
+    pub cwd: String,
 }
 
 impl Task {
@@ -216,6 +218,7 @@ impl Task {
             name: String::from("init"),
             children: Vec::new(),
             signals: crate::process::signal::SignalQueue::new(),
+            cwd: String::from("/"), // Start at root
         }
     }
 
@@ -252,6 +255,7 @@ impl Task {
             name: parent.name.clone(),
             children: Vec::new(),
             signals: parent.signals.clone(), // Inherit signal handlers from parent
+            cwd: parent.cwd.clone(), // Inherit cwd from parent
         }
     }
 

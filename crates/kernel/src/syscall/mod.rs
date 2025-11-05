@@ -74,17 +74,16 @@ pub fn syscall_dispatcher(nr: usize, args: &[u64; 6]) -> isize {
     }
 }
 
-/// sys_openat - Open a file (Phase A1: treat as open for absolute paths)
+/// sys_openat - Open a file (Phase A2: support relative paths with CWD)
 pub fn sys_openat(dirfd: i32, pathname: *const u8, flags: i32, mode: u32) -> Result<isize> {
-    // For Phase A1, only support absolute paths (dirfd is ignored if path is absolute)
-    let _ = dirfd;
+    const AT_FDCWD: i32 = -100;
 
     if pathname.is_null() {
         return Err(Errno::EFAULT);
     }
 
     // Copy pathname from userspace
-    let path = unsafe {
+    let path_str = unsafe {
         let mut len = 0;
         while len < 4096 && *pathname.add(len) != 0 {
             len += 1;
@@ -92,6 +91,35 @@ pub fn sys_openat(dirfd: i32, pathname: *const u8, flags: i32, mode: u32) -> Res
         let bytes = core::slice::from_raw_parts(pathname, len);
         core::str::from_utf8(bytes).map_err(|_| Errno::EINVAL)?
     };
+
+    // Phase A2: Resolve relative paths
+    // Get current task to access CWD
+    let pid = crate::process::current_pid();
+    let table = crate::process::get_process_table();
+    let table = table.as_ref().ok_or(Errno::ESRCH)?;
+    let task = table.get(pid).ok_or(Errno::ESRCH)?;
+
+    // Resolve path (absolute or relative)
+    let path = if path_str.starts_with('/') {
+        // Absolute path - use as-is
+        alloc::string::String::from(path_str)
+    } else {
+        // Relative path
+        if dirfd == AT_FDCWD || dirfd == -1 {
+            // Resolve against current CWD
+            let mut full_path = task.cwd.clone();
+            if !full_path.ends_with('/') {
+                full_path.push('/');
+            }
+            full_path.push_str(path_str);
+            normalize_path(&full_path)
+        } else {
+            // Phase B+: Resolve against directory FD
+            return Err(Errno::ENOTSUP);
+        }
+    };
+
+    drop(table); // Release the reference before continuing
 
     // Convert flags to OpenFlags
     let open_flags = crate::vfs::OpenFlags::from_bits_truncate(flags as u32);
@@ -102,13 +130,13 @@ pub fn sys_openat(dirfd: i32, pathname: *const u8, flags: i32, mode: u32) -> Res
         alloc::sync::Arc::new(crate::vfs::open_ptmx()?)
     } else if open_flags.contains(crate::vfs::OpenFlags::O_CREAT) {
         // Create new file if doesn't exist
-        match crate::vfs::open(path, open_flags) {
+        match crate::vfs::open(&path, open_flags) {
             Ok(f) => f,
-            Err(Errno::ENOENT) => crate::vfs::create(path, mode, open_flags)?,
+            Err(Errno::ENOENT) => crate::vfs::create(&path, mode, open_flags)?,
             Err(e) => return Err(e),
         }
     } else {
-        crate::vfs::open(path, open_flags)?
+        crate::vfs::open(&path, open_flags)?
     };
 
     // Get current process and allocate FD
@@ -813,14 +841,23 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> Result<isize> {
         return Err(Errno::EFAULT);
     }
 
-    // Phase A1: Always return "/" (absolute paths only)
-    let cwd = b"/\0";
-    if size < cwd.len() {
+    // Phase A2: Return actual CWD from task
+    let pid = crate::process::current_pid();
+    let table = crate::process::get_process_table();
+    let table = table.as_ref().ok_or(Errno::ESRCH)?;
+    let task = table.get(pid).ok_or(Errno::ESRCH)?;
+
+    // CWD string + null terminator
+    let cwd_bytes = task.cwd.as_bytes();
+    let total_len = cwd_bytes.len() + 1; // +1 for null terminator
+
+    if size < total_len {
         return Err(Errno::ERANGE);
     }
 
     unsafe {
-        core::ptr::copy_nonoverlapping(cwd.as_ptr(), buf, cwd.len());
+        core::ptr::copy_nonoverlapping(cwd_bytes.as_ptr(), buf, cwd_bytes.len());
+        *buf.add(cwd_bytes.len()) = 0; // Null terminator
     }
 
     Ok(buf as isize)
@@ -842,19 +879,80 @@ pub fn sys_chdir(pathname: *const u8) -> Result<isize> {
         core::str::from_utf8(bytes).map_err(|_| Errno::EINVAL)?
     };
 
-    // Phase A1: Verify path exists but don't actually change CWD
-    // (all paths must be absolute in A1)
-    let root = crate::vfs::get_root().ok_or(Errno::ENOENT)?;
-    let inode = crate::vfs::path_lookup(&root, path)?;
+    // Phase A2: Resolve path and update CWD
+    // For absolute paths, verify they exist
+    // For relative paths, resolve against current CWD
+    let pid = crate::process::current_pid();
+    let mut table = crate::process::get_process_table();
+    let table = table.as_mut().ok_or(Errno::ESRCH)?;
+    let task = table.get_mut(pid).ok_or(Errno::ESRCH)?;
 
-    // Verify it's a directory
-    let meta = inode.getattr()?;
-    if (meta.mode & crate::vfs::S_IFMT) != crate::vfs::S_IFDIR {
-        return Err(Errno::ENOTDIR);
+    // Resolve path (handle both absolute and relative)
+    let new_cwd = if path.starts_with('/') {
+        // Absolute path - verify it exists
+        let root = crate::vfs::get_root().ok_or(Errno::ENOENT)?;
+        let inode = crate::vfs::path_lookup(&root, path)?;
+
+        // Verify it's a directory
+        let meta = inode.getattr()?;
+        if (meta.mode & crate::vfs::S_IFMT) != crate::vfs::S_IFDIR {
+            return Err(Errno::ENOTDIR);
+        }
+
+        path.to_string()
+    } else {
+        // Relative path - resolve against current CWD
+        let mut new_path = task.cwd.clone();
+        if !new_path.ends_with('/') {
+            new_path.push('/');
+        }
+        new_path.push_str(path);
+
+        // Normalize path (remove ./ and ../)
+        // For Phase A2, simplified normalization
+        let normalized = normalize_path(&new_path);
+
+        // Verify it exists
+        let root = crate::vfs::get_root().ok_or(Errno::ENOENT)?;
+        let inode = crate::vfs::path_lookup(&root, &normalized)?;
+
+        let meta = inode.getattr()?;
+        if (meta.mode & crate::vfs::S_IFMT) != crate::vfs::S_IFDIR {
+            return Err(Errno::ENOTDIR);
+        }
+
+        normalized
+    };
+
+    // Update task CWD
+    task.cwd = new_cwd;
+
+    Ok(0)
+}
+
+/// Normalize a path by resolving . and .. components
+fn normalize_path(path: &str) -> String {
+    let mut components = Vec::new();
+
+    for component in path.split('/') {
+        match component {
+            "" | "." => continue, // Skip empty and current directory
+            ".." => {
+                // Go up one level (unless at root)
+                if components.len() > 0 {
+                    components.pop();
+                }
+            }
+            c => components.push(c),
+        }
     }
 
-    // TODO: Phase A2 - actually store CWD in task
-    Ok(0)
+    // Build normalized path
+    if components.is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{}", components.join("/"))
+    }
 }
 
 /// sys_ioctl - I/O control operations
