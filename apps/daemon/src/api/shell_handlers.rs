@@ -8,11 +8,8 @@ use std::sync::Arc;
 use tracing::debug;
 use utoipa::ToSchema;
 
-/// Error response
-#[derive(Debug, serde::Serialize, ToSchema)]
-pub struct ErrorResponse {
-    pub error: String,
-}
+// Re-export problem+json ErrorResponse from handlers
+pub use super::handlers::ErrorResponse;
 
 /// Execute a shell command
 #[utoipa::path(
@@ -49,10 +46,7 @@ pub async fn shell_exec(
                 StatusCode::INTERNAL_SERVER_ERROR
             };
 
-            Err((
-                status_code,
-                Json(ErrorResponse { error: error_msg }),
-            ))
+            Err((status_code, Json(ErrorResponse::new(status_code, error_msg))))
         }
     }
 }
@@ -123,10 +117,7 @@ pub async fn shell_selfcheck(
                 StatusCode::INTERNAL_SERVER_ERROR
             };
 
-            Err((
-                status_code,
-                Json(ErrorResponse { error: error_msg }),
-            ))
+            Err((status_code, Json(ErrorResponse::new(status_code, error_msg))))
         }
     }
 }

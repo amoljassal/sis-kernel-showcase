@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 const MAX_EVENT_SUBSCRIBERS: usize = 100;
 const MAX_PARSED_EVENT_BUFFER: usize = 1000;
+const MAX_OUTPUT_LINES: u64 = 50_000; // Backpressure: cap at 50k lines
 
 /// Event broadcast to subscribers
 #[derive(Debug, Clone, serde::Serialize)]
@@ -133,6 +134,7 @@ impl QemuSupervisor {
     }
 
     /// Start QEMU with given configuration
+    #[tracing::instrument(skip(self, config), fields(features = ?config.features, qemu_pid = tracing::field::Empty))]
     pub async fn run(&self, config: QemuConfig) -> Result<()> {
         let mut state = self.state.write().await;
 
@@ -146,20 +148,23 @@ impl QemuSupervisor {
         // Build environment variables
         let mut env_vars = config.env.clone();
 
-        // Set SIS_FEATURES if features are specified
+        // Set SIS_FEATURES if features are specified (or from environment)
         if !config.features.is_empty() {
             env_vars.insert("SIS_FEATURES".to_string(), config.features.join(","));
+        } else if let Ok(env_features) = std::env::var("SIS_FEATURES") {
+            env_vars.insert("SIS_FEATURES".to_string(), env_features);
         }
 
         // Default to bringup mode
         env_vars.entry("BRINGUP".to_string()).or_insert("1".to_string());
 
-        // Find uefi_run.sh script
-        let script_path = config
-            .working_dir
-            .as_ref()
-            .map(|d| format!("{}/scripts/uefi_run.sh", d))
-            .unwrap_or_else(|| "./scripts/uefi_run.sh".to_string());
+        // Find uefi_run.sh script (allow environment override)
+        let script_path = std::env::var("SIS_RUN_SCRIPT").ok().or_else(|| {
+            config
+                .working_dir
+                .as_ref()
+                .map(|d| format!("{}/scripts/uefi_run.sh", d))
+        }).unwrap_or_else(|| "./scripts/uefi_run.sh".to_string());
 
         // Launch QEMU via uefi_run.sh
         let mut cmd = Command::new("bash");
@@ -178,6 +183,7 @@ impl QemuSupervisor {
 
         let pid = child.id();
         info!("QEMU started with PID: {:?}", pid);
+        tracing::Span::current().record("qemu_pid", pid.map(|p| p.to_string()).unwrap_or_default());
 
         // Capture stdin, stdout and stderr
         let stdin = child.stdin.take().context("Failed to capture stdin")?;
@@ -279,8 +285,8 @@ impl QemuSupervisor {
             let mut parser = LineParser::new();
 
             while let Ok(Some(line)) = lines.next_line().await {
-                // Update lines processed
-                {
+                // Check backpressure limit
+                let lines_processed = {
                     let mut s = state.write().await;
                     s.lines_processed += 1;
 
@@ -292,6 +298,17 @@ impl QemuSupervisor {
                             timestamp: chrono::Utc::now(),
                         });
                     }
+
+                    s.lines_processed
+                };
+
+                // Apply backpressure: stop processing if limit exceeded
+                if lines_processed > MAX_OUTPUT_LINES {
+                    warn!(
+                        "Output line limit reached ({} lines), dropping further output",
+                        MAX_OUTPUT_LINES
+                    );
+                    break;
                 }
 
                 // Emit raw line event (for terminal display)
@@ -382,6 +399,7 @@ impl QemuSupervisor {
     }
 
     /// Execute a shell command
+    #[tracing::instrument(skip(self), fields(command = %request.command, timeout_ms = request.timeout_ms))]
     pub async fn execute_command(&self, request: ShellCommandRequest) -> Result<ShellCommandResponse> {
         // Check if busy (e.g., running self-check)
         if self.busy.load(Ordering::SeqCst) {
@@ -407,6 +425,7 @@ impl QemuSupervisor {
     }
 
     /// Run self-check tests
+    #[tracing::instrument(skip(self))]
     pub async fn run_self_check(&self) -> Result<ShellCommandResponse> {
         // Set busy flag
         if self.busy.swap(true, Ordering::SeqCst) {
