@@ -49,8 +49,36 @@ export interface MetricEvent {
 }
 
 export interface ParsedEvent {
-  type: 'metric' | 'marker' | 'banner' | 'shell';
+  type: 'metric' | 'marker' | 'banner' | 'shell' | 'prompt' | 'test_result';
   [key: string]: any;
+}
+
+export interface ShellCommandRequest {
+  command: string;
+  timeout_ms?: number;
+}
+
+export interface ShellCommandResponse {
+  command: string;
+  output: string[];
+  success: boolean;
+  error?: string;
+  execution_time_ms: number;
+}
+
+export interface TestResultEntry {
+  name: string;
+  passed: boolean;
+  timestamp: number;
+}
+
+export interface SelfCheckResponse {
+  tests: TestResultEntry[];
+  total: number;
+  passed: number;
+  failed: number;
+  success: boolean;
+  execution_time_ms: number;
 }
 
 // API methods
@@ -65,6 +93,23 @@ export const qemuApi = {
 
   async status(): Promise<QemuStatus> {
     const response = await api.get<QemuStatus>('/api/v1/qemu/status');
+    return response.data;
+  },
+};
+
+export const shellApi = {
+  async exec(request: ShellCommandRequest): Promise<ShellCommandResponse> {
+    const response = await api.post<ShellCommandResponse>(
+      '/api/v1/shell/exec',
+      request
+    );
+    return response.data;
+  },
+
+  async selfcheck(): Promise<SelfCheckResponse> {
+    const response = await api.post<SelfCheckResponse>(
+      '/api/v1/shell/selfcheck'
+    );
     return response.data;
   },
 };

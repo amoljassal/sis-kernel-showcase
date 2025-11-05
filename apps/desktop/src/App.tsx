@@ -13,6 +13,8 @@ import { Terminal } from './components/Terminal';
 import { BootMarkers } from './components/BootMarkers';
 import { QemuProfileSelector } from './components/QemuProfileSelector';
 import { MetricsSparkline } from './components/MetricsSparkline';
+import { ShellCommandInput } from './components/ShellCommandInput';
+import { SelfCheckRunner } from './components/SelfCheckRunner';
 import { AlertCircle, Activity, Terminal as TerminalIcon } from 'lucide-react';
 import './App.css';
 
@@ -187,6 +189,14 @@ function App() {
               />
 
               <BootMarkers markers={bootMarkers} />
+
+              <ShellCommandInput
+                disabled={currentState !== QemuState.Running}
+              />
+
+              <SelfCheckRunner
+                disabled={currentState !== QemuState.Running}
+              />
             </div>
 
             {/* Middle Column - Terminal */}

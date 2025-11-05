@@ -84,6 +84,14 @@ impl BootMarker {
     }
 }
 
+/// Test result marker from self_check
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum TestResult {
+    Pass,
+    Fail,
+}
+
 /// Parsed event from kernel output
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -113,11 +121,28 @@ pub enum ParsedEvent {
         #[serde(with = "chrono::serde::ts_milliseconds")]
         timestamp: chrono::DateTime<chrono::Utc>,
     },
+    /// Shell prompt detected (sis>)
+    Prompt {
+        #[serde(with = "chrono::serde::ts_milliseconds")]
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
+    /// Test result (PASS/FAIL from self_check)
+    TestResult {
+        test_name: String,
+        result: TestResult,
+        #[serde(with = "chrono::serde::ts_milliseconds")]
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
 }
 
 // Regex patterns (compiled once)
 static METRIC_PATTERN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"METRIC\s+([a-zA-Z_][a-zA-Z0-9_]*)=([0-9.eE+-]+)").unwrap());
+
+static PROMPT_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"^sis>\s*$").unwrap());
+
+static TEST_RESULT_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\[(PASS|FAIL)\]\s+(.+)").unwrap());
 
 /// Line parser for SIS kernel UART output
 #[derive(Debug)]
@@ -148,12 +173,34 @@ impl LineParser {
 
         let timestamp = chrono::Utc::now();
 
+        // Check for shell prompt (sis>)
+        if PROMPT_PATTERN.is_match(line) {
+            self.shell_active = true;
+            return Some(ParsedEvent::Prompt { timestamp });
+        }
+
         // Check for boot markers first (highest priority)
         if let Some(marker) = BootMarker::from_line(line) {
             if marker == BootMarker::ShellReady {
                 self.shell_active = true;
             }
             return Some(ParsedEvent::Marker { marker, timestamp });
+        }
+
+        // Check for test results [PASS]/[FAIL]
+        if let Some(captures) = TEST_RESULT_PATTERN.captures(line) {
+            let result_str = captures.get(1)?.as_str();
+            let test_name = captures.get(2)?.as_str().to_string();
+            let result = match result_str {
+                "PASS" => TestResult::Pass,
+                "FAIL" => TestResult::Fail,
+                _ => return None,
+            };
+            return Some(ParsedEvent::TestResult {
+                test_name,
+                result,
+                timestamp,
+            });
         }
 
         // Check for METRIC lines
@@ -181,6 +228,11 @@ impl LineParser {
             text: line.to_string(),
             timestamp,
         })
+    }
+
+    /// Check if shell is ready for commands
+    pub fn is_shell_ready(&self) -> bool {
+        self.shell_active
     }
 
     /// Parse multiple metrics from a line (supports multiple METRIC entries)
