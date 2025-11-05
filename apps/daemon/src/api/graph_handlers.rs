@@ -3,7 +3,10 @@
 //! Wraps `graphctl` shell commands with REST API.
 
 use super::handlers::{exec_and_parse, ErrorResponse};
-use crate::qemu::{QemuSupervisor, ReplayManager};
+use crate::qemu::{
+    GraphChannel as EventGraphChannel, GraphOperator as EventGraphOperator,
+    GraphOperatorStats, GraphStateData, QemuEvent, QemuSupervisor, ReplayManager,
+};
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -175,10 +178,19 @@ pub struct ExportGraphResponse {
 pub async fn graph_create(
     State((supervisor, _)): State<(Arc<QemuSupervisor>, Arc<ReplayManager>)>,
 ) -> Response {
-    exec_and_parse::<CreateGraphResponse>(&supervisor, "graphctl create --json".to_string())
+    match exec_and_parse::<CreateGraphResponse>(&supervisor, "graphctl create --json".to_string())
         .await
-        .map(|resp| Json(resp).into_response())
-        .unwrap_or_else(|r| r)
+    {
+        Ok(resp) => {
+            // Emit GraphState event
+            let graph_id = resp.graph_id.clone();
+            tokio::spawn(async move {
+                emit_graph_state_event(&supervisor, graph_id).await;
+            });
+            Json(resp).into_response()
+        }
+        Err(r) => r,
+    }
 }
 
 /// Add a channel to a graph
@@ -201,10 +213,18 @@ pub async fn graph_add_channel(
         "graphctl add-channel --graph {} --cap {} --json",
         req.graph_id, req.cap
     );
-    exec_and_parse::<AddChannelResponse>(&supervisor, cmd)
-        .await
-        .map(|resp| Json(resp).into_response())
-        .unwrap_or_else(|r| r)
+    let graph_id = req.graph_id.clone();
+    match exec_and_parse::<AddChannelResponse>(&supervisor, cmd).await {
+        Ok(resp) => {
+            // Emit GraphState event
+            let supervisor_clone = Arc::clone(&supervisor);
+            tokio::spawn(async move {
+                emit_graph_state_event(&supervisor_clone, graph_id).await;
+            });
+            Json(resp).into_response()
+        }
+        Err(r) => r,
+    }
 }
 
 /// Add an operator to a graph
@@ -249,10 +269,18 @@ pub async fn graph_add_operator(
 
     cmd.push_str(" --json");
 
-    exec_and_parse::<AddOperatorResponse>(&supervisor, cmd)
-        .await
-        .map(|resp| Json(resp).into_response())
-        .unwrap_or_else(|r| r)
+    let graph_id = req.graph_id.clone();
+    match exec_and_parse::<AddOperatorResponse>(&supervisor, cmd).await {
+        Ok(resp) => {
+            // Emit GraphState event
+            let supervisor_clone = Arc::clone(&supervisor);
+            tokio::spawn(async move {
+                emit_graph_state_event(&supervisor_clone, graph_id).await;
+            });
+            Json(resp).into_response()
+        }
+        Err(r) => r,
+    }
 }
 
 /// Start a graph execution
@@ -276,10 +304,18 @@ pub async fn graph_start(
         "graphctl start --graph {} --steps {} --json",
         req.graph_id, req.steps
     );
-    exec_and_parse::<StartGraphResponse>(&supervisor, cmd)
-        .await
-        .map(|resp| Json(resp).into_response())
-        .unwrap_or_else(|r| r)
+    let graph_id = req.graph_id.clone();
+    match exec_and_parse::<StartGraphResponse>(&supervisor, cmd).await {
+        Ok(resp) => {
+            // Emit GraphState event
+            let supervisor_clone = Arc::clone(&supervisor);
+            tokio::spawn(async move {
+                emit_graph_state_event(&supervisor_clone, graph_id).await;
+            });
+            Json(resp).into_response()
+        }
+        Err(r) => r,
+    }
 }
 
 /// Predict operator performance
@@ -309,6 +345,7 @@ pub async fn graph_predict(
 
     cmd.push_str(" --json");
 
+    // Predict doesn't have graphId in request, so we don't emit event
     exec_and_parse::<PredictResponse>(&supervisor, cmd)
         .await
         .map(|resp| Json(resp).into_response())
@@ -335,6 +372,7 @@ pub async fn graph_feedback(
         "graphctl feedback --op {} --verdict {} --json",
         req.op_id, req.verdict
     );
+    // Feedback doesn't have graphId in request, so we don't emit event
     exec_and_parse::<FeedbackResponse>(&supervisor, cmd)
         .await
         .map(|resp| Json(resp).into_response())
@@ -390,4 +428,51 @@ pub async fn graph_export(
         .await
         .map(|resp| Json(resp).into_response())
         .unwrap_or_else(|r| r)
+}
+
+// ============================================================================
+// Event Emission Helpers
+// ============================================================================
+
+/// Emit GraphState event after a mutation
+async fn emit_graph_state_event(supervisor: &Arc<QemuSupervisor>, graph_id: String) {
+    // Fetch current graph state
+    let cmd = format!("graphctl state --graph {} --json", graph_id);
+    if let Ok(state) = exec_and_parse::<GraphState>(supervisor, cmd).await {
+        // Convert REST types to event types
+        let operators = state
+            .operators
+            .into_iter()
+            .map(|op| EventGraphOperator {
+                id: op.id,
+                name: None,
+                prio: op.prio.map(|p| p as u32),
+                stage: op.stage,
+                stats: None, // TODO: Add stats if available
+            })
+            .collect();
+
+        let channels = state
+            .channels
+            .into_iter()
+            .map(|ch| EventGraphChannel {
+                id: ch.id,
+                cap: ch.cap,
+                depth: ch.depth,
+            })
+            .collect();
+
+        let event_data = GraphStateData {
+            operators,
+            channels,
+        };
+
+        let event = QemuEvent::GraphState {
+            graph_id,
+            state: event_data,
+            ts: chrono::Utc::now().timestamp_millis(),
+        };
+
+        supervisor.broadcast_event(event);
+    }
 }

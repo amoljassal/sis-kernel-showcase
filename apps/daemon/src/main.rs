@@ -14,6 +14,7 @@ mod config;
 mod metrics;
 mod parser;
 mod qemu;
+mod tracing_layer;
 
 use anyhow::Result;
 use std::net::SocketAddr;
@@ -23,7 +24,10 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing with structured fields
+    // Create QEMU supervisor first (needed for tracing layer)
+    let supervisor = Arc::new(qemu::QemuSupervisor::new());
+
+    // Initialize tracing with structured fields and WebSocket layer
     tracing_subscriber::registry()
         .with(
             fmt::layer()
@@ -31,6 +35,7 @@ async fn main() -> Result<()> {
                 .with_thread_ids(true)
                 .with_thread_names(true),
         )
+        .with(tracing_layer::WebSocketLayer::new(Arc::clone(&supervisor)))
         .with(
             EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| EnvFilter::new("info,sisctl=debug")),
@@ -46,9 +51,6 @@ async fn main() -> Result<()> {
         .parse::<SocketAddr>()?;
 
     info!("Binding to {}", bind_addr);
-
-    // Create QEMU supervisor
-    let supervisor = Arc::new(qemu::QemuSupervisor::new());
 
     // Create replay manager
     let replay_manager = Arc::new(qemu::ReplayManager::new());
