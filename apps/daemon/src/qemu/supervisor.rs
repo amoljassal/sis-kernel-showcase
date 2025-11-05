@@ -3,6 +3,7 @@
 use super::shell::{ShellCommandRequest, ShellCommandResponse};
 use super::shell_executor::ShellExecutor;
 use super::types::{QemuConfig, QemuState, QemuStatus};
+use crate::metrics::MetricsStore;
 use crate::parser::{BootStatus, LineParser, ParsedEvent};
 use anyhow::{Context, Result};
 use std::process::Stdio;
@@ -122,12 +123,23 @@ pub struct QemuSupervisor {
     busy: Arc<AtomicBool>,
     busy_reason: Arc<Mutex<Option<BusyReason>>>,
     cancel_self_check: Arc<AtomicBool>,
+    metrics: Arc<MetricsStore>,
 }
 
 impl QemuSupervisor {
     /// Create a new QEMU supervisor
     pub fn new() -> Self {
         let (event_tx, _) = broadcast::channel(MAX_EVENT_SUBSCRIBERS);
+
+        // Load metrics config from daemon config
+        let daemon_config = crate::config::DaemonConfig::from_env();
+        let metrics_config = crate::metrics::MetricsConfig {
+            high_res_retention_ms: daemon_config.metrics_high_res_retention_ms,
+            downsample_retention_ms: daemon_config.metrics_downsample_retention_ms,
+            cardinality_limit: daemon_config.metrics_cardinality_limit,
+            memory_budget_bytes: 64 * 1024 * 1024, // 64MB
+        };
+
         Self {
             state: Arc::new(RwLock::new(SupervisorState::default())),
             event_tx,
@@ -135,12 +147,18 @@ impl QemuSupervisor {
             busy: Arc::new(AtomicBool::new(false)),
             busy_reason: Arc::new(Mutex::new(None)),
             cancel_self_check: Arc::new(AtomicBool::new(false)),
+            metrics: Arc::new(MetricsStore::new(metrics_config)),
         }
     }
 
     /// Subscribe to QEMU events
     pub fn subscribe(&self) -> broadcast::Receiver<QemuEvent> {
         self.event_tx.subscribe()
+    }
+
+    /// Get metrics store reference
+    pub fn metrics(&self) -> Arc<MetricsStore> {
+        Arc::clone(&self.metrics)
     }
 
     /// Get current status
@@ -326,6 +344,7 @@ impl QemuSupervisor {
     ) {
         let state = Arc::clone(&self.state);
         let event_tx = self.event_tx.clone();
+        let metrics = Arc::clone(&self.metrics);
 
         tokio::spawn(async move {
             let reader = BufReader::new(output);
@@ -371,6 +390,15 @@ impl QemuSupervisor {
                     if let ParsedEvent::Marker { marker, .. } = &event {
                         let mut s = state.write().await;
                         s.boot_status.mark_seen(*marker);
+                    }
+
+                    // Record metric if it's a metric event
+                    if let ParsedEvent::Metric { name, value, timestamp } = &event {
+                        let ts_ms = timestamp.timestamp_millis();
+                        if let Err(e) = metrics.record(name.clone(), *value, ts_ms).await {
+                            // Log but don't fail - cardinality limit may be exceeded
+                            debug!("Failed to record metric {}: {}", name, e);
+                        }
                     }
 
                     // Emit parsed event

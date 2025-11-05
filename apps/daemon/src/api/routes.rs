@@ -1,6 +1,6 @@
 //! API routing
 
-use super::{handlers, middleware, replay_handlers, shell_handlers, ws};
+use super::{handlers, metrics_handlers, middleware, replay_handlers, shell_handlers, ws};
 use crate::qemu::{QemuSupervisor, ReplayManager};
 use axum::{
     middleware as axum_middleware,
@@ -27,6 +27,8 @@ use utoipa_swagger_ui::SwaggerUi;
         replay_handlers::replay_start,
         replay_handlers::replay_stop,
         replay_handlers::replay_status,
+        metrics_handlers::list_streams,
+        metrics_handlers::query_series,
     ),
     components(
         schemas(
@@ -40,6 +42,10 @@ use utoipa_swagger_ui::SwaggerUi;
             crate::qemu::ShellCommandResponse,
             crate::qemu::SelfCheckResponse,
             crate::qemu::TestResultEntry,
+            crate::metrics::MetricPoint,
+            crate::metrics::SeriesStats,
+            crate::metrics::store::SeriesMetadata,
+            crate::metrics::store::QueryResult,
             handlers::ErrorResponse,
             handlers::SuccessResponse,
             handlers::HealthResponse,
@@ -52,7 +58,8 @@ use utoipa_swagger_ui::SwaggerUi;
         (name = "config", description = "Configuration endpoints"),
         (name = "qemu", description = "QEMU control endpoints"),
         (name = "shell", description = "Shell command execution"),
-        (name = "replay", description = "Replay log files for offline testing")
+        (name = "replay", description = "Replay log files for offline testing"),
+        (name = "metrics", description = "Metrics collection and querying")
     ),
     info(
         title = "SIS Kernel Control Daemon (sisctl)",
@@ -93,6 +100,9 @@ pub fn create_router(supervisor: Arc<QemuSupervisor>, replay_manager: Arc<Replay
         .route("/api/v1/replay", post(replay_handlers::replay_start))
         .route("/api/v1/replay/stop", post(replay_handlers::replay_stop))
         .route("/api/v1/replay/status", get(replay_handlers::replay_status))
+        // Metrics endpoints
+        .route("/api/v1/metrics/streams", get(metrics_handlers::list_streams))
+        .route("/api/v1/metrics/query", get(metrics_handlers::query_series))
         // WebSocket events
         .route("/events", get(ws::events_handler))
         // State

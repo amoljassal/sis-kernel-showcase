@@ -1,6 +1,7 @@
 //! REST API and WebSocket handlers
 
 pub mod handlers;
+pub mod metrics_handlers;
 pub mod middleware;
 pub mod replay_handlers;
 pub mod routes;
