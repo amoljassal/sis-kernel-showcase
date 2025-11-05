@@ -47,7 +47,7 @@ impl Default for Credentials {
 /// Memory management structure (stub for now, expanded in mm module)
 #[derive(Debug)]
 pub struct MemoryManager {
-    /// Page table base address (TTBR0_EL0)
+    /// Page table base address (TTBR0_EL1) - physical address
     pub page_table: u64,
     /// Break pointer for heap (brk syscall)
     pub brk: u64,
@@ -57,6 +57,20 @@ pub struct MemoryManager {
     pub stack_top: u64,
     /// List of VMAs (will be implemented in mm/address_space.rs)
     pub vmas: Vec<Vma>,
+}
+
+impl MemoryManager {
+    /// Allocate a new user address space with page table
+    pub fn new_user() -> Result<Self, KernelError> {
+        let page_table = crate::mm::alloc_user_page_table()?;
+        Ok(Self {
+            page_table,
+            brk: crate::mm::USER_HEAP_START,
+            brk_start: crate::mm::USER_HEAP_START,
+            stack_top: crate::mm::USER_STACK_TOP,
+            vmas: Vec::new(),
+        })
+    }
 }
 
 /// Virtual Memory Area
@@ -171,18 +185,14 @@ pub struct Task {
 impl Task {
     /// Create a new task (for PID 1 / init)
     pub fn new_init() -> Self {
+        let mm = MemoryManager::new_user().expect("Failed to allocate page table for init");
+
         Self {
             pid: 1,
             ppid: 0,
             state: ProcessState::Running,
             exit_code: 0,
-            mm: MemoryManager {
-                page_table: 0,
-                brk: 0,
-                brk_start: 0,
-                stack_top: 0x0000_7FFF_FFFF_F000, // User stack top
-                vmas: Vec::new(),
-            },
+            mm,
             files: FileTable::new(),
             cred: Credentials::default(),
             trap_frame: TrapFrame::default(),
