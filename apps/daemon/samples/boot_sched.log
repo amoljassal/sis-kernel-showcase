@@ -1,0 +1,26 @@
+[KERNEL] [    0.000000] SIS Kernel starting...
+[MARKER] boot:start
+[MARKER] boot:memory_init
+[KERNEL] [    0.100000] Memory subsystem initialized
+[MARKER] boot:sched_ready
+[KERNEL] [    0.200000] Scheduling subsystem ready
+[KERNEL] [    0.250000] Workload detected: init (PID 1, PRIO 100, CPU 0)
+[KERNEL] [    0.300000] Workload detected: worker-1 (PID 1001, PRIO 80, CPU 0)
+[KERNEL] [    0.350000] Workload detected: worker-2 (PID 1002, PRIO 75, CPU 1)
+[KERNEL] [    0.400000] Workload detected: worker-3 (PID 1003, PRIO 70, CPU 2)
+[WS:sched_event] {"type":"sched_event","event":"prio_change","payload":{"pid":1001,"prio":90},"ts":1699200450000}
+[KERNEL] [    0.450000] Priority change: PID 1001 -> 90
+[WS:sched_event] {"type":"sched_event","event":"affinity_change","payload":{"pid":1002,"cpuMask":"0x3"},"ts":1699200500000}
+[KERNEL] [    0.500000] Affinity change: PID 1002 -> CPUs 0,1
+[WS:sched_event] {"type":"sched_event","event":"feature_toggle","payload":{"name":"autonomous-scheduling","enable":true},"ts":1699200550000}
+[KERNEL] [    0.550000] Feature enabled: autonomous-scheduling
+[KERNEL] [    0.600000] Circuit breaker: Closed (0/5 failures)
+[WS:sched_event] {"type":"sched_event","event":"prio_change","payload":{"pid":1003,"prio":85},"ts":1699200650000}
+[KERNEL] [    0.650000] Priority change: PID 1003 -> 85
+[MARKER] boot:sched_active
+[KERNEL] [    0.700000] Scheduling autonomous mode active
+[WS:sched_event] {"type":"sched_event","event":"feature_toggle","payload":{"name":"shadow-mode","enable":true},"ts":1699200750000}
+[KERNEL] [    0.750000] Feature enabled: shadow-mode
+[KERNEL] [    0.800000] Circuit breaker: Closed (0/5 failures)
+[MARKER] boot:complete
+[KERNEL] [    1.000000] Boot complete with scheduling subsystem
