@@ -269,6 +269,11 @@ mod bringup {
         print_number(stats.total_pages);
         super::uart_print(b" pages)\n");
 
+        // Initialize process table before VFS (needed for syscalls)
+        super::uart_print(b"PROCESS: INIT TABLE\n");
+        crate::process::init_process_table();
+        super::uart_print(b"PROCESS: TABLE READY\n");
+
         // Initialize VFS
         super::uart_print(b"VFS: INIT\n");
         crate::vfs::init().expect("Failed to initialize VFS");
