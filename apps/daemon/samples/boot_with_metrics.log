@@ -1,0 +1,31 @@
+KERNEL(U)
+[INFO] Stack initialized
+STACK OK
+METRIC boot_time_ns=1234567
+[INFO] Configuring MMU control register
+MMU: SCTLR
+METRIC mmu_setup_ns=234567
+[INFO] MMU enabled successfully
+MMU ON
+METRIC mmu_enable_ns=345678
+[INFO] UART driver ready
+UART: READY
+METRIC uart_init_ns=123456
+[INFO] GIC initialization complete
+GIC: INIT
+METRIC gic_init_ns=456789
+[INFO] Exception vectors installed
+VECTORS OK
+METRIC vector_setup_ns=111222
+[INFO] Kernel initialization complete
+METRIC total_boot_ns=2567890
+LAUNCHING SHELL
+sis>
+help
+Available commands:
+  help        - Show this help
+  info        - System information
+  autoctl     - Auto-control subsystem
+  memctl      - Memory control subsystem
+  self_check  - Run self-check tests
+sis>
