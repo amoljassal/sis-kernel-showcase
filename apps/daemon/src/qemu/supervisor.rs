@@ -77,6 +77,9 @@ struct SupervisorState {
     events_emitted: u64,
     boot_status: BootStatus,
     last_error: Option<String>,
+    run_id: Option<String>,
+    transport: String,
+    profile: String,
 }
 
 impl Default for SupervisorState {
@@ -90,6 +93,9 @@ impl Default for SupervisorState {
             events_emitted: 0,
             boot_status: BootStatus::new(),
             last_error: None,
+            run_id: None,
+            transport: "none".to_string(),
+            profile: std::env::var("SIS_PROFILE").unwrap_or_else(|_| "default".to_string()),
         }
     }
 }
@@ -150,7 +156,16 @@ impl QemuSupervisor {
     }
 
     /// Start QEMU with given configuration
-    #[tracing::instrument(skip(self, config), fields(features = ?config.features, qemu_pid = tracing::field::Empty))]
+    #[tracing::instrument(
+        skip(self, config),
+        fields(
+            run_id = tracing::field::Empty,
+            transport = "qemu",
+            qemu_pid = tracing::field::Empty,
+            features = ?config.features,
+            profile = tracing::field::Empty,
+        )
+    )]
     pub async fn run(&self, config: QemuConfig) -> Result<()> {
         let mut state = self.state.write().await;
 
@@ -158,6 +173,15 @@ impl QemuSupervisor {
         if state.state != QemuState::Idle {
             anyhow::bail!("QEMU already running or in transition");
         }
+
+        // Generate run_id and set transport
+        let run_id = uuid::Uuid::new_v4().to_string();
+        state.run_id = Some(run_id.clone());
+        state.transport = "qemu".to_string();
+
+        // Record run_id and profile in span
+        tracing::Span::current().record("run_id", &run_id);
+        tracing::Span::current().record("profile", &state.profile);
 
         info!("Starting QEMU with features: {:?}", config.features);
 
@@ -272,6 +296,8 @@ impl QemuSupervisor {
         state.state = QemuState::Idle;
         state.config = None;
         state.start_time = None;
+        state.run_id = None;
+        state.transport = "none".to_string();
 
         // Emit final state change
         let _ = self.event_tx.send(QemuEvent::StateChanged {
@@ -429,8 +455,27 @@ impl QemuSupervisor {
     }
 
     /// Execute a shell command
-    #[tracing::instrument(skip(self), fields(command = %request.command, timeout_ms = request.timeout_ms))]
+    #[tracing::instrument(
+        skip(self),
+        fields(
+            command = %request.command,
+            timeout_ms = request.timeout_ms,
+            run_id = tracing::field::Empty,
+            transport = tracing::field::Empty,
+            profile = tracing::field::Empty,
+        )
+    )]
     pub async fn execute_command(&self, request: ShellCommandRequest) -> Result<ShellCommandResponse> {
+        // Record context from state
+        {
+            let state = self.state.read().await;
+            if let Some(ref run_id) = state.run_id {
+                tracing::Span::current().record("run_id", run_id);
+            }
+            tracing::Span::current().record("transport", &state.transport);
+            tracing::Span::current().record("profile", &state.profile);
+        }
+
         // Check if busy (e.g., running self-check)
         if let Some(reason) = self.check_busy().await {
             anyhow::bail!("System busy: {}", reason);
@@ -473,8 +518,25 @@ impl QemuSupervisor {
     }
 
     /// Run self-check tests
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(
+        skip(self),
+        fields(
+            run_id = tracing::field::Empty,
+            transport = tracing::field::Empty,
+            profile = tracing::field::Empty,
+        )
+    )]
     pub async fn run_self_check(&self) -> Result<ShellCommandResponse> {
+        // Record context from state
+        {
+            let state = self.state.read().await;
+            if let Some(ref run_id) = state.run_id {
+                tracing::Span::current().record("run_id", run_id);
+            }
+            tracing::Span::current().record("transport", &state.transport);
+            tracing::Span::current().record("profile", &state.profile);
+        }
+
         // Set busy flag
         if self.busy.swap(true, Ordering::SeqCst) {
             if let Some(reason) = self.check_busy().await {
