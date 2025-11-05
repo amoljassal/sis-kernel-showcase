@@ -15,6 +15,7 @@ import { QemuProfileSelector } from './components/QemuProfileSelector';
 import { MetricsSparkline } from './components/MetricsSparkline';
 import { ShellCommandInput } from './components/ShellCommandInput';
 import { SelfCheckRunner } from './components/SelfCheckRunner';
+import { ReplayControls } from './components/ReplayControls';
 import { AlertCircle, Activity, Terminal as TerminalIcon } from 'lucide-react';
 import './App.css';
 
@@ -196,6 +197,10 @@ function App() {
 
               <SelfCheckRunner
                 disabled={currentState !== QemuState.Running}
+              />
+
+              <ReplayControls
+                disabled={currentState !== QemuState.Idle}
               />
             </div>
 
