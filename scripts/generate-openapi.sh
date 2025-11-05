@@ -8,6 +8,17 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DAEMON_DIR="$ROOT_DIR/apps/daemon"
 OUTPUT_FILE="$ROOT_DIR/openapi.json"
 
+# Try using openapi_dump binary first (no network required)
+echo "Attempting to generate OpenAPI spec using openapi_dump..."
+cd "$ROOT_DIR"
+if cargo run --bin openapi_dump -- "$OUTPUT_FILE" 2>/dev/null; then
+    echo "✓ OpenAPI spec generated using openapi_dump"
+    echo "Spec version: $(jq -r '.info.version' "$OUTPUT_FILE")"
+    echo "Endpoints: $(jq -r '.paths | keys | length' "$OUTPUT_FILE")"
+    exit 0
+fi
+
+echo "openapi_dump failed, falling back to daemon method..."
 echo "Building daemon..."
 cd "$DAEMON_DIR"
 cargo build --release 2>&1 | grep -E "(Compiling|Finished)" || true
