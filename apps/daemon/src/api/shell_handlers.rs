@@ -44,7 +44,7 @@ fn error_response(status: StatusCode, detail: String, error_type: Option<String>
     tag = "shell"
 )]
 pub async fn shell_exec(
-    State(supervisor): State<Arc<QemuSupervisor>>,
+    State((supervisor, _)): State<(Arc<QemuSupervisor>, Arc<crate::qemu::ReplayManager>)>,
     Json(request): Json<ShellCommandRequest>,
 ) -> Response {
     debug!("Executing shell command: {}", request.command);
@@ -82,7 +82,7 @@ pub async fn shell_exec(
     tag = "shell"
 )]
 pub async fn shell_selfcheck(
-    State(supervisor): State<Arc<QemuSupervisor>>,
+    State((supervisor, _)): State<(Arc<QemuSupervisor>, Arc<crate::qemu::ReplayManager>)>,
 ) -> Response {
     debug!("Running self-check");
 
@@ -152,7 +152,7 @@ pub async fn shell_selfcheck(
     tag = "shell"
 )]
 pub async fn shell_selfcheck_cancel(
-    State(supervisor): State<Arc<QemuSupervisor>>,
+    State((supervisor, _)): State<(Arc<QemuSupervisor>, Arc<crate::qemu::ReplayManager>)>,
 ) -> Response {
     debug!("Canceling self-check");
 

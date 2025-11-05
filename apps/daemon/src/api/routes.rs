@@ -1,7 +1,7 @@
 //! API routing
 
 use super::{handlers, middleware, replay_handlers, shell_handlers, ws};
-use crate::qemu::QemuSupervisor;
+use crate::qemu::{QemuSupervisor, ReplayManager};
 use axum::{
     middleware as axum_middleware,
     routing::{get, post},
@@ -24,7 +24,9 @@ use utoipa_swagger_ui::SwaggerUi;
         shell_handlers::shell_exec,
         shell_handlers::shell_selfcheck,
         shell_handlers::shell_selfcheck_cancel,
-        replay_handlers::replay_sample,
+        replay_handlers::replay_start,
+        replay_handlers::replay_stop,
+        replay_handlers::replay_status,
     ),
     components(
         schemas(
@@ -32,6 +34,8 @@ use utoipa_swagger_ui::SwaggerUi;
             crate::qemu::QemuConfig,
             crate::qemu::QemuStatus,
             crate::qemu::QemuState,
+            crate::qemu::ReplayStatus,
+            crate::qemu::ReplayState,
             crate::qemu::ShellCommandRequest,
             crate::qemu::ShellCommandResponse,
             crate::qemu::SelfCheckResponse,
@@ -59,9 +63,12 @@ use utoipa_swagger_ui::SwaggerUi;
 struct ApiDoc;
 
 /// Create the API router
-pub fn create_router(supervisor: Arc<QemuSupervisor>) -> Router {
+pub fn create_router(supervisor: Arc<QemuSupervisor>, replay_manager: Arc<ReplayManager>) -> Router {
     // Create OpenAPI documentation
     let openapi = ApiDoc::openapi();
+
+    // Shared state tuple for all handlers
+    let state = (supervisor, replay_manager);
 
     Router::new()
         // Health check
@@ -83,13 +90,15 @@ pub fn create_router(supervisor: Arc<QemuSupervisor>) -> Router {
             post(shell_handlers::shell_selfcheck_cancel),
         )
         // Replay endpoints for offline testing
-        .route("/api/v1/replay", post(replay_handlers::replay_sample))
+        .route("/api/v1/replay", post(replay_handlers::replay_start))
+        .route("/api/v1/replay/stop", post(replay_handlers::replay_stop))
+        .route("/api/v1/replay/status", get(replay_handlers::replay_status))
         // WebSocket events
         .route("/events", get(ws::events_handler))
+        // State
+        .with_state(state)
         // Swagger UI
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
-        // State
-        .with_state(supervisor)
         // Request ID middleware
         .layer(axum_middleware::from_fn(middleware::request_id_middleware))
         // CORS for local development

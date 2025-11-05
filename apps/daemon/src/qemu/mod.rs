@@ -9,7 +9,7 @@ pub mod shell_executor;
 pub mod supervisor;
 pub mod types;
 
-pub use replay::{ReplaySpeed, ReplayTransport};
+pub use replay::{ReplayManager, ReplaySpeed, ReplayState, ReplayStatus, ReplayTransport};
 pub use shell::{SelfCheckResponse, ShellCommandRequest, ShellCommandResponse, TestResultEntry};
 pub use shell_executor::ShellExecutor;
 pub use supervisor::{QemuEvent, QemuSupervisor};

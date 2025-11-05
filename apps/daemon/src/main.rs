@@ -49,8 +49,11 @@ async fn main() -> Result<()> {
     // Create QEMU supervisor
     let supervisor = Arc::new(qemu::QemuSupervisor::new());
 
+    // Create replay manager
+    let replay_manager = Arc::new(qemu::ReplayManager::new());
+
     // Create API router
-    let app = api::create_router(supervisor);
+    let app = api::create_router(supervisor, replay_manager);
 
     // Create server
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
