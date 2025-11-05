@@ -13,13 +13,23 @@ use crate::lib::error::{Errno, Result};
 /// - Return value: x0 (negative for errno)
 pub fn syscall_dispatcher(nr: usize, args: &[u64; 6]) -> isize {
     let result = match nr {
-        // Phase A0 minimal syscalls
+        // I/O syscalls
         63 => sys_read(args[0] as i32, args[1] as *mut u8, args[2] as usize),
         64 => sys_write(args[0] as i32, args[1] as *const u8, args[2] as usize),
+
+        // Process management
         93 => sys_exit(args[0] as i32),
         172 => sys_getpid(),
+        220 => sys_fork(),
+        221 => sys_execve(args[0] as *const u8, args[1] as *const *const u8, args[2] as *const *const u8),
+        260 => sys_wait4(args[0] as i32, args[1] as *mut i32, args[2] as i32, args[3] as *mut u8),
 
-        // Phase A1+ syscalls (not implemented yet)
+        // Memory management
+        214 => sys_brk(args[0] as *const u8),
+        222 => sys_mmap(args[0] as *mut u8, args[1] as usize, args[2] as i32, args[3] as i32, args[4] as i32, args[5] as i64),
+        215 => sys_munmap(args[0] as *mut u8, args[1] as usize),
+
+        // Unimplemented
         _ => {
             crate::warn!("Unimplemented syscall: {}", nr);
             Err(Errno::ENOSYS)
@@ -90,23 +100,120 @@ pub fn sys_write(fd: i32, buf: *const u8, count: usize) -> Result<isize> {
 }
 
 /// sys_exit - Terminate current process
-///
-/// Phase A0: Just panics (no process model yet)
-/// Phase A1: Will properly terminate process and schedule next
 pub fn sys_exit(code: i32) -> Result<isize> {
-    crate::info!("Process exit with code {}", code);
+    let pid = crate::process::current_pid();
+    crate::info!("Process {} exit with code {}", pid, code);
 
-    // Phase A0: No process model, just halt
-    panic!("sys_exit called - no process model in Phase A0");
+    // Call do_exit which never returns
+    crate::process::do_exit(pid, code);
 }
 
 /// sys_getpid - Get process ID
-///
-/// Phase A0: Returns fixed PID 1 (no process model yet)
-/// Phase A1: Will return actual process PID
 pub fn sys_getpid() -> Result<isize> {
-    // Phase A0: Stub - always return PID 1
-    Ok(1)
+    let pid = crate::process::current_pid();
+    Ok(pid as isize)
+}
+
+/// sys_fork - Create a child process
+pub fn sys_fork() -> Result<isize> {
+    let parent_pid = crate::process::current_pid();
+
+    // Allocate new PID for child
+    let child_pid = crate::process::alloc_pid()
+        .map_err(|_| Errno::EAGAIN)?;
+
+    crate::info!("fork: parent={}, child={}", parent_pid, child_pid);
+
+    // Get parent task and create child
+    let mut table = crate::process::get_process_table();
+    let table = table.as_mut().ok_or(Errno::ESRCH)?;
+
+    let parent = table.get(parent_pid).ok_or(Errno::ESRCH)?;
+    let mut child = crate::process::Task::fork_from(parent, child_pid);
+
+    // Set up COW for parent and child
+    crate::mm::setup_cow_for_fork(&mut child.mm)
+        .map_err(|_| Errno::ENOMEM)?;
+
+    // Insert child into process table
+    drop(table); // Release lock before inserting
+    crate::process::insert_task(child)
+        .map_err(|_| Errno::ENOMEM)?;
+
+    // TODO: Copy trap frame and set child's return value to 0
+    // TODO: Mark child as runnable in scheduler
+
+    // Parent returns child PID
+    Ok(child_pid as isize)
+}
+
+/// sys_execve - Execute a program
+pub fn sys_execve(
+    pathname: *const u8,
+    argv: *const *const u8,
+    envp: *const *const u8,
+) -> Result<isize> {
+    // Stub for Phase A1
+    crate::warn!("sys_execve not yet implemented");
+    Err(Errno::ENOSYS)
+}
+
+/// sys_wait4 - Wait for process to change state
+pub fn sys_wait4(
+    pid: i32,
+    wstatus: *mut i32,
+    options: i32,
+    rusage: *mut u8,
+) -> Result<isize> {
+    let current_pid = crate::process::current_pid();
+
+    let child_pid = crate::process::do_wait4(current_pid, pid, wstatus, options)?;
+
+    Ok(child_pid as isize)
+}
+
+/// sys_brk - Change data segment size
+pub fn sys_brk(addr: *const u8) -> Result<isize> {
+    let new_brk = addr as u64;
+    let pid = crate::process::current_pid();
+
+    let mut table = crate::process::get_process_table();
+    let table = table.as_mut().ok_or(Errno::ESRCH)?;
+    let task = table.get_mut(pid).ok_or(Errno::ESRCH)?;
+
+    let result_brk = task.mm.do_brk(new_brk)?;
+    Ok(result_brk as isize)
+}
+
+/// sys_mmap - Map memory
+pub fn sys_mmap(
+    addr: *mut u8,
+    length: usize,
+    prot: i32,
+    flags: i32,
+    fd: i32,
+    offset: i64,
+) -> Result<isize> {
+    let pid = crate::process::current_pid();
+
+    let mut table = crate::process::get_process_table();
+    let table = table.as_mut().ok_or(Errno::ESRCH)?;
+    let task = table.get_mut(pid).ok_or(Errno::ESRCH)?;
+
+    let result_addr = task.mm.do_mmap(addr as u64, length as u64, prot, flags)?;
+    Ok(result_addr as isize)
+}
+
+/// sys_munmap - Unmap memory
+pub fn sys_munmap(addr: *mut u8, length: usize) -> Result<isize> {
+    let pid = crate::process::current_pid();
+
+    let mut table = crate::process::get_process_table();
+    let table = table.as_mut().ok_or(Errno::ESRCH)?;
+    let task = table.get_mut(pid).ok_or(Errno::ESRCH)?;
+
+    task.mm.do_munmap(addr as u64, length as u64)?;
+    Ok(0)
 }
 
 // Syscall numbers for reference (ARM64 calling convention)
