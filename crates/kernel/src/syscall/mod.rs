@@ -337,9 +337,132 @@ pub fn sys_execve(
     argv: *const *const u8,
     envp: *const *const u8,
 ) -> Result<isize> {
-    // Stub for Phase A1
-    crate::warn!("sys_execve not yet implemented");
-    Err(Errno::ENOSYS)
+    use alloc::vec::Vec;
+    use alloc::string::String;
+
+    let current_pid = crate::process::current_pid();
+
+    // 1. Copy pathname from userspace
+    let path = unsafe {
+        if pathname.is_null() {
+            return Err(Errno::EFAULT);
+        }
+        let mut len = 0;
+        while len < 4096 && *pathname.add(len) != 0 {
+            len += 1;
+        }
+        if len == 0 {
+            return Err(Errno::EINVAL);
+        }
+        let bytes = core::slice::from_raw_parts(pathname, len);
+        String::from_utf8(bytes.to_vec()).map_err(|_| Errno::EINVAL)?
+    };
+
+    crate::info!("execve: path={}", path);
+
+    // 2. Copy argv from userspace
+    let mut argv_vec = Vec::new();
+    if !argv.is_null() {
+        let mut i = 0;
+        loop {
+            let arg_ptr = unsafe { *argv.add(i) };
+            if arg_ptr.is_null() {
+                break;
+            }
+            let arg = unsafe {
+                let mut len = 0;
+                while len < 4096 && *arg_ptr.add(len) != 0 {
+                    len += 1;
+                }
+                let bytes = core::slice::from_raw_parts(arg_ptr, len);
+                String::from_utf8(bytes.to_vec()).map_err(|_| Errno::EINVAL)?
+            };
+            argv_vec.push(arg);
+            i += 1;
+            if i > 1024 {
+                return Err(Errno::E2BIG); // Too many arguments
+            }
+        }
+    }
+
+    // 3. Copy envp from userspace
+    let mut envp_vec = Vec::new();
+    if !envp.is_null() {
+        let mut i = 0;
+        loop {
+            let env_ptr = unsafe { *envp.add(i) };
+            if env_ptr.is_null() {
+                break;
+            }
+            let env = unsafe {
+                let mut len = 0;
+                while len < 4096 && *env_ptr.add(len) != 0 {
+                    len += 1;
+                }
+                let bytes = core::slice::from_raw_parts(env_ptr, len);
+                String::from_utf8(bytes.to_vec()).map_err(|_| Errno::EINVAL)?
+            };
+            envp_vec.push(env);
+            i += 1;
+            if i > 1024 {
+                return Err(Errno::E2BIG); // Too many environment variables
+            }
+        }
+    }
+
+    crate::debug!("execve: argc={}, envc={}", argv_vec.len(), envp_vec.len());
+
+    // 4. Open and read the ELF file
+    let root = crate::vfs::get_root().ok_or(Errno::ENOENT)?;
+    let inode = crate::vfs::path_lookup(&root, &path)?;
+
+    // Read entire file into buffer
+    let meta = inode.getattr()?;
+    let file_size = meta.size as usize;
+    if file_size > 16 * 1024 * 1024 {
+        return Err(Errno::E2BIG); // File too large (16MB limit)
+    }
+
+    let mut elf_data = Vec::with_capacity(file_size);
+    elf_data.resize(file_size, 0);
+    let bytes_read = inode.read(0, &mut elf_data)?;
+    elf_data.truncate(bytes_read);
+
+    // 5. Get current task and load ELF
+    let mut table = crate::process::get_process_table();
+    let table = table.as_mut().ok_or(Errno::ESRCH)?;
+    let task = table.get_mut(current_pid).ok_or(Errno::ESRCH)?;
+
+    // Clear existing VMAs
+    task.mm.vmas.clear();
+    task.mm.brk = crate::mm::USER_HEAP_START;
+    task.mm.brk_start = crate::mm::USER_HEAP_START;
+
+    // Load ELF
+    crate::process::exec::elf::load_elf(task, &elf_data, argv_vec, envp_vec)
+        .map_err(|e| Errno::from(e))?;
+
+    // 6. Set up FD 0/1/2 if not already open
+    if task.files.get(0).is_err() {
+        // Open /dev/console for stdin/stdout/stderr
+        let dev_root = crate::vfs::get_root().ok_or(Errno::ENOENT)?;
+        let console_inode = crate::vfs::path_lookup(&dev_root, "/dev/console")?;
+
+        let console_file = alloc::sync::Arc::new(crate::vfs::File::new(
+            console_inode,
+            crate::vfs::OpenFlags::RDWR,
+            &crate::drivers::char::CONSOLE_OPS,
+        ));
+
+        task.files.alloc_fd(console_file.clone())?; // FD 0 (stdin)
+        task.files.alloc_fd(console_file.clone())?; // FD 1 (stdout)
+        task.files.alloc_fd(console_file)?;         // FD 2 (stderr)
+    }
+
+    crate::info!("execve: loaded {} successfully", path);
+
+    // execve does not return on success (trap frame was updated)
+    Ok(0)
 }
 
 /// sys_wait4 - Wait for process to change state
