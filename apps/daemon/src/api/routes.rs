@@ -16,6 +16,7 @@ use utoipa_swagger_ui::SwaggerUi;
 #[openapi(
     paths(
         handlers::health,
+        handlers::get_config,
         handlers::qemu_run,
         handlers::qemu_stop,
         handlers::qemu_status,
@@ -26,6 +27,7 @@ use utoipa_swagger_ui::SwaggerUi;
     ),
     components(
         schemas(
+            crate::config::DaemonConfig,
             crate::qemu::QemuConfig,
             crate::qemu::QemuStatus,
             crate::qemu::QemuState,
@@ -42,6 +44,7 @@ use utoipa_swagger_ui::SwaggerUi;
     ),
     tags(
         (name = "health", description = "Health check endpoints"),
+        (name = "config", description = "Configuration endpoints"),
         (name = "qemu", description = "QEMU control endpoints"),
         (name = "shell", description = "Shell command execution"),
         (name = "replay", description = "Replay log files for offline testing")
@@ -62,6 +65,8 @@ pub fn create_router(supervisor: Arc<QemuSupervisor>) -> Router {
     Router::new()
         // Health check
         .route("/health", get(handlers::health))
+        // Configuration
+        .route("/api/v1/config", get(handlers::get_config))
         // QEMU control endpoints
         .route("/api/v1/qemu/run", post(handlers::qemu_run))
         .route("/api/v1/qemu/stop", post(handlers::qemu_stop))

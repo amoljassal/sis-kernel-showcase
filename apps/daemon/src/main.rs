@@ -10,6 +10,7 @@
 //! REST API: /api/v1/*
 
 mod api;
+mod config;
 mod parser;
 mod qemu;
 
