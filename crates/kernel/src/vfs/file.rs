@@ -7,6 +7,12 @@ use crate::lib::error::Errno;
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicU64, Ordering};
 
+// Forward declaration for pipe type
+pub enum PipeEnd {
+    Reader(super::pipe::PipeReader),
+    Writer(super::pipe::PipeWriter),
+}
+
 bitflags::bitflags! {
     /// File open flags
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,10 +75,11 @@ pub trait FileOps: Send + Sync {
 
 /// File structure
 pub struct File {
-    pub inode: Arc<Inode>,
+    pub inode: Option<Arc<Inode>>,
     pub offset: AtomicU64,
     pub flags: OpenFlags,
     pub fops: &'static dyn FileOps,
+    pub pipe: Option<PipeEnd>,
 }
 
 impl File {
@@ -81,20 +88,44 @@ impl File {
         // Get file operations from filesystem type
         // For now, use default ops that delegate to inode
         Self {
-            inode,
+            inode: Some(inode),
             offset: AtomicU64::new(0),
             flags,
             fops: &DefaultFileOps,
+            pipe: None,
         }
     }
 
     /// Create with specific FileOps
     pub fn new_with_ops(inode: Arc<Inode>, flags: OpenFlags, fops: &'static dyn FileOps) -> Self {
         Self {
-            inode,
+            inode: Some(inode),
             offset: AtomicU64::new(0),
             flags,
             fops,
+            pipe: None,
+        }
+    }
+
+    /// Create a file from a pipe reader
+    pub fn from_pipe_reader(reader: super::pipe::PipeReader) -> Self {
+        Self {
+            inode: None,
+            offset: AtomicU64::new(0),
+            flags: OpenFlags::O_RDONLY,
+            fops: &PipeFileOps,
+            pipe: Some(PipeEnd::Reader(reader)),
+        }
+    }
+
+    /// Create a file from a pipe writer
+    pub fn from_pipe_writer(writer: super::pipe::PipeWriter) -> Self {
+        Self {
+            inode: None,
+            offset: AtomicU64::new(0),
+            flags: OpenFlags::O_WRONLY,
+            fops: &PipeFileOps,
+            pipe: Some(PipeEnd::Writer(writer)),
         }
     }
 
@@ -142,9 +173,13 @@ impl File {
 
 impl core::fmt::Debug for File {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("File")
-            .field("inode", &self.inode.ino())
-            .field("offset", &self.offset())
+        let mut d = f.debug_struct("File");
+        if let Some(ref inode) = self.inode {
+            d.field("inode", &inode.ino());
+        } else if self.pipe.is_some() {
+            d.field("type", &"pipe");
+        }
+        d.field("offset", &self.offset())
             .field("flags", &self.flags)
             .finish()
     }
@@ -155,15 +190,17 @@ struct DefaultFileOps;
 
 impl FileOps for DefaultFileOps {
     fn read(&self, file: &File, buf: &mut [u8]) -> Result<usize, Errno> {
+        let inode = file.inode.as_ref().ok_or(Errno::EBADF)?;
         let offset = file.offset();
-        let n = file.inode.read(offset, buf)?;
+        let n = inode.read(offset, buf)?;
         file.advance_offset(n);
         Ok(n)
     }
 
     fn write(&self, file: &File, buf: &[u8]) -> Result<usize, Errno> {
+        let inode = file.inode.as_ref().ok_or(Errno::EBADF)?;
         let offset = file.offset();
-        let n = file.inode.write(offset, buf)?;
+        let n = inode.write(offset, buf)?;
         file.advance_offset(n);
         Ok(n)
     }
@@ -189,5 +226,30 @@ impl FileOps for DefaultFileOps {
 
         file.set_offset(new_offset as u64);
         Ok(new_offset as u64)
+    }
+}
+
+/// Pipe file operations
+struct PipeFileOps;
+
+impl FileOps for PipeFileOps {
+    fn read(&self, file: &File, buf: &mut [u8]) -> Result<usize, Errno> {
+        match &file.pipe {
+            Some(PipeEnd::Reader(reader)) => reader.read(buf),
+            Some(PipeEnd::Writer(_)) => Err(Errno::EBADF), // Can't read from write end
+            None => Err(Errno::EBADF),
+        }
+    }
+
+    fn write(&self, file: &File, buf: &[u8]) -> Result<usize, Errno> {
+        match &file.pipe {
+            Some(PipeEnd::Writer(writer)) => writer.write(buf),
+            Some(PipeEnd::Reader(_)) => Err(Errno::EBADF), // Can't write to read end
+            None => Err(Errno::EBADF),
+        }
+    }
+
+    fn lseek(&self, _file: &File, _offset: i64, _whence: i32) -> Result<u64, Errno> {
+        Err(Errno::ESPIPE) // Pipes are not seekable
     }
 }

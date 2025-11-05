@@ -10,10 +10,12 @@ pub mod file;
 pub mod mount;
 pub mod tmpfs;
 pub mod devfs;
+pub mod pipe;
 
 pub use inode::{Inode, InodeType, InodeOps, Ino, DirEntry, alloc_ino};
-pub use file::{File, FileOps, OpenFlags};
+pub use file::{File, FileOps, OpenFlags, PipeEnd};
 pub use mount::{Mount, init_vfs, mount, get_root, get_mounts};
+pub use pipe::{create_pipe, PipeReader, PipeWriter};
 
 use crate::lib::error::Errno;
 use alloc::sync::Arc;
