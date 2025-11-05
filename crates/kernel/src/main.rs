@@ -254,6 +254,54 @@ mod bringup {
             }
         }
 
+        // Phase A1: Initialize MM, VFS, and boot userspace
+        super::uart_print(b"PHASE A1: BOOT WIRING\n");
+
+        // Initialize buddy allocator with available RAM
+        // For QEMU virt, assume 128MB RAM starting at 0x40000000
+        super::uart_print(b"MM: BUDDY ALLOCATOR\n");
+        let ram_start = 0x4100_0000u64; // Start after kernel (16MB offset)
+        let ram_size = 112 * 1024 * 1024u64; // 112MB available
+        crate::mm::init_buddy(ram_start, ram_size)
+            .expect("Failed to initialize buddy allocator");
+        let stats = crate::mm::get_stats();
+        super::uart_print(b"MM: BUDDY READY (");
+        print_number(stats.total_pages);
+        super::uart_print(b" pages)\n");
+
+        // Initialize VFS
+        super::uart_print(b"VFS: INIT\n");
+        crate::vfs::init().expect("Failed to initialize VFS");
+
+        // Mount tmpfs at /
+        super::uart_print(b"VFS: MOUNT TMPFS AT /\n");
+        let root = crate::vfs::tmpfs::mount_tmpfs().expect("Failed to mount tmpfs");
+        crate::vfs::set_root(root.clone());
+
+        // Mount devfs at /dev
+        super::uart_print(b"VFS: MOUNT DEVFS AT /dev\n");
+        let dev_inode = crate::vfs::devfs::mount_devfs().expect("Failed to mount devfs");
+        root.create("dev", crate::vfs::S_IFDIR | 0o755).expect("Failed to create /dev");
+        // Note: Actual mount point linking deferred to when mount syscall is available
+        crate::vfs::set_root(root.clone()); // Re-set root to ensure consistency
+
+        super::uart_print(b"VFS: READY\n");
+
+        // TODO: Unpack initramfs (when INITRAMFS_DATA is available)
+        // super::uart_print(b"INITRAMFS: UNPACKING\n");
+        // let initramfs_data = &INITRAMFS_DATA;
+        // crate::initramfs::unpack_initramfs(initramfs_data).expect("Failed to unpack initramfs");
+        // super::uart_print(b"INITRAMFS: READY\n");
+
+        // TODO: Create PID 1 and execute /sbin/init
+        // super::uart_print(b"INIT: CREATING PID 1\n");
+        // let mut init_task = crate::process::Task::new_init();
+        // crate::process::insert_task(init_task).expect("Failed to insert init task");
+        // super::uart_print(b"INIT: EXEC /sbin/init\n");
+        // crate::process::exec::elf::load_elf(&mut init_task, elf_data, argv, envp).expect("Failed to exec init");
+
+        super::uart_print(b"PHASE A1: BOOT WIRING COMPLETE\n");
+
         // Graph demo is available as a shell command `graphdemo` (feature: graph-demo).
         // Avoid running it during bring-up to keep boot deterministic.
 
