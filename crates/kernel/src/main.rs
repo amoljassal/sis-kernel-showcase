@@ -22,6 +22,8 @@ pub mod process;
 pub mod mm;
 // Virtual File System
 pub mod vfs;
+// Device drivers (Phase A1)
+pub mod drivers;
 // Userspace test module
 pub mod userspace_test;
 // Interactive shell module
