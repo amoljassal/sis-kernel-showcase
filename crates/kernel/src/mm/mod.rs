@@ -30,6 +30,8 @@ pub use paging::{
     PAGE_SIZE, PAGE_SHIFT, KERNEL_BASE,
     PteFlags, Pte, PageTable,
     map_page, unmap_page,
+    map_user_page, unmap_user_page, get_pte, get_pte_mut,
+    switch_user_mm, alloc_user_page_table,
     flush_tlb, flush_tlb_all,
 };
 

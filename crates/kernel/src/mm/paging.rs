@@ -205,3 +205,143 @@ pub fn flush_tlb_all() {
         );
     }
 }
+
+/// Allocate a new zero-filled page table
+fn alloc_page_table() -> Option<*mut PageTable> {
+    let phys_addr = super::alloc_page()?;
+    let ptr = phys_addr as *mut PageTable;
+
+    // Zero-fill the page table
+    unsafe {
+        core::ptr::write_bytes(ptr, 0, 1);
+    }
+
+    Some(ptr)
+}
+
+/// Walk page table and get PTE for virtual address, allocating tables as needed
+/// Returns mutable reference to the L3 (page) PTE
+fn walk_page_table(
+    root: *mut PageTable,
+    virt_addr: u64,
+    alloc: bool,
+) -> Result<*mut Pte, KernelError> {
+    let mut table = root;
+
+    // Walk levels 0-2 (tables)
+    for level in 0..3 {
+        let idx = PageTable::index(virt_addr, level);
+
+        unsafe {
+            let pte = &mut (*table).entries[idx];
+
+            if !pte.is_valid() {
+                if !alloc {
+                    return Err(KernelError::NotFound);
+                }
+
+                // Allocate new page table
+                let new_table = alloc_page_table().ok_or(KernelError::OutOfMemory)?;
+                let new_phys = new_table as u64;
+
+                // Set table descriptor: VALID | TABLE | USER
+                let table_flags = PteFlags::VALID | PteFlags::TABLE | PteFlags::USER;
+                *pte = Pte::new(new_phys, table_flags);
+            }
+
+            // Follow to next level
+            table = pte.phys_addr() as *mut PageTable;
+        }
+    }
+
+    // Return pointer to L3 (page level) PTE
+    let idx = PageTable::index(virt_addr, 3);
+    unsafe {
+        Ok(&mut (*table).entries[idx] as *mut Pte)
+    }
+}
+
+/// Map a user virtual page to physical page with given flags
+pub fn map_user_page(
+    root: *mut PageTable,
+    virt_addr: u64,
+    phys_addr: u64,
+    mut flags: PteFlags,
+) -> Result<(), KernelError> {
+    // Enforce user bit and no W+X
+    flags.insert(PteFlags::USER);
+    if flags.contains(PteFlags::VALID) && !flags.contains(PteFlags::READONLY) {
+        // Writable, so must not be executable
+        flags.insert(PteFlags::UXN);
+    }
+
+    // Get or allocate PTE
+    let pte_ptr = walk_page_table(root, virt_addr, true)?;
+
+    unsafe {
+        *pte_ptr = Pte::new(phys_addr, flags);
+    }
+
+    // Flush TLB for this address
+    flush_tlb(virt_addr);
+
+    Ok(())
+}
+
+/// Unmap a user virtual page
+pub fn unmap_user_page(
+    root: *mut PageTable,
+    virt_addr: u64,
+) -> Result<(), KernelError> {
+    let pte_ptr = walk_page_table(root, virt_addr, false)?;
+
+    unsafe {
+        *pte_ptr = Pte::invalid();
+    }
+
+    flush_tlb(virt_addr);
+
+    Ok(())
+}
+
+/// Get PTE for a virtual address (without allocating)
+pub fn get_pte(
+    root: *mut PageTable,
+    virt_addr: u64,
+) -> Result<Pte, KernelError> {
+    let pte_ptr = walk_page_table(root, virt_addr, false)?;
+    unsafe {
+        Ok(*pte_ptr)
+    }
+}
+
+/// Get mutable PTE for a virtual address (without allocating tables)
+pub fn get_pte_mut(
+    root: *mut PageTable,
+    virt_addr: u64,
+) -> Result<*mut Pte, KernelError> {
+    walk_page_table(root, virt_addr, false)
+}
+
+/// Switch to user address space (sets TTBR0_EL1)
+#[inline]
+pub fn switch_user_mm(ttbr0: u64) {
+    unsafe {
+        core::arch::asm!(
+            "msr ttbr0_el1, {ttbr0}",  // Set TTBR0_EL1
+            "dsb ish",                   // Ensure write completes
+            "tlbi vmalle1is",            // Invalidate all TLB entries for EL1
+            "dsb ish",                   // Ensure TLB invalidation completes
+            "isb",                       // Instruction barrier
+            ttbr0 = in(reg) ttbr0,
+            options(nostack)
+        );
+    }
+}
+
+/// Allocate a new page table root for user space
+pub fn alloc_user_page_table() -> Result<u64, KernelError> {
+    let ptr = alloc_page_table().ok_or(KernelError::OutOfMemory)?;
+    Ok(ptr as u64)
+}
+

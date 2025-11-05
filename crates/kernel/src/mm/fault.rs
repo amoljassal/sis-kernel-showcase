@@ -92,26 +92,49 @@ fn handle_cow_fault(task: &mut crate::process::Task, fault_addr: u64) -> Result<
 
     crate::debug!("COW fault at {:#x}", page_addr);
 
-    // TODO: Walk page table to find PTE
-    // TODO: Check if page has COW bit set
-    // TODO: If refcount == 1, just make writable
-    // TODO: If refcount > 1, allocate new page and copy
+    let page_table = task.mm.page_table as *mut super::paging::PageTable;
 
-    // For now, stub implementation
-    // In a real implementation:
-    // 1. Allocate a new physical page
-    // 2. Copy contents from old page to new page
-    // 3. Update PTE to point to new page with RW permissions
-    // 4. Decrement refcount on old page
-    // 5. Flush TLB for this address
+    // Get the current PTE
+    let pte_ptr = super::paging::get_pte_mut(page_table, page_addr)
+        .map_err(|_| Errno::EFAULT)?;
 
-    let new_page = alloc_page().ok_or(Errno::ENOMEM)?;
+    let old_pte = unsafe { *pte_ptr };
 
-    // TODO: Copy old page to new page
-    // TODO: Update PTE
-    // flush_tlb(page_addr);
+    // Verify this is actually a COW fault
+    if !old_pte.flags().is_cow() {
+        crate::error!("Permission fault but not COW at {:#x}", page_addr);
+        return Err(Errno::EFAULT);
+    }
 
-    crate::info!("COW: allocated new page {:#x} for fault at {:#x}", new_page, fault_addr);
+    let old_phys = old_pte.phys_addr();
+
+    // Allocate new page
+    let new_phys = alloc_page().ok_or(Errno::ENOMEM)?;
+
+    // Copy old page to new page (both are identity mapped in kernel space)
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            old_phys as *const u8,
+            new_phys as *mut u8,
+            PAGE_SIZE
+        );
+    }
+
+    // Update PTE: clear COW and READONLY, keep other flags
+    let mut new_flags = old_pte.flags();
+    new_flags.clear_cow(); // Removes COW and READONLY
+
+    unsafe {
+        *pte_ptr = super::paging::Pte::new(new_phys, new_flags);
+    }
+
+    // Flush TLB for this address
+    super::paging::flush_tlb(page_addr);
+
+    // TODO: Decrement refcount on old page (when refcounting is implemented)
+
+    crate::debug!("COW: copied page {:#x} -> {:#x} for fault at {:#x}",
+                  old_phys, new_phys, fault_addr);
     Ok(())
 }
 
@@ -126,23 +149,29 @@ fn handle_lazy_fault(
 
     crate::debug!("Lazy fault at {:#x}, flags={:?}", page_addr, vma_flags);
 
-    // Allocate a physical page
+    // Allocate a physical page (buddy allocator already zero-fills)
     let phys_page = alloc_page().ok_or(Errno::ENOMEM)?;
 
     // Convert VMA flags to PTE flags
-    let pte_flags = if vma_flags.contains(crate::process::VmaFlags::WRITE) {
-        PteFlags::user_rw()
-    } else if vma_flags.contains(crate::process::VmaFlags::EXEC) {
+    let pte_flags = if vma_flags.contains(crate::process::VmaFlags::EXEC) {
+        // Executable: R|X (never writable)
         PteFlags::user_rx()
+    } else if vma_flags.contains(crate::process::VmaFlags::WRITE) {
+        // Writable: R|W (never executable, enforced in map_user_page)
+        PteFlags::user_rw()
     } else {
+        // Read-only
         PteFlags::user_ro()
     };
 
-    // TODO: Map the page in the page table
-    // map_page(&mut task.mm.page_table, page_addr, phys_page, pte_flags);
-    // flush_tlb(page_addr);
+    let page_table = task.mm.page_table as *mut super::paging::PageTable;
 
-    crate::info!("Lazy: allocated page {:#x} for fault at {:#x}", phys_page, fault_addr);
+    // Map the page in the page table
+    super::paging::map_user_page(page_table, page_addr, phys_page, pte_flags)
+        .map_err(|_| Errno::ENOMEM)?;
+
+    crate::debug!("Lazy: allocated and mapped page {:#x} for fault at {:#x}",
+                  phys_page, fault_addr);
     Ok(())
 }
 
