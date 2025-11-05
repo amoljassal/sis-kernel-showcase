@@ -353,6 +353,46 @@ pnpm format:check
   - Color-coded log levels
   - Timestamp display
 
+### Milestone 5 (M5) Deliverables ✅
+
+**Metrics Enhancements - Storage, Alerts, and Analysis**
+
+- [x] **IndexedDB Persistent Storage** - Client-side metrics persistence
+  - IndexedDB-based storage utility (metricsDB.ts)
+  - Automatic metrics persistence across sessions
+  - 24-hour data retention with auto-cleanup
+  - Efficient querying by series name
+  - Stale data detection and removal
+  - Clear all / delete series operations
+  - Size-aware storage management
+
+- [x] **Performance Alert System** - Threshold-based monitoring
+  - Configurable threshold rules with operators (>, <, =)
+  - Multi-level severity (critical, warning, info)
+  - Default rules for common metrics (IRQ latency, memory, CPU)
+  - Real-time alert checking on incoming metrics
+  - Alert history with localStorage persistence (max 100)
+  - Toast notifications for critical alerts
+  - Enable/disable rules individually
+  - Custom rule creation and management
+
+- [x] **Metrics Alerts Panel** - Alert visualization and management
+  - Split view: alert rules and alert history
+  - Visual severity indicators (critical/warning/info)
+  - Rule configuration (metric, threshold, operator, severity)
+  - Alert history with timestamps and values
+  - Enable/disable/delete rules
+  - Clear alert history
+  - Real-time alert feed
+  - Formatted value display (K/M suffixes)
+
+- [x] **Enhanced Metrics Panel** - Time-series controls (existing)
+  - Time range selection (5m, 30m, 1h) for zoom capability
+  - Pause/resume live updates
+  - Sparkline visualizations
+  - CSV/JSON export
+  - Backpressure detection
+
 ## Next Steps (Milestone 6+)
 
 - [x] Replay authoring guide documentation (see docs/guides/REPLAY-AUTHORING-GUIDE.md)
