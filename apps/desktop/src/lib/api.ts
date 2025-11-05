@@ -3,6 +3,7 @@
  */
 
 import axios from 'axios';
+import type { components } from 'protos/src/schema';
 
 const DAEMON_URL = import.meta.env.VITE_DAEMON_URL || 'http://localhost:8871';
 
@@ -85,6 +86,19 @@ export interface QemuExitedEvent {
   timestamp: number;
 }
 
+export interface MetricBatchEvent {
+  type: 'metric_batch';
+  points: BatchedMetricPoint[];
+  dropped_count?: number;
+  seq?: number;
+}
+
+export interface BatchedMetricPoint {
+  name: string;
+  ts: number; // Unix timestamp in milliseconds
+  value: number;
+}
+
 export type QemuEvent =
   | { type: 'state_changed'; state: QemuState; timestamp: number }
   | { type: 'parsed'; event: ParsedEvent }
@@ -93,7 +107,8 @@ export type QemuEvent =
   | SelfCheckTestEvent
   | SelfCheckCompletedEvent
   | SelfCheckCanceledEvent
-  | QemuExitedEvent;
+  | QemuExitedEvent
+  | MetricBatchEvent;
 
 export interface ShellCommandRequest {
   command: string;
@@ -205,6 +220,44 @@ export const replayApi = {
 
   async status(): Promise<ReplayStatus> {
     const response = await api.get<ReplayStatus>('/api/v1/replay/status');
+    return response.data;
+  },
+};
+
+// Metrics types from generated schema
+export type MetricPoint = components['schemas']['MetricPoint'];
+export type SeriesStats = components['schemas']['SeriesStats'];
+export type SeriesMetadata = components['schemas']['SeriesMetadata'];
+export type QueryResult = components['schemas']['QueryResult'];
+
+export interface MetricsStreamsQuery {
+  prefix?: string;
+}
+
+export interface MetricsQueryParams {
+  name: string;
+  from?: number; // Unix timestamp in milliseconds
+  to?: number; // Unix timestamp in milliseconds
+  maxPoints?: number; // 100-5000, default 1000
+}
+
+export const metricsApi = {
+  async listStreams(query?: MetricsStreamsQuery): Promise<SeriesMetadata[]> {
+    const response = await api.get<SeriesMetadata[]>('/api/v1/metrics/streams', {
+      params: query,
+    });
+    return response.data;
+  },
+
+  async query(params: MetricsQueryParams): Promise<QueryResult> {
+    const response = await api.get<QueryResult>('/api/v1/metrics/query', {
+      params: {
+        name: params.name,
+        from: params.from,
+        to: params.to,
+        maxPoints: params.maxPoints,
+      },
+    });
     return response.data;
   },
 };
