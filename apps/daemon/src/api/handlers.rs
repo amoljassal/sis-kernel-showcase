@@ -33,8 +33,12 @@ pub struct ErrorResponse {
 
 impl ErrorResponse {
     pub fn new(status: StatusCode, detail: String) -> Self {
+        Self::with_type(status, detail, None)
+    }
+
+    pub fn with_type(status: StatusCode, detail: String, error_type: Option<String>) -> Self {
         Self {
-            r#type: None,
+            r#type: error_type,
             title: status.canonical_reason().unwrap_or("Error").to_string(),
             status: status.as_u16(),
             detail: detail.clone(),

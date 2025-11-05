@@ -3,13 +3,31 @@
 use crate::qemu::{
     QemuSupervisor, SelfCheckResponse, ShellCommandRequest, ShellCommandResponse, TestResultEntry,
 };
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{
+    extract::State,
+    http::{header, HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
+    Json,
+};
 use std::sync::Arc;
 use tracing::debug;
 use utoipa::ToSchema;
 
 // Re-export problem+json ErrorResponse from handlers
 pub use super::handlers::ErrorResponse;
+
+/// Helper to create error response with proper headers
+fn error_response(status: StatusCode, detail: String, error_type: Option<String>) -> Response {
+    let mut headers = HeaderMap::new();
+
+    // Add Retry-After header for 409 Conflict
+    if status == StatusCode::CONFLICT {
+        headers.insert(header::RETRY_AFTER, "5".parse().unwrap());
+    }
+
+    let error = ErrorResponse::with_type(status, detail, error_type);
+    (status, headers, Json(error)).into_response()
+}
 
 /// Execute a shell command
 #[utoipa::path(
@@ -28,25 +46,25 @@ pub use super::handlers::ErrorResponse;
 pub async fn shell_exec(
     State(supervisor): State<Arc<QemuSupervisor>>,
     Json(request): Json<ShellCommandRequest>,
-) -> Result<Json<ShellCommandResponse>, (StatusCode, Json<ErrorResponse>)> {
+) -> Response {
     debug!("Executing shell command: {}", request.command);
 
     // Execute command via supervisor
     match supervisor.execute_command(request).await {
-        Ok(response) => Ok(Json(response)),
+        Ok(response) => Json(response).into_response(),
         Err(e) => {
             let error_msg = e.to_string();
-            let status_code = if error_msg.contains("busy") {
-                StatusCode::CONFLICT
+            let (status_code, error_type) = if error_msg.contains("busy") {
+                (StatusCode::CONFLICT, Some("/errors/busy".to_string()))
             } else if error_msg.contains("not ready") || error_msg.contains("not running") {
-                StatusCode::SERVICE_UNAVAILABLE
+                (StatusCode::SERVICE_UNAVAILABLE, Some("/errors/shell-not-ready".to_string()))
             } else if error_msg.contains("timed out") {
-                StatusCode::GATEWAY_TIMEOUT
+                (StatusCode::GATEWAY_TIMEOUT, Some("/errors/timeout".to_string()))
             } else {
-                StatusCode::INTERNAL_SERVER_ERROR
+                (StatusCode::INTERNAL_SERVER_ERROR, Some("/errors/internal".to_string()))
             };
 
-            Err((status_code, Json(ErrorResponse::new(status_code, error_msg))))
+            error_response(status_code, error_msg, error_type)
         }
     }
 }
@@ -65,7 +83,7 @@ pub async fn shell_exec(
 )]
 pub async fn shell_selfcheck(
     State(supervisor): State<Arc<QemuSupervisor>>,
-) -> Result<Json<SelfCheckResponse>, (StatusCode, Json<ErrorResponse>)> {
+) -> Response {
     debug!("Running self-check");
 
     let start = std::time::Instant::now();
@@ -98,26 +116,26 @@ pub async fn shell_selfcheck(
             let failed = tests.len() - passed;
             let execution_time_ms = start.elapsed().as_millis() as u64;
 
-            Ok(Json(SelfCheckResponse {
+            Json(SelfCheckResponse {
                 tests,
                 total: tests.len(),
                 passed,
                 failed,
                 success: failed == 0,
                 execution_time_ms,
-            }))
+            }).into_response()
         }
         Err(e) => {
             let error_msg = e.to_string();
-            let status_code = if error_msg.contains("busy") {
-                StatusCode::CONFLICT
+            let (status_code, error_type) = if error_msg.contains("busy") {
+                (StatusCode::CONFLICT, Some("/errors/busy".to_string()))
             } else if error_msg.contains("not ready") || error_msg.contains("not running") {
-                StatusCode::SERVICE_UNAVAILABLE
+                (StatusCode::SERVICE_UNAVAILABLE, Some("/errors/shell-not-ready".to_string()))
             } else {
-                StatusCode::INTERNAL_SERVER_ERROR
+                (StatusCode::INTERNAL_SERVER_ERROR, Some("/errors/internal".to_string()))
             };
 
-            Err((status_code, Json(ErrorResponse::new(status_code, error_msg))))
+            error_response(status_code, error_msg, error_type)
         }
     }
 }
