@@ -20,6 +20,7 @@ export interface EnhancedError {
   message: string;
   detail?: string;
   retryAfter?: number;
+  requestId?: string;
   ctas?: ErrorCTA[];
 }
 
@@ -41,12 +42,14 @@ export function parseErrorWithCTAs(
   const type = problemDetail.type || '';
   const detail = problemDetail.detail || error?.message || 'An error occurred';
   const retryAfter = problemDetail['retry-after'];
+  const requestId = error?.requestId || error?.response?.data?.requestId;
 
   // Default enhanced error
   const enhanced: EnhancedError = {
     message: problemDetail.title || 'Error',
     detail,
     retryAfter,
+    requestId,
     ctas: [],
   };
 

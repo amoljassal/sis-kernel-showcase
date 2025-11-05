@@ -232,18 +232,91 @@ pnpm lint
 pnpm format:check
 ```
 
-## Next Steps (Milestone 1+)
+### Milestone 1-3 Deliverables ✅
 
-- [ ] Shell command execution API (`POST /shell/exec`)
-- [ ] Self-check automation (`GET /selfcheck`)
-- [ ] Metrics ingestion with downsampling
-- [ ] Autonomy control panel (`autoctl` wrapper)
-- [ ] Memory approvals UI (`memctl` wrapper)
-- [ ] What-if scenario simulator
-- [ ] Graph/LLM/Scheduling panels
+- [x] Shell command execution API (`POST /shell/exec`)
+- [x] Self-check automation (`POST /shell/selfcheck`)
+- [x] Metrics ingestion with downsampling (LTTB algorithm)
+- [x] Autonomy control panel (`autoctl` wrapper)
+- [x] Memory approvals UI (`memctl` wrapper)
+- [x] What-if scenario simulator
+- [x] Replay controls for offline testing
+- [x] Live log tailing with run history
+
+### Milestone 4 (M4) Deliverables ✅
+
+**Graph/Scheduling/LLM/Logs - Production Systems**
+
+- [x] **GraphPanel** - Graph computation visualization
+  - Create/manage computational graphs via API
+  - Add channels and operators dynamically
+  - Live graph state updates via WebSocket
+  - Prediction/feedback loop UI
+  - Export graph states (JSON)
+
+- [x] **SchedPanel** - Workload scheduling control
+  - View active workloads with priorities and affinity
+  - Set priorities (0-139) for workloads
+  - Configure CPU affinity masks
+  - Toggle scheduler features (GENTLE_FAIR_SLEEPERS, etc.)
+  - Circuit breaker monitoring and reset
+
+- [x] **LlmPanel** - LLM model management
+  - Load models with path and format selection
+  - Inference requests with prompt input
+  - Token streaming via WebSocket
+  - Audit trail with request history
+  - Model status and configuration display
+
+- [x] **LogsPanel** - Advanced log management
+  - Live log tailing with level/source filtering
+  - Run history tracking with profiles
+  - Start/stop runs with feature configurations
+  - Export run logs for troubleshooting
+  - WebSocket backpressure detection with droppedCount badges
+
+### Milestone 5 (M5) Deliverables ✅
+
+**Crash Capture & Incident Management**
+
+- [x] **CrashPanel** - Crash capture and incident workflow
+  - Live crash feed from WebSocket
+  - Crash detail modal with stack traces and registers
+  - Severity filtering (critical/high/medium/low)
+  - Incident creation from crashes (title + description)
+  - Crash/incident correlation and tracking
+  - Auto-deduplication by crashId
+
+- [x] **Crash API** - Backend crash ingestion
+  - `POST /api/v1/crash` - Ingest crash reports
+  - `GET /api/v1/crashes` - List with pagination and filters
+  - `POST /api/v1/incidents` - Create incidents
+  - `GET /api/v1/incidents` - List incidents
+  - WebSocket streaming of crash events
+
+### UX Polish (Option A) ✅
+
+- [x] **Copy-to-clipboard** for JSON exports (GraphPanel, LogsPanel)
+- [x] **Problem+json CTA hints** with actionable error banners
+- [x] **droppedCount badges** with auto-reset for backpressure visibility
+- [x] **QEMU profile save/load** with localStorage persistence
+
+### Dev Tools (Option B) ✅
+
+- [x] **X-Request-Id tracer** for API debugging
+  - Middleware generates/accepts X-Request-Id (UUIDv4)
+  - Request ID in error responses (Problem+json format)
+  - Request ID in log entries (WebSocket + REST)
+  - Frontend captures and displays request IDs in error banners
+  - Axios interceptor for automatic request ID extraction
+
+## Next Steps (Milestone 6+)
+
+- [ ] Replay authoring guide documentation
 - [ ] i18n support
 - [ ] Playwright E2E tests
 - [ ] CI/CD packaging (macOS/Linux/Windows)
+- [ ] Hardware deployment workflows
 
 ## Troubleshooting
 

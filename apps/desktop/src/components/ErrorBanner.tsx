@@ -18,6 +18,11 @@ export function ErrorBanner({ error, onDismiss }: ErrorBannerProps) {
         <div>
           <p className="font-semibold">{error.message}</p>
           <p className="text-sm mt-1">{error.detail}</p>
+          {error.requestId && (
+            <p className="text-xs mt-1 text-muted-foreground font-mono">
+              Request ID: {error.requestId}
+            </p>
+          )}
         </div>
 
         {/* CTAs */}

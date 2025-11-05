@@ -116,6 +116,8 @@ pub enum QemuEvent {
         source: String,
         msg: String,
         ts: i64,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "requestId")]
+        request_id: Option<String>,
     },
     /// M5: Crash captured
     Crash {

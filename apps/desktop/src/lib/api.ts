@@ -12,6 +12,32 @@ export const api = axios.create({
   timeout: 10000,
 });
 
+// Add response interceptor to capture X-Request-Id from errors
+api.interceptors.response.use(
+  (response) => {
+    // Attach X-Request-Id to successful responses if present
+    const requestId = response.headers['x-request-id'];
+    if (requestId && response.data && typeof response.data === 'object') {
+      response.data.requestId = requestId;
+    }
+    return response;
+  },
+  (error) => {
+    // Attach X-Request-Id to error responses
+    if (error.response) {
+      const requestId = error.response.headers['x-request-id'];
+      if (requestId) {
+        error.requestId = requestId;
+        // Also attach to error.response.data if it's an object
+        if (error.response.data && typeof error.response.data === 'object') {
+          error.response.data.requestId = requestId;
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Types matching daemon API
 export interface QemuConfig {
   features?: string[];

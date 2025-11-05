@@ -27,6 +27,10 @@ pub struct ErrorResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub instance: Option<String>,
 
+    /// Request ID for tracing (X-Request-Id)
+    #[serde(skip_serializing_if = "Option::is_none", rename = "requestId")]
+    pub request_id: Option<String>,
+
     /// Legacy error field for backward compatibility
     #[serde(skip)]
     pub error: String,
@@ -44,8 +48,14 @@ impl ErrorResponse {
             status: status.as_u16(),
             detail: detail.clone(),
             instance: None,
+            request_id: None,
             error: detail,
         }
+    }
+
+    pub fn with_request_id(mut self, request_id: Option<String>) -> Self {
+        self.request_id = request_id;
+        self
     }
 }
 

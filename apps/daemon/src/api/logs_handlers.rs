@@ -37,6 +37,8 @@ pub struct LogEntry {
     pub level: String,
     pub source: String,
     pub msg: String,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "requestId")]
+    pub request_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
