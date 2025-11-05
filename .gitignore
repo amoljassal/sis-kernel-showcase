@@ -34,3 +34,5 @@ Projects/
 
 # macOS metadata
 .DS_Store
+# GUI testing directory (separate from main kernel)
+GUI/
