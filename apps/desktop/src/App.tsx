@@ -21,7 +21,11 @@ import { WhatIfSimulator } from './components/WhatIfSimulator';
 import { ShellCommandInput } from './components/ShellCommandInput';
 import { SelfCheckRunner } from './components/SelfCheckRunner';
 import { ReplayControls } from './components/ReplayControls';
-import { AlertCircle, Activity, Terminal as TerminalIcon, TrendingUp, Shield, GitCompare } from 'lucide-react';
+import { GraphPanel } from './components/GraphPanel';
+import { SchedPanel } from './components/SchedPanel';
+import { LlmPanel } from './components/LlmPanel';
+import { LogsPanel } from './components/LogsPanel';
+import { AlertCircle, Activity, Terminal as TerminalIcon, TrendingUp, Shield, GitCompare, Network, Cpu, Brain, FileText } from 'lucide-react';
 import * as Tabs from '@radix-ui/react-tabs';
 import type { BatchedMetricPoint } from './lib/api';
 import './App.css';
@@ -219,7 +223,7 @@ function App() {
 
             {/* Right Content - Tabbed Views */}
             <Tabs.Root value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
-              <Tabs.List className="flex gap-2 border-b pb-2 mb-4">
+              <Tabs.List className="flex gap-2 border-b pb-2 mb-4 overflow-x-auto">
                 <Tabs.Trigger
                   value="dashboard"
                   className="px-4 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-muted transition-colors"
@@ -233,6 +237,34 @@ function App() {
                 >
                   <TrendingUp className="h-4 w-4 inline-block mr-2" />
                   Metrics
+                </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="graph"
+                  className="px-4 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-muted transition-colors"
+                >
+                  <Network className="h-4 w-4 inline-block mr-2" />
+                  Graph
+                </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="scheduling"
+                  className="px-4 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-muted transition-colors"
+                >
+                  <Cpu className="h-4 w-4 inline-block mr-2" />
+                  Scheduling
+                </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="llm"
+                  className="px-4 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-muted transition-colors"
+                >
+                  <Brain className="h-4 w-4 inline-block mr-2" />
+                  LLM
+                </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="logs"
+                  className="px-4 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-muted transition-colors"
+                >
+                  <FileText className="h-4 w-4 inline-block mr-2" />
+                  Logs
                 </Tabs.Trigger>
                 <Tabs.Trigger
                   value="autonomy"
@@ -263,6 +295,22 @@ function App() {
 
               <Tabs.Content value="metrics" className="flex-1 overflow-hidden">
                 <MetricsPanel metricBatch={currentMetricBatch} />
+              </Tabs.Content>
+
+              <Tabs.Content value="graph" className="flex-1 overflow-hidden">
+                <GraphPanel />
+              </Tabs.Content>
+
+              <Tabs.Content value="scheduling" className="flex-1 overflow-hidden">
+                <SchedPanel />
+              </Tabs.Content>
+
+              <Tabs.Content value="llm" className="flex-1 overflow-hidden">
+                <LlmPanel />
+              </Tabs.Content>
+
+              <Tabs.Content value="logs" className="flex-1 overflow-hidden">
+                <LogsPanel />
               </Tabs.Content>
 
               <Tabs.Content value="autonomy" className="flex-1 overflow-hidden">
