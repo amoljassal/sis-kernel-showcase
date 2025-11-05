@@ -25,9 +25,10 @@ import { GraphPanel } from './components/GraphPanel';
 import { SchedPanel } from './components/SchedPanel';
 import { LlmPanel } from './components/LlmPanel';
 import { LogsPanel } from './components/LogsPanel';
-import { AlertCircle, Activity, Terminal as TerminalIcon, TrendingUp, Shield, GitCompare, Network, Cpu, Brain, FileText } from 'lucide-react';
+import { CrashPanel } from './components/CrashPanel';
+import { AlertCircle, Activity, Terminal as TerminalIcon, TrendingUp, Shield, GitCompare, Network, Cpu, Brain, FileText, AlertTriangle } from 'lucide-react';
 import * as Tabs from '@radix-ui/react-tabs';
-import type { BatchedMetricPoint } from './lib/api';
+import type { BatchedMetricPoint, CrashEvent } from './lib/api';
 import './App.css';
 
 function App() {
@@ -39,6 +40,7 @@ function App() {
     seq?: number;
     droppedCount?: number;
   } | null>(null);
+  const [currentCrashEvent, setCurrentCrashEvent] = useState<CrashEvent | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [explainDecision, setExplainDecision] = useState<AutonomyDecision | null>(null);
 
@@ -119,6 +121,11 @@ function App() {
         seq: event.seq,
         droppedCount: event.dropped_count,
       });
+    }
+
+    // Handle crash events
+    if (event.type === 'crash') {
+      setCurrentCrashEvent(event);
     }
 
     // Handle state changes
@@ -267,6 +274,13 @@ function App() {
                   Logs
                 </Tabs.Trigger>
                 <Tabs.Trigger
+                  value="crashes"
+                  className="px-4 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-muted transition-colors"
+                >
+                  <AlertTriangle className="h-4 w-4 inline-block mr-2" />
+                  Crashes
+                </Tabs.Trigger>
+                <Tabs.Trigger
                   value="autonomy"
                   className="px-4 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-muted transition-colors"
                 >
@@ -311,6 +325,10 @@ function App() {
 
               <Tabs.Content value="logs" className="flex-1 overflow-hidden">
                 <LogsPanel />
+              </Tabs.Content>
+
+              <Tabs.Content value="crashes" className="flex-1 overflow-hidden">
+                <CrashPanel crashEvent={currentCrashEvent} />
               </Tabs.Content>
 
               <Tabs.Content value="autonomy" className="flex-1 overflow-hidden">

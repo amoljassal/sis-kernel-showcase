@@ -117,6 +117,17 @@ pub enum QemuEvent {
         msg: String,
         ts: i64,
     },
+    /// M5: Crash captured
+    Crash {
+        #[serde(rename = "crashId")]
+        crash_id: String,
+        #[serde(rename = "panicMsg")]
+        panic_msg: String,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "stackTrace")]
+        stack_trace: Option<Vec<String>>,
+        severity: String,
+        ts: i64,
+    },
 }
 
 /// Graph state data for GraphState event

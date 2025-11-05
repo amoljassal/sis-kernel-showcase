@@ -99,6 +99,15 @@ export interface BatchedMetricPoint {
   value: number;
 }
 
+export interface CrashEvent {
+  type: 'crash';
+  crashId: string;
+  panicMsg: string;
+  stackTrace?: string[];
+  severity: string;
+  ts: number;
+}
+
 export type QemuEvent =
   | { type: 'state_changed'; state: QemuState; timestamp: number }
   | { type: 'parsed'; event: ParsedEvent }
@@ -108,7 +117,8 @@ export type QemuEvent =
   | SelfCheckCompletedEvent
   | SelfCheckCanceledEvent
   | QemuExitedEvent
-  | MetricBatchEvent;
+  | MetricBatchEvent
+  | CrashEvent;
 
 export interface ShellCommandRequest {
   command: string;
@@ -596,6 +606,111 @@ export const logsApi = {
 
   async exportRun(runId: string): Promise<any> {
     const response = await api.get(`/api/v1/runs/${runId}/export`);
+    return response.data;
+  },
+};
+
+// ============================================================================
+// M5 APIs - Crash Capture & Incident Management
+// ============================================================================
+
+// Crash types
+export interface CrashLog {
+  crashId: string;
+  ts: number;
+  panic_msg: string;
+  stack_trace?: string[];
+  registers?: any;
+  run_id?: string;
+  severity: string; // 'critical' | 'high' | 'medium' | 'low'
+}
+
+export interface IngestCrashRequest {
+  panic_msg: string;
+  stack_trace?: string[];
+  registers?: any;
+  run_id?: string;
+  severity?: string;
+}
+
+export interface IngestCrashResponse {
+  crashId: string;
+}
+
+export interface CrashListQuery {
+  page?: number;
+  page_size?: number;
+  severity?: string;
+  run_id?: string;
+}
+
+export interface CrashListResponse {
+  crashes: CrashLog[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+// Incident types
+export interface Incident {
+  incidentId: string;
+  crashId: string;
+  title: string;
+  description: string;
+  createdAt: number;
+  resolvedAt?: number;
+  status: string; // 'open' | 'investigating' | 'resolved'
+}
+
+export interface CreateIncidentRequest {
+  crashId: string;
+  title: string;
+  description: string;
+}
+
+export interface CreateIncidentResponse {
+  incidentId: string;
+}
+
+export interface IncidentListQuery {
+  page?: number;
+  page_size?: number;
+  status?: string;
+}
+
+export interface IncidentListResponse {
+  incidents: Incident[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+// Crash API
+export const crashApi = {
+  async ingest(req: IngestCrashRequest): Promise<IngestCrashResponse> {
+    const response = await api.post<IngestCrashResponse>('/api/v1/crash', req);
+    return response.data;
+  },
+
+  async list(query?: CrashListQuery): Promise<CrashListResponse> {
+    const response = await api.get<CrashListResponse>('/api/v1/crashes', {
+      params: query,
+    });
+    return response.data;
+  },
+};
+
+// Incident API
+export const incidentApi = {
+  async create(req: CreateIncidentRequest): Promise<CreateIncidentResponse> {
+    const response = await api.post<CreateIncidentResponse>('/api/v1/incidents', req);
+    return response.data;
+  },
+
+  async list(query?: IncidentListQuery): Promise<IncidentListResponse> {
+    const response = await api.get<IncidentListResponse>('/api/v1/incidents', {
+      params: query,
+    });
     return response.data;
   },
 };
