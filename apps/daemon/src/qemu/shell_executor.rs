@@ -98,8 +98,11 @@ impl ShellExecutor {
                     while let Some(event) = event_rx.recv().await {
                         match event {
                             ParsedEvent::Shell { text, .. } => {
-                                // Skip the echoed command line
-                                if skip_first_echo && text.trim() == req.command.trim() {
+                                // Skip the echoed command line (case-insensitive, trim CR)
+                                let text_normalized = text.trim_end_matches(|c| c == '\r' || c == '\n').trim();
+                                let cmd_normalized = req.command.trim_end_matches(|c| c == '\r' || c == '\n').trim();
+
+                                if skip_first_echo && text_normalized.eq_ignore_ascii_case(cmd_normalized) {
                                     skip_first_echo = false;
                                     continue;
                                 }
