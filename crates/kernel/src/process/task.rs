@@ -176,6 +176,10 @@ pub struct Task {
     pub cred: Credentials,
     /// Saved trap frame (for context switching)
     pub trap_frame: TrapFrame,
+    /// CPU context (callee-saved registers + SP)
+    pub cpu_context: crate::arch::CpuContext,
+    /// Kernel stack base (physical address) - 16KB
+    pub kstack: u64,
     /// Process name
     pub name: String,
     /// Children PIDs
@@ -183,9 +187,18 @@ pub struct Task {
 }
 
 impl Task {
+    /// Allocate kernel stack for task (16KB = 4 pages)
+    fn alloc_kstack() -> Result<u64, KernelError> {
+        // Allocate 4 contiguous pages (16KB)
+        crate::mm::alloc_pages(2).ok_or(KernelError::OutOfMemory)
+    }
+}
+
+impl Task {
     /// Create a new task (for PID 1 / init)
     pub fn new_init() -> Self {
         let mm = MemoryManager::new_user().expect("Failed to allocate page table for init");
+        let kstack = Self::alloc_kstack().expect("Failed to allocate kernel stack for init");
 
         Self {
             pid: 1,
@@ -196,6 +209,8 @@ impl Task {
             files: FileTable::new(),
             cred: Credentials::default(),
             trap_frame: TrapFrame::default(),
+            cpu_context: crate::arch::CpuContext::new(),
+            kstack,
             name: String::from("init"),
             children: Vec::new(),
         }
@@ -203,23 +218,34 @@ impl Task {
 
     /// Create a new task as a fork of another
     pub fn fork_from(parent: &Task, child_pid: Pid) -> Self {
+        // Allocate new page table and kernel stack for child
+        let mm = MemoryManager::new_user().expect("Failed to allocate page table for child");
+        let kstack = Self::alloc_kstack().expect("Failed to allocate kernel stack for child");
+
+        // Copy parent's VMAs (COW will be set up later)
+        let mut child_mm = mm;
+        child_mm.brk = parent.mm.brk;
+        child_mm.brk_start = parent.mm.brk_start;
+        child_mm.stack_top = parent.mm.stack_top;
+        child_mm.vmas = parent.mm.vmas.clone();
+
+        // Child gets same trap frame but x0 (return value) will be set to 0 in fork syscall
+        let mut child_tf = parent.trap_frame;
+        child_tf.x0 = 0; // Child returns 0 from fork
+
         Self {
             pid: child_pid,
             ppid: parent.pid,
             state: ProcessState::Running,
             exit_code: 0,
-            mm: MemoryManager {
-                page_table: 0, // Will be allocated during fork
-                brk: parent.mm.brk,
-                brk_start: parent.mm.brk_start,
-                stack_top: parent.mm.stack_top,
-                vmas: parent.mm.vmas.clone(), // COW will mark pages RO
-            },
+            mm: child_mm,
             files: FileTable {
                 fds: parent.files.fds.clone(),
             },
             cred: parent.cred,
-            trap_frame: parent.trap_frame,
+            trap_frame: child_tf,
+            cpu_context: crate::arch::CpuContext::new(), // Will be initialized in scheduler
+            kstack,
             name: parent.name.clone(),
             children: Vec::new(),
         }
