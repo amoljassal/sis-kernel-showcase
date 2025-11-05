@@ -5,7 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { LineChart, Line, ResponsiveContainer, YAxis, XAxis } from 'recharts';
 import { Activity, Terminal, PlayCircle, Brain } from 'lucide-react';
-import { qemuApi, metricsApi, replayApi, QemuState, ReplayState } from '../lib/api';
+import { qemuApi, metricsApi, replayApi, autonomyApi, QemuState, ReplayState } from '../lib/api';
 
 const DEFAULT_METRICS = [
   { name: 'nn_infer_us', label: 'NN Inference (μs)', color: '#10b981' },
@@ -33,6 +33,15 @@ export function Dashboard({ daemonHealthy }: DashboardProps) {
     queryFn: () => replayApi.status(),
     enabled: daemonHealthy,
     refetchInterval: 2000,
+  });
+
+  // Fetch autonomy status
+  const { data: autonomyStatus } = useQuery({
+    queryKey: ['autonomy', 'status'],
+    queryFn: () => autonomyApi.status(),
+    enabled: daemonHealthy,
+    refetchInterval: 2000,
+    retry: false,
   });
 
   // Fetch default metrics
@@ -88,8 +97,15 @@ export function Dashboard({ daemonHealthy }: DashboardProps) {
     {
       icon: Brain,
       label: 'Autonomy',
-      value: 'disabled',
-      color: 'text-muted-foreground',
+      value: autonomyStatus?.enabled
+        ? `${autonomyStatus.total_decisions} decisions`
+        : 'disabled',
+      color: autonomyStatus?.enabled
+        ? 'text-green-500'
+        : 'text-muted-foreground',
+      detail: autonomyStatus?.enabled
+        ? `${autonomyStatus.accepted} acc / ${autonomyStatus.deferred} def`
+        : undefined,
     },
   ];
 
@@ -109,6 +125,11 @@ export function Dashboard({ daemonHealthy }: DashboardProps) {
             <div className={`text-sm font-semibold ${card.color}`}>
               {card.value}
             </div>
+            {'detail' in card && card.detail && (
+              <div className="text-xs text-muted-foreground mt-1">
+                {card.detail}
+              </div>
+            )}
           </div>
         ))}
       </div>
