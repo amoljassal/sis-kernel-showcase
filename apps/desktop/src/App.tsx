@@ -29,7 +29,8 @@ import { CrashPanel } from './components/CrashPanel';
 import { ApiExplorerPanel } from './components/ApiExplorerPanel';
 import { BootTimelineView } from './components/BootTimelineView';
 import { MetricsAlertsPanel } from './components/MetricsAlertsPanel';
-import { AlertCircle, Activity, Terminal as TerminalIcon, TrendingUp, Shield, GitCompare, Network, Cpu, Brain, FileText, AlertTriangle, Code, Clock, Bell } from 'lucide-react';
+import { SettingsPanel } from './components/SettingsPanel';
+import { AlertCircle, Activity, Terminal as TerminalIcon, TrendingUp, Shield, GitCompare, Network, Cpu, Brain, FileText, AlertTriangle, Code, Clock, Bell, Settings } from 'lucide-react';
 import * as Tabs from '@radix-ui/react-tabs';
 import type { BatchedMetricPoint, CrashEvent } from './lib/api';
 import './App.css';
@@ -325,6 +326,13 @@ function App() {
                   <Bell className="h-4 w-4 inline-block mr-2" />
                   Alerts
                 </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="settings"
+                  className="px-4 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-muted transition-colors"
+                >
+                  <Settings className="h-4 w-4 inline-block mr-2" />
+                  Settings
+                </Tabs.Trigger>
               </Tabs.List>
 
               <Tabs.Content value="dashboard" className="flex-1 overflow-y-auto">
@@ -377,6 +385,10 @@ function App() {
 
               <Tabs.Content value="alerts" className="flex-1 overflow-hidden">
                 <MetricsAlertsPanel />
+              </Tabs.Content>
+
+              <Tabs.Content value="settings" className="flex-1 overflow-hidden">
+                <SettingsPanel />
               </Tabs.Content>
             </Tabs.Root>
           </div>
