@@ -43,6 +43,7 @@ export function MetricsPanel({ metricBatch }: MetricsPanelProps) {
   const [metricsData, setMetricsData] = useState<MetricsState>({});
   const [lastSeq, setLastSeq] = useState<number>(0);
   const [droppedCount, setDroppedCount] = useState<number>(0);
+  const [lastDropTime, setLastDropTime] = useState<number>(0);
 
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -103,6 +104,7 @@ export function MetricsPanel({ metricBatch }: MetricsPanelProps) {
     if (seq !== undefined) setLastSeq(seq);
     if (dropped !== undefined && dropped > 0) {
       setDroppedCount((prev) => prev + dropped);
+      setLastDropTime(Date.now());
     }
 
     // Merge points into state (deduplicate by ts)
@@ -129,6 +131,21 @@ export function MetricsPanel({ metricBatch }: MetricsPanelProps) {
     refetchSelectedData,
     selectedSeries,
   ]);
+
+  // Auto-reset dropped count after 10s of no new drops
+  useEffect(() => {
+    if (droppedCount > 0 && lastDropTime > 0) {
+      const timeoutId = setTimeout(() => {
+        const elapsed = Date.now() - lastDropTime;
+        if (elapsed >= 10000) {
+          setDroppedCount(0);
+          setLastDropTime(0);
+        }
+      }, 10000);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [droppedCount, lastDropTime]);
 
   // Handle pause/resume
   const togglePause = () => {
@@ -261,8 +278,11 @@ export function MetricsPanel({ metricBatch }: MetricsPanelProps) {
         </div>
 
         {droppedCount > 0 && (
-          <div className="text-xs text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded">
-            {droppedCount} points dropped due to backpressure
+          <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 text-red-500 rounded-md border border-red-500/20">
+            <div className="flex-shrink-0 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            <span className="text-sm font-semibold">
+              Dropped: {droppedCount} points (backpressure)
+            </span>
           </div>
         )}
       </div>
