@@ -175,6 +175,14 @@ pub fn load_elf(
     // SPSR for EL0: clear all flags, EL0t mode
     task.trap_frame.pstate = 0;
 
+    // Flush instruction cache after loading executable segments
+    // This ensures the processor sees the newly written code
+    #[cfg(target_arch = "aarch64")]
+    {
+        crate::arch::flush_icache_all();
+        crate::debug!("Flushed instruction cache after ELF load");
+    }
+
     crate::info!("ELF loaded: entry={:#x}, sp={:#x}", entry, sp);
 
     Ok(entry)
