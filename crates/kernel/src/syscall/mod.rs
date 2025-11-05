@@ -653,10 +653,40 @@ pub fn sys_pipe(fds: *mut i32) -> Result<isize> {
         return Err(Errno::EFAULT);
     }
 
-    // TODO: Implement pipe infrastructure
-    // For now, return ENOSYS
-    crate::warn!("pipe not yet implemented in Phase A1");
-    Err(Errno::ENOSYS)
+    // Create pipe
+    let (reader, writer) = crate::vfs::create_pipe();
+
+    // Wrap in File objects
+    let read_file = Arc::new(crate::vfs::File::from_pipe_reader(reader));
+    let write_file = Arc::new(crate::vfs::File::from_pipe_writer(writer));
+
+    // Get current task and allocate FDs
+    let pid = crate::process::current_pid();
+    let mut table = crate::process::get_process_table();
+    let table = table.as_mut().ok_or(Errno::ESRCH)?;
+    let task = table.get_mut(pid).ok_or(Errno::ESRCH)?;
+
+    // Allocate read FD
+    let read_fd = task.files.alloc_fd(read_file)?;
+
+    // Allocate write FD
+    let write_fd = match task.files.alloc_fd(write_file) {
+        Ok(fd) => fd,
+        Err(e) => {
+            // Failed to allocate write FD, clean up read FD
+            let _ = task.files.close(read_fd);
+            return Err(e);
+        }
+    };
+
+    // Write FDs to userspace
+    unsafe {
+        *fds.offset(0) = read_fd;
+        *fds.offset(1) = write_fd;
+    }
+
+    crate::debug!("sys_pipe: created pipe with fds [{}, {}]", read_fd, write_fd);
+    Ok(0)
 }
 
 /// sys_dup - Duplicate file descriptor
