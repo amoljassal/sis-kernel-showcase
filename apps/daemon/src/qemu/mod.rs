@@ -4,9 +4,11 @@
 //! and provides process control (run, stop, status).
 
 pub mod shell;
+pub mod shell_executor;
 pub mod supervisor;
 pub mod types;
 
 pub use shell::{SelfCheckResponse, ShellCommandRequest, ShellCommandResponse, TestResultEntry};
+pub use shell_executor::ShellExecutor;
 pub use supervisor::{QemuEvent, QemuSupervisor};
 pub use types::{QemuConfig, QemuState, QemuStatus};

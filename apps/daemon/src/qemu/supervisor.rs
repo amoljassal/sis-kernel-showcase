@@ -1,5 +1,7 @@
 //! QEMU supervisor implementation
 
+use super::shell::{ShellCommandRequest, ShellCommandResponse};
+use super::shell_executor::ShellExecutor;
 use super::types::{QemuConfig, QemuState, QemuStatus};
 use crate::parser::{BootStatus, LineParser, ParsedEvent};
 use anyhow::{Context, Result};
@@ -8,10 +10,11 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 
 const MAX_EVENT_SUBSCRIBERS: usize = 100;
+const MAX_PARSED_EVENT_BUFFER: usize = 1000;
 
 /// Event broadcast to subscribers
 #[derive(Debug, Clone, serde::Serialize)]
@@ -68,6 +71,7 @@ impl Default for SupervisorState {
 pub struct QemuSupervisor {
     state: Arc<RwLock<SupervisorState>>,
     event_tx: broadcast::Sender<QemuEvent>,
+    shell_executor: Arc<Mutex<Option<ShellExecutor>>>,
 }
 
 impl QemuSupervisor {
@@ -77,6 +81,7 @@ impl QemuSupervisor {
         Self {
             state: Arc::new(RwLock::new(SupervisorState::default())),
             event_tx,
+            shell_executor: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -136,6 +141,7 @@ impl QemuSupervisor {
         let mut cmd = Command::new("bash");
         cmd.arg(&script_path)
             .envs(env_vars)
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
@@ -149,9 +155,13 @@ impl QemuSupervisor {
         let pid = child.id();
         info!("QEMU started with PID: {:?}", pid);
 
-        // Capture stdout and stderr
+        // Capture stdin, stdout and stderr
+        let stdin = child.stdin.take().context("Failed to capture stdin")?;
         let stdout = child.stdout.take().context("Failed to capture stdout")?;
         let stderr = child.stderr.take().context("Failed to capture stderr")?;
+
+        // Create channel for parsed events to shell executor
+        let (parsed_event_tx, parsed_event_rx) = mpsc::unbounded_channel();
 
         // Update state
         state.state = QemuState::Starting;
@@ -172,9 +182,13 @@ impl QemuSupervisor {
         // Drop write lock before spawning tasks
         drop(state);
 
-        // Spawn output processing tasks
-        self.spawn_output_processor(stdout, false);
-        self.spawn_output_processor(stderr, true);
+        // Create shell executor
+        let shell_exec = ShellExecutor::new(stdin, parsed_event_rx);
+        *self.shell_executor.lock().await = Some(shell_exec);
+
+        // Spawn output processing tasks (with parsed event sender)
+        self.spawn_output_processor(stdout, false, Some(parsed_event_tx.clone()));
+        self.spawn_output_processor(stderr, true, Some(parsed_event_tx));
 
         // Spawn process monitor
         self.spawn_process_monitor();
@@ -219,6 +233,9 @@ impl QemuSupervisor {
             timestamp: chrono::Utc::now(),
         });
 
+        // Clear shell executor
+        *self.shell_executor.lock().await = None;
+
         Ok(())
     }
 
@@ -227,6 +244,7 @@ impl QemuSupervisor {
         &self,
         output: impl tokio::io::AsyncRead + Unpin + Send + 'static,
         is_stderr: bool,
+        parsed_event_tx: Option<mpsc::UnboundedSender<ParsedEvent>>,
     ) {
         let state = Arc::clone(&self.state);
         let event_tx = self.event_tx.clone();
@@ -270,6 +288,11 @@ impl QemuSupervisor {
                     {
                         let mut s = state.write().await;
                         s.events_emitted += 1;
+                    }
+
+                    // Send to shell executor if available
+                    if let Some(ref tx) = parsed_event_tx {
+                        let _ = tx.send(event.clone());
                     }
 
                     let _ = event_tx.send(QemuEvent::Parsed { event });
@@ -332,6 +355,21 @@ impl QemuSupervisor {
                 }
             }
         });
+    }
+
+    /// Execute a shell command
+    pub async fn execute_command(&self, request: ShellCommandRequest) -> Result<ShellCommandResponse> {
+        let executor = self.shell_executor.lock().await;
+        match executor.as_ref() {
+            Some(exec) => exec.execute(request).await,
+            None => Err(anyhow::anyhow!("Shell not ready or QEMU not running")),
+        }
+    }
+
+    /// Check if shell is ready for commands
+    pub async fn is_shell_ready(&self) -> bool {
+        let executor = self.shell_executor.lock().await;
+        executor.as_ref().map(|e| e.is_available()).unwrap_or(false)
     }
 }
 

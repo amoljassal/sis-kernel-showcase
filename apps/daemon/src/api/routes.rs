@@ -7,7 +7,6 @@ use axum::{
     Router,
 };
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -55,34 +54,25 @@ pub fn create_router(supervisor: Arc<QemuSupervisor>) -> Router {
     // Create OpenAPI documentation
     let openapi = ApiDoc::openapi();
 
-    // Create shell state
-    let shell_state = Arc::new(RwLock::new(shell_handlers::ShellState::new()));
-
-    // Shell command router with shell state
-    let shell_router = Router::new()
-        .route("/api/v1/shell/exec", post(shell_handlers::shell_exec))
-        .route(
-            "/api/v1/shell/selfcheck",
-            post(shell_handlers::shell_selfcheck),
-        )
-        .with_state(shell_state);
-
-    // Main router with supervisor state
-    let main_router = Router::new()
+    Router::new()
         // Health check
         .route("/health", get(handlers::health))
         // QEMU control endpoints
         .route("/api/v1/qemu/run", post(handlers::qemu_run))
         .route("/api/v1/qemu/stop", post(handlers::qemu_stop))
         .route("/api/v1/qemu/status", get(handlers::qemu_status))
+        // Shell command endpoints
+        .route("/api/v1/shell/exec", post(shell_handlers::shell_exec))
+        .route(
+            "/api/v1/shell/selfcheck",
+            post(shell_handlers::shell_selfcheck),
+        )
         // WebSocket events
         .route("/events", get(ws::events_handler))
-        .with_state(supervisor);
-
-    // Merge routers and add Swagger UI
-    Router::new()
-        .merge(main_router)
-        .merge(shell_router)
+        // Swagger UI
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi))
+        // State
+        .with_state(supervisor)
+        // CORS for local development
         .layer(CorsLayer::permissive())
 }

@@ -1,42 +1,12 @@
 //! Shell command API handlers
 
 use crate::qemu::{
-    SelfCheckResponse, ShellCommandRequest, ShellCommandResponse, TestResultEntry,
+    QemuSupervisor, SelfCheckResponse, ShellCommandRequest, ShellCommandResponse, TestResultEntry,
 };
 use axum::{extract::State, http::StatusCode, Json};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tracing::debug;
 use utoipa::ToSchema;
-
-/// Shell executor shared state
-pub struct ShellState {
-    /// Whether shell is ready for commands
-    shell_ready: AtomicBool,
-}
-
-impl ShellState {
-    pub fn new() -> Self {
-        Self {
-            shell_ready: AtomicBool::new(false),
-        }
-    }
-
-    pub fn set_ready(&self, ready: bool) {
-        self.shell_ready.store(ready, Ordering::Relaxed);
-    }
-
-    pub fn is_ready(&self) -> bool {
-        self.shell_ready.load(Ordering::Relaxed)
-    }
-}
-
-impl Default for ShellState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 /// Error response
 #[derive(Debug, serde::Serialize, ToSchema)]
@@ -58,36 +28,30 @@ pub struct ErrorResponse {
     tag = "shell"
 )]
 pub async fn shell_exec(
-    State(shell_state): State<Arc<RwLock<ShellState>>>,
+    State(supervisor): State<Arc<QemuSupervisor>>,
     Json(request): Json<ShellCommandRequest>,
 ) -> Result<Json<ShellCommandResponse>, (StatusCode, Json<ErrorResponse>)> {
-    // Check if shell is ready
-    let is_ready = shell_state.read().await.is_ready();
-    if !is_ready {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorResponse {
-                error: "Shell not ready. Please wait for QEMU to boot.".to_string(),
-            }),
-        ));
-    }
-
     debug!("Executing shell command: {}", request.command);
 
-    // TODO: Implement actual command execution via stdin
-    // For now, return a placeholder response
-    warn!("Shell command execution not yet fully implemented");
+    // Execute command via supervisor
+    match supervisor.execute_command(request).await {
+        Ok(response) => Ok(Json(response)),
+        Err(e) => {
+            let error_msg = e.to_string();
+            let status_code = if error_msg.contains("not ready") || error_msg.contains("not running") {
+                StatusCode::SERVICE_UNAVAILABLE
+            } else if error_msg.contains("timed out") {
+                StatusCode::GATEWAY_TIMEOUT
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
 
-    Ok(Json(ShellCommandResponse {
-        command: request.command.clone(),
-        output: vec![
-            "Command execution coming soon!".to_string(),
-            format!("Would execute: {}", request.command),
-        ],
-        success: true,
-        error: None,
-        execution_time_ms: 0,
-    }))
+            Err((
+                status_code,
+                Json(ErrorResponse { error: error_msg }),
+            ))
+        }
+    }
 }
 
 /// Run self-check tests
@@ -102,37 +66,41 @@ pub async fn shell_exec(
     tag = "shell"
 )]
 pub async fn shell_selfcheck(
-    State(shell_state): State<Arc<RwLock<ShellState>>>,
+    State(supervisor): State<Arc<QemuSupervisor>>,
 ) -> Result<Json<SelfCheckResponse>, (StatusCode, Json<ErrorResponse>)> {
-    // Check if shell is ready
-    let is_ready = shell_state.read().await.is_ready();
-    if !is_ready {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorResponse {
-                error: "Shell not ready. Please wait for QEMU to boot.".to_string(),
-            }),
-        ));
-    }
-
     debug!("Running self-check");
 
     // TODO: Implement actual self-check execution
-    // For now, return a placeholder response
-    warn!("Self-check execution not yet fully implemented");
+    // For now, execute simple test commands
+
+    let test_commands = vec!["info", "help"];
+    let mut tests = Vec::new();
+    let start = std::time::Instant::now();
+
+    for cmd in test_commands {
+        let request = ShellCommandRequest {
+            command: cmd.to_string(),
+            timeout_ms: 5000,
+        };
+
+        let passed = supervisor.execute_command(request).await.is_ok();
+        tests.push(TestResultEntry {
+            name: format!("Command: {}", cmd),
+            passed,
+            timestamp: chrono::Utc::now(),
+        });
+    }
+
+    let passed = tests.iter().filter(|t| t.passed).count();
+    let failed = tests.len() - passed;
+    let execution_time_ms = start.elapsed().as_millis() as u64;
 
     Ok(Json(SelfCheckResponse {
-        tests: vec![
-            TestResultEntry {
-                name: "Example test".to_string(),
-                passed: true,
-                timestamp: chrono::Utc::now(),
-            },
-        ],
-        total: 1,
-        passed: 1,
-        failed: 0,
-        success: true,
-        execution_time_ms: 0,
+        tests,
+        total: tests.len(),
+        passed,
+        failed,
+        success: failed == 0,
+        execution_time_ms,
     }))
 }
