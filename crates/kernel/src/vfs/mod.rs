@@ -9,6 +9,7 @@ pub mod inode;
 pub mod file;
 pub mod mount;
 pub mod tmpfs;
+pub mod devfs;
 
 pub use inode::{Inode, InodeType, InodeOps, Ino, DirEntry, alloc_ino};
 pub use file::{File, FileOps, OpenFlags};
