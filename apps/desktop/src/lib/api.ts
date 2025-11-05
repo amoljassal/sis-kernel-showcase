@@ -166,3 +166,45 @@ export const healthApi = {
     return response.data;
   },
 };
+
+// Replay types
+export enum ReplayState {
+  Idle = 'idle',
+  Running = 'running',
+}
+
+export interface ReplayStatus {
+  state: ReplayState;
+  source?: string;
+  mode?: string;
+  progress: number; // 0-100
+}
+
+export interface ReplayRequest {
+  mode?: string; // 'sample' or 'upload'
+  logSource?: string; // Sample name or file identifier
+  file?: string; // Base64 encoded file content
+  speed?: string; // 'instant', 'fast', 'realtime'
+  sample?: string; // DEPRECATED: Use logSource with mode=sample
+}
+
+export interface ReplayResponse {
+  message: string;
+  lines_processed: number;
+}
+
+export const replayApi = {
+  async start(request: ReplayRequest): Promise<ReplayResponse> {
+    const response = await api.post<ReplayResponse>('/api/v1/replay', request);
+    return response.data;
+  },
+
+  async stop(): Promise<void> {
+    await api.post('/api/v1/replay/stop');
+  },
+
+  async status(): Promise<ReplayStatus> {
+    const response = await api.get<ReplayStatus>('/api/v1/replay/status');
+    return response.data;
+  },
+};
