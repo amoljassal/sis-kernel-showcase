@@ -147,31 +147,45 @@ pub extern "C" fn handle_serror(_frame: &mut TrapFrame) {
     panic!("SError exception");
 }
 
+/// Handle synchronous exception from current EL (kernel mode)
+#[no_mangle]
+pub extern "C" fn handle_sync_curr_el(frame: &mut TrapFrame) {
+    let esr = read_esr_el1();
+    let ec = (esr & ESR_EC_MASK) >> ESR_EC_SHIFT;
+
+    crate::error!(
+        "Kernel exception: EC={:#x}, ESR={:#x}, PC={:#x}",
+        ec, esr, frame.pc
+    );
+    panic!("Kernel synchronous exception");
+}
+
 /// Initialize exception vector table
-/// This should be called early in boot
+/// This should be called early in boot, before enabling interrupts
 pub fn init_exception_vectors() {
     extern "C" {
         static exception_vector_table: u64;
     }
 
     unsafe {
+        let vbar_addr = &exception_vector_table as *const _ as u64;
+
         // Set VBAR_EL1 to point to our exception vector table
         asm!(
             "msr VBAR_EL1, {}",
-            in(reg) &exception_vector_table as *const _ as u64
+            in(reg) vbar_addr
         );
+
+        // Instruction Synchronization Barrier - ensure VBAR is set before continuing
+        asm!("isb");
 
         // Enable alignment fault checking
         let mut sctlr: u64;
         asm!("mrs {}, SCTLR_EL1", out(reg) sctlr);
         sctlr |= (1 << 1);  // A bit: Alignment check enable
         asm!("msr SCTLR_EL1, {}", in(reg) sctlr);
+        asm!("isb");
+
+        crate::info!("VBAR_EL1 set to {:#x}", vbar_addr);
     }
-
-    crate::info!("Exception vectors initialized at {:#x}", unsafe {
-        &exception_vector_table as *const _ as u64
-    });
 }
-
-// Assembly exception vector table will be in arch/aarch64/vectors.S
-// For Phase A0, we'll link in a minimal assembly stub
