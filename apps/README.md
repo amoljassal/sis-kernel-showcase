@@ -310,6 +310,23 @@ pnpm format:check
   - Frontend captures and displays request IDs in error banners
   - Axios interceptor for automatic request ID extraction
 
+### Milestone 3 (M3) Deliverables ✅
+
+**API Explorer - Enhanced Testing & Development**
+
+- [x] **API Explorer Panel** - Comprehensive API testing interface
+  - Interactive endpoint browser with 50+ REST endpoints
+  - Endpoint search and filtering by name, tag, or method
+  - Grouping by API tags (qemu, replay, metrics, graph, etc.)
+  - Custom request builder with method/URL/headers/body
+  - Request history with localStorage persistence (max 100 entries)
+  - Response inspection with JSON formatting
+  - One-click copy to clipboard for responses
+  - Request timing and status display
+  - Integration with Swagger UI (`/swagger-ui`)
+  - Support for GET, POST, PUT, PATCH, DELETE methods
+  - Load historical requests for replay
+
 ## Next Steps (Milestone 6+)
 
 - [x] Replay authoring guide documentation (see docs/guides/REPLAY-AUTHORING-GUIDE.md)
