@@ -184,6 +184,8 @@ pub struct Task {
     pub name: String,
     /// Children PIDs
     pub children: Vec<Pid>,
+    /// Signal queue (pending signals and handlers)
+    pub signals: crate::process::signal::SignalQueue,
 }
 
 impl Task {
@@ -213,6 +215,7 @@ impl Task {
             kstack,
             name: String::from("init"),
             children: Vec::new(),
+            signals: crate::process::signal::SignalQueue::new(),
         }
     }
 
@@ -248,6 +251,7 @@ impl Task {
             kstack,
             name: parent.name.clone(),
             children: Vec::new(),
+            signals: parent.signals.clone(), // Inherit signal handlers from parent
         }
     }
 
