@@ -4,18 +4,21 @@
   "private": true,
   "description": "SIS Kernel Desktop App - Cross-platform QEMU management and control",
   "scripts": {
-    "dev": "concurrently \"pnpm -F daemon dev\" \"pnpm -F desktop dev\"",
-    "build": "pnpm -r build",
+    "dev": "concurrently \"pnpm daemon:build && pnpm daemon\" \"wait-on http://127.0.0.1:8871/health && pnpm -F desktop dev\"",
+    "build": "pnpm daemon:build && pnpm openapi:check && pnpm -r build",
     "test": "pnpm -r test",
+    "test:e2e": "pnpm -F desktop test:e2e",
     "lint": "pnpm -r lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "daemon": "pnpm -F daemon dev",
     "desktop": "pnpm -F desktop dev",
     "daemon:build": "cd apps/daemon && cargo build --release",
-    "openapi:generate": "pnpm -F protos generate"
+    "openapi:generate": "pnpm -F protos generate",
+    "openapi:check": "bash scripts/check-openapi-drift.sh"
   },
   "devDependencies": {
+    "@playwright/test": "^1.40.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "concurrently": "^8.2.2",
@@ -25,7 +28,8 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "lefthook": "^1.6.0",
     "prettier": "^3.2.5",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "wait-on": "^7.2.0"
   },
   "engines": {
     "node": ">=18.0.0",
