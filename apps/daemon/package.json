@@ -1,0 +1,14 @@
+{
+  "name": "daemon",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SIS Kernel Control Daemon (sisctl)",
+  "scripts": {
+    "dev": "cargo watch -x 'run'",
+    "build": "cargo build --release",
+    "test": "cargo test",
+    "lint": "cargo clippy -- -D warnings",
+    "format": "cargo fmt",
+    "format:check": "cargo fmt -- --check"
+  }
+}
