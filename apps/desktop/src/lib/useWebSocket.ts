@@ -6,10 +6,59 @@ import { useEffect, useRef, useState } from 'react';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8871/events';
 
-export interface WebSocketEvent {
-  type: 'state_changed' | 'parsed' | 'raw_line' | 'metric_batch';
-  [key: string]: any;
+// M4 WS Event Types
+export interface GraphStateEvent {
+  type: 'graph_state';
+  graphId: string;
+  state: {
+    operators: Array<{
+      id: string;
+      name?: string;
+      prio?: number;
+      stage?: string;
+      stats?: { execCount: number; avgUs: number };
+    }>;
+    channels: Array<{
+      id: string;
+      cap: number;
+      depth?: number;
+    }>;
+  };
+  ts: number;
 }
+
+export interface SchedEvent {
+  type: 'sched_event';
+  event: 'prio_change' | 'affinity_change' | 'feature_toggle';
+  payload: any;
+  ts: number;
+}
+
+export interface LlmTokensEvent {
+  type: 'llm_tokens';
+  requestId: string;
+  chunk: string;
+  done: boolean;
+  ts: number;
+}
+
+export interface LogLineEvent {
+  type: 'log_line';
+  level: 'debug' | 'info' | 'warn' | 'error';
+  source: 'daemon' | 'qemu' | 'kernel';
+  msg: string;
+  ts: number;
+}
+
+export type WebSocketEvent =
+  | { type: 'state_changed'; [key: string]: any }
+  | { type: 'parsed'; [key: string]: any }
+  | { type: 'raw_line'; [key: string]: any }
+  | { type: 'metric_batch'; points: any[]; seq?: number; dropped_count?: number }
+  | GraphStateEvent
+  | SchedEvent
+  | LlmTokensEvent
+  | LogLineEvent;
 
 export function useWebSocket(onEvent?: (event: WebSocketEvent) => void) {
   const [isConnected, setIsConnected] = useState(false);
