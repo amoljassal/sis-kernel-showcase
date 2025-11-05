@@ -9,9 +9,9 @@ pub mod inode;
 pub mod file;
 pub mod mount;
 
-pub use inode::{Inode, InodeType, InodeOps};
+pub use inode::{Inode, InodeType, InodeOps, Ino, DirEntry, alloc_ino};
 pub use file::{File, FileOps, OpenFlags};
-pub use mount::{Mount, MountTable, init_vfs, mount, get_root};
+pub use mount::{Mount, init_vfs, mount, get_root, get_mounts};
 
 use crate::lib::error::Errno;
 use alloc::sync::Arc;
@@ -26,19 +26,35 @@ pub const S_IFCHR: u32 = 0o020000;  // Character device
 pub const S_IRUSR: u32 = 0o000400;  // Owner read
 pub const S_IWUSR: u32 = 0o000200;  // Owner write
 pub const S_IXUSR: u32 = 0o000100;  // Owner execute
+pub const S_IRGRP: u32 = 0o000040;  // Group read
+pub const S_IWGRP: u32 = 0o000020;  // Group write
+pub const S_IXGRP: u32 = 0o000010;  // Group execute
+pub const S_IROTH: u32 = 0o000004;  // Other read
+pub const S_IWOTH: u32 = 0o000002;  // Other write
+pub const S_IXOTH: u32 = 0o000001;  // Other execute
 
 /// Open a file by path
 pub fn open(path: &str, flags: OpenFlags) -> Result<Arc<File>, Errno> {
     // Get root inode
     let root = get_root().ok_or(Errno::ENOENT)?;
 
-    // For now, simple path resolution (absolute paths only)
+    // Simple path resolution (absolute paths only)
     let inode = if path == "/" {
         root
     } else {
         // Walk path components
         path_walk(root, path)?
     };
+
+    // Handle O_DIRECTORY flag
+    if flags.contains(OpenFlags::O_DIRECTORY) && !inode.is_dir() {
+        return Err(Errno::ENOTDIR);
+    }
+
+    // Handle O_TRUNC flag
+    if flags.contains(OpenFlags::O_TRUNC) && flags.is_writable() {
+        inode.set_size(0);
+    }
 
     // Create File object
     let file = File::new(inode, flags);
@@ -54,6 +70,20 @@ fn path_walk(mut current: Arc<Inode>, path: &str) -> Result<Arc<Inode>, Errno> {
     let components: Vec<&str> = path.trim_start_matches('/').split('/').filter(|s| !s.is_empty()).collect();
 
     for component in components {
+        // Check if current is a directory
+        if !current.is_dir() {
+            return Err(Errno::ENOTDIR);
+        }
+
+        // Handle special components
+        if component == "." {
+            continue;
+        }
+        if component == ".." {
+            // For A1, just stay at current (no parent traversal yet)
+            continue;
+        }
+
         // Look up component in current directory
         current = current.lookup(component)?;
     }
@@ -61,8 +91,8 @@ fn path_walk(mut current: Arc<Inode>, path: &str) -> Result<Arc<Inode>, Errno> {
     Ok(current)
 }
 
-/// Create a new regular file
-pub fn create(path: &str, mode: u32) -> Result<Arc<Inode>, Errno> {
+/// Create a new file or directory
+pub fn create(path: &str, mode: u32, flags: OpenFlags) -> Result<Arc<File>, Errno> {
     let root = get_root().ok_or(Errno::ENOENT)?;
 
     // Split path into parent and name
@@ -76,7 +106,16 @@ pub fn create(path: &str, mode: u32) -> Result<Arc<Inode>, Errno> {
     };
 
     // Create file in parent
-    parent.create(name, mode)
+    let inode = parent.create(name, mode)?;
+
+    // Handle O_TRUNC if needed
+    if flags.contains(OpenFlags::O_TRUNC) {
+        inode.set_size(0);
+    }
+
+    // Open the newly created file
+    let file = File::new(inode, flags);
+    Ok(Arc::new(file))
 }
 
 /// Split path into (parent, name)
