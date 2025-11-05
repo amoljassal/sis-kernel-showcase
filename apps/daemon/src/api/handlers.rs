@@ -1,5 +1,6 @@
 //! API request handlers
 
+use crate::config::DaemonConfig;
 use crate::qemu::{QemuConfig, QemuStatus, QemuSupervisor};
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
@@ -149,4 +150,17 @@ pub async fn qemu_status(
     State(supervisor): State<Arc<QemuSupervisor>>,
 ) -> Json<QemuStatus> {
     Json(supervisor.status().await)
+}
+
+/// Get daemon configuration
+#[utoipa::path(
+    get,
+    path = "/api/v1/config",
+    responses(
+        (status = 200, description = "Configuration retrieved", body = DaemonConfig)
+    ),
+    tag = "config"
+)]
+pub async fn get_config() -> Json<DaemonConfig> {
+    Json(DaemonConfig::from_env())
 }
