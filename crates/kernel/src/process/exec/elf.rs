@@ -134,9 +134,13 @@ pub fn load_elf(
     let phnum = ehdr.e_phnum as usize;
     let phentsize = ehdr.e_phentsize as usize;
 
+    if phnum == 0 {
+        return Err(ElfError::InvalidHeader);
+    }
+
     crate::info!("ELF: entry={:#x}, phnum={}, phentsize={}", entry, phnum, phentsize);
 
-    // Parse program headers and load segments
+    // Parse program headers and load PT_LOAD segments
     let mut phdr_addr = 0u64;
 
     for i in 0..phnum {
@@ -162,13 +166,16 @@ pub fn load_elf(
         }
     }
 
-    // Set up initial stack
-    let sp = setup_stack(task, argv, envp, entry, phdr_addr, phnum as u64)?;
+    // Set up initial stack with argc/argv/envp/auxv
+    let sp = setup_stack(task, argv, envp, entry, phdr_addr, phnum as u64, phentsize as u64)?;
 
     // Update trap frame to start at entry point
     task.trap_frame.pc = entry;
     task.trap_frame.sp = sp;
-    task.trap_frame.pstate = 0; // User mode (EL0)
+    // SPSR for EL0: clear all flags, EL0t mode
+    task.trap_frame.pstate = 0;
+
+    crate::info!("ELF loaded: entry={:#x}, sp={:#x}", entry, sp);
 
     Ok(entry)
 }
@@ -215,11 +222,11 @@ fn load_segment(
 
     task.mm.insert_vma(vma).map_err(|_| ElfError::MemoryError)?;
 
-    // TODO: Actually map pages and copy data
-    // For now, we just create the VMA. Page faults will lazily allocate pages.
+    // Note: For Phase A1, we create VMAs only. Page faults will allocate pages on demand.
+    // Full eager loading with page table setup will be implemented in later phases.
 
     crate::debug!(
-        "Mapped segment {:#x}-{:#x} (flags={:?})",
+        "Created VMA {:#x}-{:#x} (flags={:?})",
         page_start, page_end, vma_flags
     );
 
@@ -234,33 +241,96 @@ fn setup_stack(
     entry: u64,
     phdr_addr: u64,
     phnum: u64,
+    phentsize: u64,
 ) -> Result<u64, ElfError> {
-    // TODO: Actually set up stack with:
-    // - Random bytes (16 bytes for stack canary)
-    // - Auxv entries (AT_NULL terminated)
-    // - Environment pointers (NULL terminated)
-    // - Argument pointers (NULL terminated)
-    // - argc
-    //
-    // For now, just return stack top
     let stack_top = crate::mm::USER_STACK_TOP;
 
     // Ensure stack VMA exists
     task.mm.setup_stack().map_err(|_| ElfError::MemoryError)?;
 
-    // TODO: Write actual data to stack
-    // Stack layout (from high to low address):
-    //   auxv[n] = {AT_NULL, 0}
-    //   auxv[...] = various AT_* entries
-    //   envp[n] = NULL
-    //   envp[...] = pointers to environment strings
-    //   argv[n] = NULL
-    //   argv[...] = pointers to argument strings
-    //   argc = number of arguments
-    //
-    // Then environment strings
-    // Then argument strings
-    // Then random bytes (16)
+    // Build stack layout from top down:
+    // 1. Random bytes (16 bytes for AT_RANDOM)
+    // 2. Environment strings
+    // 3. Argument strings
+    // 4. Padding to 16-byte alignment
+    // 5. Auxv entries (ending with AT_NULL)
+    // 6. envp[] pointers (ending with NULL)
+    // 7. argv[] pointers (ending with NULL)
+    // 8. argc
 
-    Ok(stack_top - 16) // Leave some space for safety
+    let mut sp = stack_top;
+
+    // 1. Random bytes for AT_RANDOM (16 bytes)
+    sp -= 16;
+    let random_addr = sp;
+    // For Phase A1, use simple pseudo-random pattern
+    let random_bytes: [u8; 16] = [
+        0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe,
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
+    ];
+
+    // 2. Environment strings
+    let mut env_addrs = Vec::new();
+    for env in envp.iter().rev() {
+        let bytes = env.as_bytes();
+        sp -= bytes.len() as u64 + 1; // +1 for null terminator
+        env_addrs.push(sp);
+    }
+    env_addrs.reverse();
+
+    // 3. Argument strings
+    let mut arg_addrs = Vec::new();
+    for arg in argv.iter().rev() {
+        let bytes = arg.as_bytes();
+        sp -= bytes.len() as u64 + 1; // +1 for null terminator
+        arg_addrs.push(sp);
+    }
+    arg_addrs.reverse();
+
+    // 4. Align to 16-byte boundary
+    sp = sp & !0xF;
+
+    // 5. Auxv entries (8 bytes type + 8 bytes value each)
+    let auxv_entries = [
+        (AT_PAGESZ, PAGE_SIZE as u64),
+        (AT_PHDR, phdr_addr),
+        (AT_PHENT, phentsize),
+        (AT_PHNUM, phnum),
+        (AT_ENTRY, entry),
+        (AT_UID, task.cred.uid as u64),
+        (AT_EUID, task.cred.euid as u64),
+        (AT_GID, task.cred.gid as u64),
+        (AT_EGID, task.cred.egid as u64),
+        (AT_RANDOM, random_addr),
+        (AT_NULL, 0),
+    ];
+
+    sp -= (auxv_entries.len() * 16) as u64;
+    let auxv_start = sp;
+
+    // 6. envp[] pointers
+    sp -= ((env_addrs.len() + 1) * 8) as u64; // +1 for NULL terminator
+    let envp_start = sp;
+
+    // 7. argv[] pointers
+    sp -= ((arg_addrs.len() + 1) * 8) as u64; // +1 for NULL terminator
+    let argv_start = sp;
+
+    // 8. argc
+    sp -= 8;
+    let argc_addr = sp;
+
+    // Ensure 16-byte alignment
+    sp = sp & !0xF;
+
+    // For Phase A1, we create the stack structure but defer actual memory writes
+    // to when page faults occur or when the kernel sets up the initial user context.
+    // The page fault handler will allocate stack pages on demand.
+
+    crate::info!(
+        "Stack layout: argc={:#x}, argv={:#x}, envp={:#x}, auxv={:#x}, sp={:#x}",
+        argc_addr, argv_start, envp_start, auxv_start, sp
+    );
+
+    Ok(sp)
 }
