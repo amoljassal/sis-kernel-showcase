@@ -1,6 +1,6 @@
 //! API routing
 
-use super::{handlers, shell_handlers, ws};
+use super::{handlers, replay_handlers, shell_handlers, ws};
 use crate::qemu::QemuSupervisor;
 use axum::{
     routing::{get, post},
@@ -21,6 +21,7 @@ use utoipa_swagger_ui::SwaggerUi;
         handlers::qemu_status,
         shell_handlers::shell_exec,
         shell_handlers::shell_selfcheck,
+        replay_handlers::replay_sample,
     ),
     components(
         schemas(
@@ -34,12 +35,15 @@ use utoipa_swagger_ui::SwaggerUi;
             handlers::ErrorResponse,
             handlers::SuccessResponse,
             handlers::HealthResponse,
+            replay_handlers::ReplayRequest,
+            replay_handlers::ReplayResponse,
         )
     ),
     tags(
         (name = "health", description = "Health check endpoints"),
         (name = "qemu", description = "QEMU control endpoints"),
-        (name = "shell", description = "Shell command execution")
+        (name = "shell", description = "Shell command execution"),
+        (name = "replay", description = "Replay log files for offline testing")
     ),
     info(
         title = "SIS Kernel Control Daemon (sisctl)",
@@ -67,6 +71,8 @@ pub fn create_router(supervisor: Arc<QemuSupervisor>) -> Router {
             "/api/v1/shell/selfcheck",
             post(shell_handlers::shell_selfcheck),
         )
+        // Replay endpoints for offline testing
+        .route("/api/v1/replay", post(replay_handlers::replay_sample))
         // WebSocket events
         .route("/events", get(ws::events_handler))
         // Swagger UI

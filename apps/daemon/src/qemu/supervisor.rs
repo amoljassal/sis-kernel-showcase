@@ -401,6 +401,11 @@ impl QemuSupervisor {
         executor.as_ref().map(|e| e.is_available()).unwrap_or(false)
     }
 
+    /// Get event broadcaster for replay transport
+    pub fn event_broadcaster(&self) -> broadcast::Sender<QemuEvent> {
+        self.event_tx.clone()
+    }
+
     /// Run self-check tests
     pub async fn run_self_check(&self) -> Result<ShellCommandResponse> {
         // Set busy flag
