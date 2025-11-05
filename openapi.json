@@ -1,0 +1,1042 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SIS Kernel Control Daemon (sisctl)",
+    "description": "REST API for managing SIS kernel QEMU instances",
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8871",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["health"],
+        "summary": "Health check",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config": {
+      "get": {
+        "tags": ["config"],
+        "summary": "Get daemon configuration",
+        "operationId": "getConfig",
+        "responses": {
+          "200": {
+            "description": "Configuration retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/qemu/run": {
+      "post": {
+        "tags": ["qemu"],
+        "summary": "Run QEMU with configuration",
+        "operationId": "qemuRun",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QemuConfig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "QEMU started successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to start QEMU",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/qemu/stop": {
+      "post": {
+        "tags": ["qemu"],
+        "summary": "Stop QEMU",
+        "operationId": "qemuStop",
+        "responses": {
+          "200": {
+            "description": "QEMU stopped successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to stop QEMU",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/qemu/status": {
+      "get": {
+        "tags": ["qemu"],
+        "summary": "Get QEMU status",
+        "operationId": "qemuStatus",
+        "responses": {
+          "200": {
+            "description": "QEMU status retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QemuStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shell/exec": {
+      "post": {
+        "tags": ["shell"],
+        "summary": "Execute a shell command",
+        "operationId": "shellExec",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShellCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Command executed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShellCommandResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "System busy",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds to wait before retrying"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Shell not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Execution failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shell/selfcheck": {
+      "post": {
+        "tags": ["shell"],
+        "summary": "Run self-check tests",
+        "operationId": "shellSelfcheck",
+        "responses": {
+          "200": {
+            "description": "Self-check completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfCheckResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "System busy",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Shell not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Self-check failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shell/selfcheck/cancel": {
+      "post": {
+        "tags": ["shell"],
+        "summary": "Cancel running self-check",
+        "operationId": "shellSelfcheckCancel",
+        "responses": {
+          "200": {
+            "description": "Self-check canceled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No self-check running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Cancel failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/replay": {
+      "post": {
+        "tags": ["replay"],
+        "summary": "Start replay from log file",
+        "operationId": "replayStart",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplayRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replay started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Replay already running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Replay failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/replay/stop": {
+      "post": {
+        "tags": ["replay"],
+        "summary": "Stop running replay",
+        "operationId": "replayStop",
+        "responses": {
+          "200": {
+            "description": "Replay stopped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No replay running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/replay/status": {
+      "get": {
+        "tags": ["replay"],
+        "summary": "Get replay status",
+        "operationId": "replayStatus",
+        "responses": {
+          "200": {
+            "description": "Replay status retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/metrics/streams": {
+      "get": {
+        "tags": ["metrics"],
+        "summary": "List all metric series",
+        "operationId": "listStreams",
+        "parameters": [
+          {
+            "name": "prefix",
+            "in": "query",
+            "description": "Filter by name prefix",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of metric series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SeriesMetadata"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/metrics/query": {
+      "get": {
+        "tags": ["metrics"],
+        "summary": "Query a specific metric series",
+        "operationId": "querySeries",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "description": "Metric name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Start timestamp in milliseconds",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "End timestamp in milliseconds",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "maxPoints",
+            "in": "query",
+            "description": "Maximum number of points to return (100-5000, default 1000)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 5000,
+              "default": 1000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metric data points",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "type": "/errors/query-bad-range",
+                  "title": "Bad Request",
+                  "status": 400,
+                  "detail": "Invalid time range: 'from' must be less than 'to'"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Series not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "type": "/errors/query-series-unknown",
+                  "title": "Not Found",
+                  "status": 404,
+                  "detail": "Metric series not found: unknown_metric"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events": {
+      "get": {
+        "tags": ["websocket"],
+        "summary": "WebSocket event stream",
+        "description": "Upgrade to WebSocket for real-time event streaming",
+        "responses": {
+          "101": {
+            "description": "Switching Protocols"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "ok"
+          },
+          "version": {
+            "type": "string",
+            "example": "0.1.0"
+          },
+          "uptime_secs": {
+            "type": "integer",
+            "example": 3600
+          }
+        },
+        "required": ["status", "version"]
+      },
+      "DaemonConfig": {
+        "type": "object",
+        "properties": {
+          "promptPattern": {
+            "type": "string",
+            "description": "Prompt pattern regex for shell detection"
+          },
+          "maxOutputBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Maximum output bytes per command"
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Retry-After seconds for 409 Conflict responses"
+          },
+          "metricsHighResRetentionMs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "High-resolution metrics retention in milliseconds"
+          },
+          "metricsDownsampleRetentionMs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Downsampled metrics retention in milliseconds"
+          },
+          "metricsCardinalityLimit": {
+            "type": "integer",
+            "description": "Maximum number of unique metric series"
+          },
+          "runScript": {
+            "type": "string",
+            "description": "Path to QEMU run script"
+          },
+          "defaultFeatures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Default features to enable"
+          }
+        },
+        "required": [
+          "promptPattern",
+          "maxOutputBytes",
+          "retryAfterSeconds",
+          "metricsHighResRetentionMs",
+          "metricsDownsampleRetentionMs",
+          "metricsCardinalityLimit",
+          "runScript",
+          "defaultFeatures"
+        ]
+      },
+      "QemuConfig": {
+        "type": "object",
+        "properties": {
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "working_dir": {
+            "type": "string"
+          }
+        }
+      },
+      "QemuStatus": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/QemuState"
+          },
+          "pid": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "uptime_secs": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "lines_processed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "events_emitted": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": ["state", "features", "lines_processed", "events_emitted"]
+      },
+      "QemuState": {
+        "type": "string",
+        "enum": ["idle", "starting", "running", "stopping", "failed"]
+      },
+      "ShellCommandRequest": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        },
+        "required": ["command"]
+      },
+      "ShellCommandResponse": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "output": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "execution_time_ms": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": ["command", "output", "success", "execution_time_ms"]
+      },
+      "SelfCheckResponse": {
+        "type": "object",
+        "properties": {
+          "tests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TestResultEntry"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "passed": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "execution_time_ms": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": ["tests", "total", "passed", "failed", "success", "execution_time_ms"]
+      },
+      "TestResultEntry": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": ["name", "passed", "timestamp"]
+      },
+      "ReplayRequest": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["sample", "upload"],
+            "default": "sample",
+            "description": "Log source mode"
+          },
+          "logSource": {
+            "type": "string",
+            "description": "Sample name or file identifier"
+          },
+          "file": {
+            "type": "string",
+            "description": "Base64-encoded log file content (mode=upload only)"
+          },
+          "speed": {
+            "type": "string",
+            "enum": ["instant", "fast", "realtime"],
+            "default": "realtime",
+            "description": "Replay speed"
+          },
+          "sample": {
+            "type": "string",
+            "deprecated": true,
+            "description": "DEPRECATED: Use logSource with mode=sample"
+          }
+        }
+      },
+      "ReplayResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "lines_processed": {
+            "type": "integer"
+          }
+        },
+        "required": ["message", "lines_processed"]
+      },
+      "ReplayStatus": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/ReplayState"
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "mode": {
+            "type": "string",
+            "nullable": true
+          },
+          "progress": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Progress percentage"
+          }
+        },
+        "required": ["state", "progress"]
+      },
+      "ReplayState": {
+        "type": "string",
+        "enum": ["idle", "running"]
+      },
+      "MetricPoint": {
+        "type": "object",
+        "description": "A single metric data point",
+        "properties": {
+          "ts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix timestamp in milliseconds"
+          },
+          "value": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Metric value"
+          }
+        },
+        "required": ["ts", "value"]
+      },
+      "SeriesStats": {
+        "type": "object",
+        "description": "Statistics for a metric series",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "description": "Total number of points recorded"
+          },
+          "min": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Minimum value"
+          },
+          "max": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Maximum value"
+          },
+          "mean": {
+            "type": "number",
+            "format": "double",
+            "description": "Mean (average) value"
+          },
+          "last_value": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Most recent value"
+          }
+        },
+        "required": ["count", "min", "max", "mean", "last_value"]
+      },
+      "SeriesMetadata": {
+        "type": "object",
+        "description": "Metadata for a metric series",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Series name"
+          },
+          "count": {
+            "type": "integer",
+            "description": "Number of points in series"
+          },
+          "lastTs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Timestamp of most recent point (ms)"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/SeriesStats"
+          }
+        },
+        "required": ["name", "count", "lastTs", "stats"]
+      },
+      "QueryResult": {
+        "type": "object",
+        "description": "Result of a metric query",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Series name"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricPoint"
+            },
+            "description": "Data points"
+          },
+          "downsampled": {
+            "type": "boolean",
+            "description": "Whether data was downsampled"
+          },
+          "from": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Start timestamp (ms)"
+          },
+          "to": {
+            "type": "integer",
+            "format": "int64",
+            "description": "End timestamp (ms)"
+          }
+        },
+        "required": ["name", "points", "downsampled", "from", "to"]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "description": "RFC 7807 problem+json error response",
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri",
+            "description": "URI reference identifying the problem type",
+            "example": "/errors/query-bad-range"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short, human-readable summary"
+          },
+          "status": {
+            "type": "integer",
+            "description": "HTTP status code"
+          },
+          "detail": {
+            "type": "string",
+            "description": "Human-readable explanation"
+          },
+          "instance": {
+            "type": "string",
+            "format": "uri",
+            "description": "URI reference to specific occurrence",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message (legacy field)"
+          }
+        },
+        "required": ["title", "status", "detail", "error"]
+      },
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["message"]
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "health",
+      "description": "Health check endpoints"
+    },
+    {
+      "name": "config",
+      "description": "Configuration endpoints"
+    },
+    {
+      "name": "qemu",
+      "description": "QEMU control endpoints"
+    },
+    {
+      "name": "shell",
+      "description": "Shell command execution"
+    },
+    {
+      "name": "replay",
+      "description": "Replay log files for offline testing"
+    },
+    {
+      "name": "metrics",
+      "description": "Metrics collection and querying"
+    },
+    {
+      "name": "websocket",
+      "description": "WebSocket event streaming"
+    }
+  ]
+}
