@@ -13,6 +13,7 @@ import { Terminal } from './components/Terminal';
 import { BootMarkers } from './components/BootMarkers';
 import { QemuProfileSelector } from './components/QemuProfileSelector';
 import { MetricsPanel } from './components/MetricsPanel';
+import { Dashboard } from './components/Dashboard';
 import { ShellCommandInput } from './components/ShellCommandInput';
 import { SelfCheckRunner } from './components/SelfCheckRunner';
 import { ReplayControls } from './components/ReplayControls';
@@ -175,8 +176,10 @@ function App() {
           </div>
         ) : (
           <div className="h-full grid grid-cols-3 gap-4 p-4">
-            {/* Left Column - Profile & Boot Status */}
+            {/* Left Column - Dashboard & Controls */}
             <div className="space-y-4 overflow-y-auto">
+              <Dashboard daemonHealthy={daemonHealthy} />
+
               <QemuProfileSelector
                 onRun={(config) => runQemu.mutate(config)}
                 onStop={() => stopQemu.mutate()}
