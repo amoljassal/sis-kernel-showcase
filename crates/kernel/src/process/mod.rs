@@ -1,31 +1,15 @@
 // Process management
-// Phase A0 - Minimal stubs, full implementation in Phase A1
+// Phase A1 - Full process model with fork/exec/wait
 
 pub mod scheduler;
+pub mod task;
+pub mod pid;
+pub mod wait;
+pub mod current;
+pub mod exec;
 
-// Process ID type
-pub type Pid = u32;
-
-// Process state (stubbed for Phase A0)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProcessState {
-    Running,
-    Ready,
-    Sleeping,
-    Stopped,
-    Zombie,
-    Dead,
-}
-
-// Stub: Get current process PID
-// Phase A0: Always returns 1 (no process model yet)
-// Phase A1: Will return actual current process PID
-pub fn current_pid() -> Pid {
-    1
-}
-
-// Stub: Get current process (will be real in Phase A1)
-#[allow(dead_code)]
-pub fn current_process() -> Pid {
-    current_pid()
-}
+// Re-export commonly used types and functions
+pub use task::{Pid, Task, ProcessState, Credentials, MemoryManager, Vma, VmaFlags};
+pub use pid::{init_process_table, alloc_pid, insert_task, get_process_table};
+pub use current::{current_pid, set_current_pid, switch_to};
+pub use wait::{do_wait4, do_exit, WNOHANG, WUNTRACED, WCONTINUED};
