@@ -6,10 +6,42 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::ToSchema;
 
-/// API error response
+/// API error response (RFC 7807 problem+json format)
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ErrorResponse {
+    /// A URI reference that identifies the problem type
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
+
+    /// A short, human-readable summary of the problem type
+    pub title: String,
+
+    /// The HTTP status code
+    pub status: u16,
+
+    /// A human-readable explanation specific to this occurrence
+    pub detail: String,
+
+    /// A URI reference that identifies the specific occurrence
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instance: Option<String>,
+
+    /// Legacy error field for backward compatibility
+    #[serde(skip)]
     pub error: String,
+}
+
+impl ErrorResponse {
+    pub fn new(status: StatusCode, detail: String) -> Self {
+        Self {
+            r#type: None,
+            title: status.canonical_reason().unwrap_or("Error").to_string(),
+            status: status.as_u16(),
+            detail: detail.clone(),
+            instance: None,
+            error: detail,
+        }
+    }
 }
 
 /// API success response
@@ -68,12 +100,8 @@ pub async fn qemu_run(
             })
         })
         .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                }),
-            )
+            let status = StatusCode::INTERNAL_SERVER_ERROR;
+            (status, Json(ErrorResponse::new(status, e.to_string())))
         })
 }
 
@@ -99,12 +127,8 @@ pub async fn qemu_stop(
             })
         })
         .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                }),
-            )
+            let status = StatusCode::INTERNAL_SERVER_ERROR;
+            (status, Json(ErrorResponse::new(status, e.to_string())))
         })
 }
 

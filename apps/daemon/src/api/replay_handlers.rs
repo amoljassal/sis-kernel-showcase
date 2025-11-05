@@ -6,11 +6,8 @@ use std::sync::Arc;
 use tracing::{debug, error};
 use utoipa::ToSchema;
 
-/// Error response
-#[derive(Debug, serde::Serialize, ToSchema)]
-pub struct ErrorResponse {
-    pub error: String,
-}
+// Re-export problem+json ErrorResponse from handlers
+pub use super::handlers::ErrorResponse;
 
 /// Replay request
 #[derive(Debug, serde::Deserialize, ToSchema)]
@@ -60,11 +57,13 @@ pub async fn replay_sample(
         "boot_with_metrics" => "samples/boot_with_metrics.log",
         "self_check" => "samples/self_check.log",
         _ => {
+            let status = StatusCode::BAD_REQUEST;
             return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: format!("Unknown sample: {}", request.sample),
-                }),
+                status,
+                Json(ErrorResponse::new(
+                    status,
+                    format!("Unknown sample: {}", request.sample),
+                )),
             ));
         }
     };
