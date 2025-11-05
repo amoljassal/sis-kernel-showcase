@@ -27,7 +27,8 @@ import { LlmPanel } from './components/LlmPanel';
 import { LogsPanel } from './components/LogsPanel';
 import { CrashPanel } from './components/CrashPanel';
 import { ApiExplorerPanel } from './components/ApiExplorerPanel';
-import { AlertCircle, Activity, Terminal as TerminalIcon, TrendingUp, Shield, GitCompare, Network, Cpu, Brain, FileText, AlertTriangle, Code } from 'lucide-react';
+import { BootTimelineView } from './components/BootTimelineView';
+import { AlertCircle, Activity, Terminal as TerminalIcon, TrendingUp, Shield, GitCompare, Network, Cpu, Brain, FileText, AlertTriangle, Code, Clock } from 'lucide-react';
 import * as Tabs from '@radix-ui/react-tabs';
 import type { BatchedMetricPoint, CrashEvent } from './lib/api';
 import './App.css';
@@ -309,6 +310,13 @@ function App() {
                   <Code className="h-4 w-4 inline-block mr-2" />
                   API Explorer
                 </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="timeline"
+                  className="px-4 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-muted transition-colors"
+                >
+                  <Clock className="h-4 w-4 inline-block mr-2" />
+                  Boot Timeline
+                </Tabs.Trigger>
               </Tabs.List>
 
               <Tabs.Content value="dashboard" className="flex-1 overflow-y-auto">
@@ -353,6 +361,10 @@ function App() {
 
               <Tabs.Content value="api" className="flex-1 overflow-hidden">
                 <ApiExplorerPanel />
+              </Tabs.Content>
+
+              <Tabs.Content value="timeline" className="flex-1 overflow-hidden">
+                <BootTimelineView markers={bootMarkers} />
               </Tabs.Content>
             </Tabs.Root>
           </div>

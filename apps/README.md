@@ -327,6 +327,32 @@ pnpm format:check
   - Support for GET, POST, PUT, PATCH, DELETE methods
   - Load historical requests for replay
 
+### Milestone 4 (M4) Deliverables ✅
+
+**Log Viewer Enhancements & Boot Timeline**
+
+- [x] **Boot Timeline View** - Visual boot performance analysis
+  - Horizontal timeline visualization with event markers
+  - Real-time boot event tracking (9 markers)
+  - Performance metrics (total duration, avg/min/max deltas)
+  - Interactive timeline scrubbing and event selection
+  - Event sequence list with timing details
+  - Performance insights (detects slow boot steps)
+  - Color-coded performance indicators
+  - Formatted duration display (ms/s/m)
+
+- [x] **Enhanced LogsPanel** - Production-grade log viewer (existing)
+  - Virtualized scrolling with @tanstack/react-virtual
+  - Ring buffer (10,000 log limit) for memory efficiency
+  - Multi-level filtering (level, source, search text)
+  - Real-time log tailing via WebSocket
+  - Run history with start/stop/export
+  - JSON and CSV export capabilities
+  - Backpressure detection with visual indicators
+  - Self-check integration with pass/fail banners
+  - Color-coded log levels
+  - Timestamp display
+
 ## Next Steps (Milestone 6+)
 
 - [x] Replay authoring guide documentation (see docs/guides/REPLAY-AUTHORING-GUIDE.md)
