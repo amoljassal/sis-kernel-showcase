@@ -11,6 +11,7 @@
 
 mod api;
 mod config;
+mod metrics;
 mod parser;
 mod qemu;
 

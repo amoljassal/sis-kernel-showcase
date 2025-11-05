@@ -99,7 +99,7 @@ pub enum ParsedEvent {
     /// Metric line: METRIC name=value
     Metric {
         name: String,
-        value: f64,
+        value: i64,
         #[serde(with = "chrono::serde::ts_milliseconds")]
         timestamp: chrono::DateTime<chrono::Utc>,
     },
@@ -137,7 +137,7 @@ pub enum ParsedEvent {
 
 // Regex patterns (compiled once)
 static METRIC_PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"METRIC\s+([a-zA-Z_][a-zA-Z0-9_]*)=([0-9.eE+-]+)").unwrap());
+    Lazy::new(|| Regex::new(r"^METRIC\s+([A-Za-z0-9_:\-\.]+)=(-?[0-9]+)\s*$").unwrap());
 
 static PROMPT_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^\s*sis>\s*$").unwrap());
 
@@ -221,10 +221,14 @@ impl LineParser {
         }
 
         // Check for METRIC lines
-        if let Some(captures) = METRIC_PATTERN.captures(line) {
-            let name = captures.get(1)?.as_str().to_string();
+        if let Some(captures) = METRIC_PATTERN.captures(&clean_line) {
+            let name_raw = captures.get(1)?.as_str();
             let value_str = captures.get(2)?.as_str();
-            let value = value_str.parse::<f64>().ok()?;
+            let value = value_str.parse::<i64>().ok()?;
+
+            // Normalize name: trim + lowercase, keep ':'
+            let name = name_raw.trim().to_lowercase();
+
             return Some(ParsedEvent::Metric {
                 name,
                 value,
@@ -253,12 +257,17 @@ impl LineParser {
     }
 
     /// Parse multiple metrics from a line (supports multiple METRIC entries)
-    pub fn parse_metrics(&self, line: &str) -> Vec<(String, f64)> {
+    /// Note: Current regex requires line start/end, so this will only match single metrics
+    pub fn parse_metrics(&self, line: &str) -> Vec<(String, i64)> {
+        let clean_line = strip_ansi(line);
         let mut metrics = Vec::new();
-        for captures in METRIC_PATTERN.captures_iter(line) {
+
+        // Current pattern requires ^...$ so only one metric per line
+        if let Some(captures) = METRIC_PATTERN.captures(&clean_line) {
             if let (Some(name), Some(value_str)) = (captures.get(1), captures.get(2)) {
-                if let Ok(value) = value_str.as_str().parse::<f64>() {
-                    metrics.push((name.as_str().to_string(), value));
+                if let Ok(value) = value_str.as_str().parse::<i64>() {
+                    let normalized_name = name.as_str().trim().to_lowercase();
+                    metrics.push((normalized_name, value));
                 }
             }
         }
@@ -321,12 +330,36 @@ mod tests {
     #[test]
     fn test_parse_metric() {
         let mut parser = LineParser::new();
-        let event = parser.parse_line("METRIC irq_latency_ns=1234.5");
+        let event = parser.parse_line("METRIC irq_latency_ns=1234");
         assert!(matches!(event, Some(ParsedEvent::Metric { .. })));
 
         if let Some(ParsedEvent::Metric { name, value, .. }) = event {
             assert_eq!(name, "irq_latency_ns");
-            assert_eq!(value, 1234.5);
+            assert_eq!(value, 1234);
+        }
+    }
+
+    #[test]
+    fn test_parse_metric_with_colon() {
+        let mut parser = LineParser::new();
+        let event = parser.parse_line("METRIC nn:infer_us=5678");
+        assert!(matches!(event, Some(ParsedEvent::Metric { .. })));
+
+        if let Some(ParsedEvent::Metric { name, value, .. }) = event {
+            assert_eq!(name, "nn:infer_us");
+            assert_eq!(value, 5678);
+        }
+    }
+
+    #[test]
+    fn test_parse_metric_negative() {
+        let mut parser = LineParser::new();
+        let event = parser.parse_line("METRIC temperature_c=-15");
+        assert!(matches!(event, Some(ParsedEvent::Metric { .. })));
+
+        if let Some(ParsedEvent::Metric { name, value, .. }) = event {
+            assert_eq!(name, "temperature_c");
+            assert_eq!(value, -15);
         }
     }
 
@@ -381,14 +414,17 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_metrics() {
+    fn test_single_metric_per_line() {
         let parser = LineParser::new();
-        let metrics = parser.parse_metrics("METRIC cpu_util=45.2 METRIC mem_used=1024");
-        assert_eq!(metrics.len(), 2);
+        // With new regex requiring line start/end, only one metric per line
+        let metrics = parser.parse_metrics("METRIC cpu_util=45");
+        assert_eq!(metrics.len(), 1);
         assert_eq!(metrics[0].0, "cpu_util");
-        assert_eq!(metrics[0].1, 45.2);
-        assert_eq!(metrics[1].0, "mem_used");
-        assert_eq!(metrics[1].1, 1024.0);
+        assert_eq!(metrics[0].1, 45);
+
+        // Multiple metrics on one line won't match (due to ^...$ pattern)
+        let metrics2 = parser.parse_metrics("METRIC cpu_util=45 METRIC mem_used=1024");
+        assert_eq!(metrics2.len(), 0);
     }
 
     #[test]
