@@ -105,7 +105,7 @@ fn handle_cow_fault(task: &mut crate::process::Task, fault_addr: u64) -> Result<
     // 4. Decrement refcount on old page
     // 5. Flush TLB for this address
 
-    let new_page = alloc_page().map_err(|_| Errno::ENOMEM)?;
+    let new_page = alloc_page().ok_or(Errno::ENOMEM)?;
 
     // TODO: Copy old page to new page
     // TODO: Update PTE
@@ -127,7 +127,7 @@ fn handle_lazy_fault(
     crate::debug!("Lazy fault at {:#x}, flags={:?}", page_addr, vma_flags);
 
     // Allocate a physical page
-    let phys_page = alloc_page().map_err(|_| Errno::ENOMEM)?;
+    let phys_page = alloc_page().ok_or(Errno::ENOMEM)?;
 
     // Convert VMA flags to PTE flags
     let pte_flags = if vma_flags.contains(crate::process::VmaFlags::WRITE) {

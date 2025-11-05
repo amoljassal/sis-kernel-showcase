@@ -154,17 +154,8 @@ impl PageTable {
     }
 }
 
-/// Allocate a physical page (stub - will use real allocator)
-pub fn alloc_page() -> Result<u64, KernelError> {
-    // Stub: In a real implementation, this would call the page allocator
-    // For now, return an error to indicate not implemented
-    Err(KernelError::OutOfMemory)
-}
-
-/// Free a physical page (stub)
-pub fn free_page(_phys_addr: u64) {
-    // Stub: In a real implementation, this would return the page to the allocator
-}
+// Note: alloc_page, alloc_pages, free_page, free_pages are provided by buddy.rs
+// and re-exported from mm/mod.rs
 
 /// Map a virtual page to a physical page
 pub fn map_page(
