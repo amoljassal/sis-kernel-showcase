@@ -74,13 +74,19 @@ export interface SelfCheckCompletedEvent {
   timestamp: number;
 }
 
+export interface SelfCheckCanceledEvent {
+  type: 'self_check_canceled';
+  timestamp: number;
+}
+
 export type QemuEvent =
   | { type: 'state_changed'; state: QemuState; timestamp: number }
   | { type: 'parsed'; event: ParsedEvent }
   | { type: 'raw_line'; line: string; timestamp: number }
   | SelfCheckStartedEvent
   | SelfCheckTestEvent
-  | SelfCheckCompletedEvent;
+  | SelfCheckCompletedEvent
+  | SelfCheckCanceledEvent;
 
 export interface ShellCommandRequest {
   command: string;
@@ -140,6 +146,10 @@ export const shellApi = {
       '/api/v1/shell/selfcheck'
     );
     return response.data;
+  },
+
+  async cancelSelfcheck(): Promise<void> {
+    await api.post('/api/v1/shell/selfcheck/cancel');
   },
 };
 

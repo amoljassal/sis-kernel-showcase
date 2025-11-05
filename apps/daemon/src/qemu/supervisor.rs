@@ -59,6 +59,11 @@ pub enum QemuEvent {
         #[serde(with = "chrono::serde::ts_milliseconds")]
         timestamp: chrono::DateTime<chrono::Utc>,
     },
+    /// Self-check canceled
+    SelfCheckCanceled {
+        #[serde(with = "chrono::serde::ts_milliseconds")]
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
 }
 
 /// Shared QEMU supervisor state
@@ -104,6 +109,7 @@ pub struct QemuSupervisor {
     shell_executor: Arc<Mutex<Option<ShellExecutor>>>,
     busy: Arc<AtomicBool>,
     busy_reason: Arc<Mutex<Option<BusyReason>>>,
+    cancel_self_check: Arc<AtomicBool>,
 }
 
 impl QemuSupervisor {
@@ -116,6 +122,7 @@ impl QemuSupervisor {
             shell_executor: Arc::new(Mutex::new(None)),
             busy: Arc::new(AtomicBool::new(false)),
             busy_reason: Arc::new(Mutex::new(None)),
+            cancel_self_check: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -447,6 +454,24 @@ impl QemuSupervisor {
         self.event_tx.clone()
     }
 
+    /// Cancel running self-check
+    pub async fn cancel_self_check(&self) -> Result<()> {
+        // Check if self-check is running
+        if !self.busy.load(Ordering::SeqCst) {
+            anyhow::bail!("No self-check is currently running");
+        }
+
+        let reason = self.busy_reason.lock().await;
+        if !matches!(reason.as_ref(), Some(BusyReason::SelfCheck)) {
+            anyhow::bail!("No self-check is currently running");
+        }
+        drop(reason);
+
+        // Set cancel flag
+        self.cancel_self_check.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+
     /// Run self-check tests
     #[tracing::instrument(skip(self))]
     pub async fn run_self_check(&self) -> Result<ShellCommandResponse> {
@@ -458,7 +483,8 @@ impl QemuSupervisor {
             anyhow::bail!("System busy: another operation is in progress");
         }
 
-        // Set busy reason
+        // Clear cancel flag and set busy reason
+        self.cancel_self_check.store(false, Ordering::SeqCst);
         *self.busy_reason.lock().await = Some(BusyReason::SelfCheck);
 
         // Emit started event
@@ -480,45 +506,70 @@ impl QemuSupervisor {
             }
         };
 
-        // Parse and emit test results
-        if let Ok(ref response) = result {
-            let mut total = 0;
-            let mut passed_count = 0;
+        // Check if canceled
+        let was_canceled = self.cancel_self_check.load(Ordering::SeqCst);
 
-            for line in &response.output {
-                if line.contains("[PASS]") {
-                    let test_name = line.replace("[PASS]", "").trim().to_string();
-                    total += 1;
-                    passed_count += 1;
-                    let _ = self.event_tx.send(QemuEvent::SelfCheckTest {
-                        name: test_name,
-                        passed: true,
-                        timestamp: chrono::Utc::now(),
-                    });
-                } else if line.contains("[FAIL]") {
-                    let test_name = line.replace("[FAIL]", "").trim().to_string();
-                    total += 1;
-                    let _ = self.event_tx.send(QemuEvent::SelfCheckTest {
-                        name: test_name,
-                        passed: false,
+        // Parse and emit test results (only if not canceled)
+        if !was_canceled {
+            if let Ok(ref response) = result {
+                let mut total = 0;
+                let mut passed_count = 0;
+
+                for line in &response.output {
+                    // Check cancellation during result processing
+                    if self.cancel_self_check.load(Ordering::SeqCst) {
+                        break;
+                    }
+
+                    if line.contains("[PASS]") {
+                        let test_name = line.replace("[PASS]", "").trim().to_string();
+                        total += 1;
+                        passed_count += 1;
+                        let _ = self.event_tx.send(QemuEvent::SelfCheckTest {
+                            name: test_name,
+                            passed: true,
+                            timestamp: chrono::Utc::now(),
+                        });
+                    } else if line.contains("[FAIL]") {
+                        let test_name = line.replace("[FAIL]", "").trim().to_string();
+                        total += 1;
+                        let _ = self.event_tx.send(QemuEvent::SelfCheckTest {
+                            name: test_name,
+                            passed: false,
+                            timestamp: chrono::Utc::now(),
+                        });
+                    }
+                }
+
+                // Emit completed event only if not canceled mid-processing
+                if !self.cancel_self_check.load(Ordering::SeqCst) {
+                    let _ = self.event_tx.send(QemuEvent::SelfCheckCompleted {
+                        total,
+                        passed: passed_count,
+                        failed: total - passed_count,
+                        success: total > 0 && passed_count == total,
                         timestamp: chrono::Utc::now(),
                     });
                 }
             }
+        }
 
-            // Emit completed event
-            let _ = self.event_tx.send(QemuEvent::SelfCheckCompleted {
-                total,
-                passed: passed_count,
-                failed: total - passed_count,
-                success: total > 0 && passed_count == total,
+        // Emit canceled event if flagged
+        if was_canceled || self.cancel_self_check.load(Ordering::SeqCst) {
+            let _ = self.event_tx.send(QemuEvent::SelfCheckCanceled {
                 timestamp: chrono::Utc::now(),
             });
         }
 
-        // Clear busy flag and reason
+        // Clear busy flag, reason, and cancel flag
         self.busy.store(false, Ordering::SeqCst);
         *self.busy_reason.lock().await = None;
+        self.cancel_self_check.store(false, Ordering::SeqCst);
+
+        // Return error if was canceled
+        if was_canceled {
+            anyhow::bail!("Self-check was canceled");
+        }
 
         result
     }

@@ -139,3 +139,36 @@ pub async fn shell_selfcheck(
         }
     }
 }
+
+/// Cancel running self-check
+#[utoipa::path(
+    post,
+    path = "/api/v1/shell/selfcheck/cancel",
+    responses(
+        (status = 200, description = "Self-check canceled", body = SuccessResponse),
+        (status = 404, description = "No self-check running", body = ErrorResponse),
+        (status = 500, description = "Cancel failed", body = ErrorResponse)
+    ),
+    tag = "shell"
+)]
+pub async fn shell_selfcheck_cancel(
+    State(supervisor): State<Arc<QemuSupervisor>>,
+) -> Response {
+    debug!("Canceling self-check");
+
+    match supervisor.cancel_self_check().await {
+        Ok(_) => Json(crate::api::handlers::SuccessResponse {
+            message: "Self-check canceled".to_string(),
+        }).into_response(),
+        Err(e) => {
+            let error_msg = e.to_string();
+            let (status_code, error_type) = if error_msg.contains("No self-check") {
+                (StatusCode::NOT_FOUND, Some("/errors/not-found".to_string()))
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, Some("/errors/internal".to_string()))
+            };
+
+            error_response(status_code, error_msg, error_type)
+        }
+    }
+}

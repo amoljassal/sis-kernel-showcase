@@ -21,6 +21,7 @@ use utoipa_swagger_ui::SwaggerUi;
         handlers::qemu_status,
         shell_handlers::shell_exec,
         shell_handlers::shell_selfcheck,
+        shell_handlers::shell_selfcheck_cancel,
         replay_handlers::replay_sample,
     ),
     components(
@@ -70,6 +71,10 @@ pub fn create_router(supervisor: Arc<QemuSupervisor>) -> Router {
         .route(
             "/api/v1/shell/selfcheck",
             post(shell_handlers::shell_selfcheck),
+        )
+        .route(
+            "/api/v1/shell/selfcheck/cancel",
+            post(shell_handlers::shell_selfcheck_cancel),
         )
         // Replay endpoints for offline testing
         .route("/api/v1/replay", post(replay_handlers::replay_sample))
