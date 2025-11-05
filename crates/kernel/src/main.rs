@@ -24,6 +24,8 @@ pub mod mm;
 pub mod vfs;
 // Device drivers (Phase A1)
 pub mod drivers;
+// Initial RAM filesystem
+pub mod initramfs;
 // Userspace test module
 pub mod userspace_test;
 // Interactive shell module
