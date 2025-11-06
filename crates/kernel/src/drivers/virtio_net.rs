@@ -8,6 +8,7 @@ use crate::virtio::{VirtIOMMIOTransport, VirtIODeviceType, VirtIOMMIOOffset};
 use crate::virtio::virtqueue::VirtQueue;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use alloc::string::String;
 use alloc::collections::VecDeque;
 use spin::Mutex;
 use core::mem::size_of;

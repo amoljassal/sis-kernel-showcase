@@ -3,6 +3,7 @@
 /// Common animation patterns and transitions
 
 use super::{Animator, AnimationTarget, AnimationProperty, EasingFunction, AnimationId};
+use alloc::vec::Vec;
 
 /// Transition type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

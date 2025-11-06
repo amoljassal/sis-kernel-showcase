@@ -32,6 +32,13 @@ pub use ptmx::open_ptmx;
 pub use ptsfs::mount_ptsfs;
 pub use ext2::mount_ext2;
 
+/// Initialize VFS subsystem (Phase A)
+/// Wrapper for init_vfs() that returns Result for error handling
+pub fn init() -> Result<(), Errno> {
+    init_vfs();
+    Ok(())
+}
+
 use crate::lib::error::Errno;
 use alloc::sync::Arc;
 use alloc::string::String;
