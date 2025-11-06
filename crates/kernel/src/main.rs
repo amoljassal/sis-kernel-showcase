@@ -30,6 +30,8 @@ pub mod net;
 pub mod security;
 // SMP subsystem (Phase E)
 pub mod smp;
+// Filesystem layer with journaling (Phase F)
+pub mod fs;
 // Device drivers (Phase A1)
 pub mod drivers;
 // Initial RAM filesystem

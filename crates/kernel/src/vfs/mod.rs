@@ -7,6 +7,10 @@
 /// Phase A2 additions:
 /// - ptmx (/dev/ptmx for PTY allocation)
 /// - ptsfs (/dev/pts for PTY slave devices)
+/// Phase B additions:
+/// - ext2 (Second Extended Filesystem)
+/// Phase F:
+/// - ext4 with journaling (see crate::fs module for JBD2 and ext4)
 
 pub mod inode;
 pub mod file;
