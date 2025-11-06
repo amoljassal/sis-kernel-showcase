@@ -6,7 +6,8 @@
 use crate::arch::TrapFrame;
 use crate::process::{current_pid, get_process_table};
 use crate::lib::error::Errno;
-use super::paging::{PteFlags, alloc_page, flush_tlb, PAGE_SIZE};
+use super::paging::{PteFlags, flush_tlb, PAGE_SIZE};
+use super::buddy::alloc_page;
 
 /// Fault Status Code (FSC) from ESR_EL1
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
