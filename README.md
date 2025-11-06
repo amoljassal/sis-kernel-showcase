@@ -6,6 +6,31 @@ This README is intentionally scoped to what is implemented today. Sections marke
 
 This README reflects the implemented, verifiable behavior in this repo today. Phases 1-6 are COMPLETE. Future work focuses on GUI-kernel integration, hardware validation, and performance optimization.
 
+## Quick Start - Single Command
+
+Launch the complete SIS Kernel stack (daemon + kernel + GUI) with one command:
+
+```bash
+./scripts/start_all.sh
+```
+
+This will:
+1. Build and start the sisctl daemon (port 8871)
+2. Launch QEMU kernel with llm and crypto-real features
+3. Start the GUI dev server (port 5173)
+4. Open the GUI in your browser automatically
+
+**Services:**
+- Daemon API: http://localhost:8871
+- WebSocket: ws://localhost:8871/events
+- GUI: http://localhost:1420 (or 5173 depending on config)
+
+**Logs:**
+- Daemon: `/tmp/sisctl.log`
+- GUI: `/tmp/gui.log`
+
+Press Ctrl+C to stop all services. The script handles graceful shutdown of all components.
+
 ## Feature Flags and Modes
 
 - `llm`: Enables the kernel-resident LLM service and `llmctl/llminfer/llmstream` shell.
