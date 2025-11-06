@@ -6,7 +6,7 @@
 use crate::lib::error::{Result, Errno};
 use crate::block::BlockDevice;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
+use alloc::vec::{self, Vec};
 use spin::Mutex;
 
 /// JBD2 magic numbers
@@ -192,7 +192,7 @@ impl TransactionHandle {
 /// Journal handle
 pub struct Journal {
     /// Block device
-    pub device: Arc<dyn BlockDevice>,
+    pub device: Arc<BlockDevice>,
     /// Journal superblock
     pub superblock: Mutex<JournalSuperblock>,
     /// Current transaction
@@ -205,7 +205,7 @@ pub struct Journal {
 
 impl Journal {
     /// Load journal from device
-    pub fn load(device: Arc<dyn BlockDevice>, journal_block: u64) -> Result<Arc<Self>> {
+    pub fn load(device: Arc<BlockDevice>, journal_block: u64) -> Result<Arc<Self>> {
         // Read journal superblock (first block of journal)
         let mut sb_buf = vec![0u8; 4096];
         device.read(journal_block, &mut sb_buf)?;

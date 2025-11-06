@@ -5,7 +5,7 @@
 use crate::ui::{Widget, EventResponse, InputEvent, SizeConstraints, Size, Theme, MouseButton};
 use crate::ui::{VStack, Label, Panel, Padding, TextAlignment};
 use crate::graphics::{DrawContext, Rect, Font, Color};
-use alloc::vec::Vec;
+use alloc::vec::{self, Vec};
 use alloc::string::String;
 use alloc::boxed::Box;
 
