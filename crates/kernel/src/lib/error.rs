@@ -15,6 +15,7 @@ pub enum KernelError {
     NotSupported,
     BadFileDescriptor,
     BadAddress,
+    SecurityViolation,  // Phase D: W^X and security policy violations
 }
 
 #[repr(i32)]
@@ -55,6 +56,7 @@ impl From<KernelError> for Errno {
             KernelError::NotSupported => Errno::ENOSYS,
             KernelError::BadFileDescriptor => Errno::EBADF,
             KernelError::BadAddress => Errno::EFAULT,
+            KernelError::SecurityViolation => Errno::EACCES,
         }
     }
 }

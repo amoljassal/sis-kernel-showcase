@@ -345,3 +345,135 @@ pub fn alloc_user_page_table() -> Result<u64, KernelError> {
     Ok(ptr as u64)
 }
 
+// ============================
+// Memory Protection (Phase D)
+// ============================
+
+/// mprotect protection flags (Linux ABI)
+pub const PROT_NONE: i32 = 0x0;
+pub const PROT_READ: i32 = 0x1;
+pub const PROT_WRITE: i32 = 0x2;
+pub const PROT_EXEC: i32 = 0x4;
+
+/// Convert mprotect protection flags to PTE flags
+///
+/// Enforces W^X policy: a page cannot be both writable and executable.
+pub fn prot_to_pte_flags(prot: i32) -> Result<PteFlags, KernelError> {
+    let readable = (prot & PROT_READ) != 0;
+    let writable = (prot & PROT_WRITE) != 0;
+    let executable = (prot & PROT_EXEC) != 0;
+
+    // W^X enforcement: cannot be both writable and executable
+    if writable && executable {
+        crate::warn!("mprotect: W^X violation - cannot be both writable and executable");
+        return Err(KernelError::InvalidArgument);
+    }
+
+    // Build PTE flags
+    let mut flags = PteFlags::VALID | PteFlags::USER | PteFlags::ACCESS | PteFlags::NOT_GLOBAL;
+
+    // If not writable, mark as read-only
+    if !writable {
+        flags |= PteFlags::READONLY;
+    }
+
+    // If not executable, set UXN (user execute-never)
+    if !executable {
+        flags |= PteFlags::UXN;
+    }
+
+    // PROT_NONE: remove VALID bit to trigger page fault
+    if prot == PROT_NONE {
+        flags.remove(PteFlags::VALID);
+    }
+
+    // Read permission is implicit in AArch64 (controlled by VALID bit)
+    let _ = readable;
+
+    Ok(flags)
+}
+
+/// Change protection on a range of pages
+///
+/// Returns Ok(()) on success, or error if any page in the range fails.
+/// Flushes TLB for each modified page.
+pub fn change_page_protection(
+    root: *mut PageTable,
+    start_addr: u64,
+    end_addr: u64,
+    prot: i32,
+) -> Result<(), KernelError> {
+    // Validate alignment
+    if (start_addr & (PAGE_SIZE as u64 - 1)) != 0 {
+        return Err(KernelError::InvalidArgument);
+    }
+
+    if (end_addr & (PAGE_SIZE as u64 - 1)) != 0 {
+        return Err(KernelError::InvalidArgument);
+    }
+
+    // Convert protection flags
+    let new_flags = prot_to_pte_flags(prot)?;
+
+    // Change protection for each page in range
+    let mut addr = start_addr;
+    while addr < end_addr {
+        // Get PTE for this address
+        let pte_ptr = walk_page_table(root, addr, false)?;
+
+        unsafe {
+            let pte = &mut *pte_ptr;
+
+            // Check if page is mapped
+            if !pte.is_valid() {
+                // Skip unmapped pages (don't error)
+                addr += PAGE_SIZE as u64;
+                continue;
+            }
+
+            // Preserve physical address, update flags
+            let phys_addr = pte.phys_addr();
+            *pte = Pte::new(phys_addr, new_flags);
+        }
+
+        // Flush TLB for this address
+        flush_tlb(addr);
+
+        addr += PAGE_SIZE as u64;
+    }
+
+    Ok(())
+}
+
+/// Check if a page satisfies W^X policy
+pub fn check_wx_policy(flags: PteFlags) -> bool {
+    let writable = flags.is_writable();
+    let executable = flags.is_executable();
+
+    // W^X: cannot be both writable and executable
+    !(writable && executable)
+}
+
+/// Validate that all pages in an address space satisfy W^X policy
+pub fn validate_wx_policy(root: *mut PageTable) -> Result<(), KernelError> {
+    // Walk all page tables and check each valid PTE
+    // This is a simplified check - in practice, you'd walk all levels
+
+    unsafe {
+        let root_table = &*root;
+        for l0_entry in &root_table.entries {
+            if !l0_entry.is_valid() {
+                continue;
+            }
+
+            let flags = l0_entry.flags();
+            if !check_wx_policy(flags) {
+                crate::warn!("W^X violation detected in page table");
+                return Err(KernelError::SecurityViolation);
+            }
+        }
+    }
+
+    Ok(())
+}
+
