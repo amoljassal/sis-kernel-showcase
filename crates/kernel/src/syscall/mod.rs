@@ -394,16 +394,12 @@ pub fn sys_fork() -> Result<isize> {
 
     crate::info!("fork: parent={}, child={}", parent_pid, child_pid);
 
-    // Get parent task and create child
+    // Get parent task and create child (COW is set up in fork_from)
     let mut table = crate::process::get_process_table();
     let table = table.as_mut().ok_or(Errno::ESRCH)?;
 
     let parent = table.get(parent_pid).ok_or(Errno::ESRCH)?;
-    let mut child = crate::process::Task::fork_from(parent, child_pid);
-
-    // Set up COW for parent and child
-    crate::mm::setup_cow_for_fork(&mut child.mm)
-        .map_err(|_| Errno::ENOMEM)?;
+    let child = crate::process::Task::fork_from(parent, child_pid);
 
     // Insert child into process table
     drop(table); // Release lock before inserting

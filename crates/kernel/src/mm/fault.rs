@@ -180,13 +180,51 @@ fn handle_lazy_fault(
 /// Mark all writable pages in the parent and child as read-only with COW bit.
 /// This is called during fork to enable copy-on-write.
 pub fn setup_cow_for_fork(parent_mm: &mut crate::process::MemoryManager) -> Result<(), Errno> {
-    // TODO: Walk page tables
-    // TODO: For each writable user page:
-    //   1. Mark as read-only
-    //   2. Set COW bit
-    //   3. Increment refcount
-    // TODO: Flush TLB
+    use super::paging::{PageTable, PteFlags};
 
-    crate::info!("COW setup for fork (stub)");
+    if parent_mm.page_table == 0 {
+        return Ok(()); // No page table to process
+    }
+
+    let page_table = parent_mm.page_table as *mut PageTable;
+
+    // Walk all VMAs and mark their pages as COW
+    for vma in &parent_mm.vmas {
+        // Only process writable VMAs
+        if !vma.flags.contains(crate::process::VmaFlags::WRITE) {
+            continue;
+        }
+
+        // Walk pages in this VMA
+        let mut addr = vma.start;
+        while addr < vma.end {
+            // Try to get PTE for this address
+            if let Ok(pte_ptr) = super::paging::get_pte_mut(page_table, addr) {
+                unsafe {
+                    let pte = &mut *pte_ptr;
+
+                    // Only mark valid, writable pages as COW
+                    if pte.is_valid() && pte.flags().is_writable() {
+                        let mut flags = pte.flags();
+                        flags.mark_cow(); // Sets READONLY and COW bits
+
+                        // Update PTE with COW flags
+                        let phys_addr = pte.phys_addr();
+                        *pte = super::paging::Pte::new(phys_addr, flags);
+
+                        // TODO: Increment reference count for this page
+                        // For MVP, we'll copy on write without refcounting
+                    }
+                }
+            }
+
+            addr += PAGE_SIZE as u64;
+        }
+    }
+
+    // Flush TLB to ensure new permissions take effect
+    super::paging::flush_tlb_all();
+
+    crate::debug!("COW setup complete for {} VMAs", parent_mm.vmas.len());
     Ok(())
 }
