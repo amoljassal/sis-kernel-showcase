@@ -477,3 +477,56 @@ pub fn validate_wx_policy(root: *mut PageTable) -> Result<(), KernelError> {
     Ok(())
 }
 
+// ============================
+// Copy-on-Write (Phase D)
+// ============================
+
+/// Copy page table for fork with COW
+///
+/// Copies all page table entries from parent to child.
+/// For writable pages, marks them as COW in both parent and child.
+pub fn copy_page_table_for_fork(
+    parent: *mut PageTable,
+    child: *mut PageTable,
+    vma_start: u64,
+    vma_end: u64,
+    is_writable: bool,
+) -> Result<(), KernelError> {
+    let mut addr = vma_start;
+
+    while addr < vma_end {
+        // Try to get parent PTE
+        if let Ok(parent_pte_ptr) = walk_page_table(parent, addr, false) {
+            unsafe {
+                let parent_pte = &mut *parent_pte_ptr;
+
+                // Only process valid pages
+                if !parent_pte.is_valid() {
+                    addr += PAGE_SIZE as u64;
+                    continue;
+                }
+
+                let phys_addr = parent_pte.phys_addr();
+                let mut flags = parent_pte.flags();
+
+                // For writable pages, mark as COW
+                if is_writable && flags.is_writable() {
+                    flags.mark_cow(); // Sets READONLY and COW
+                    *parent_pte = Pte::new(phys_addr, flags);
+                }
+
+                // Create child PTE with same physical address and flags
+                let child_pte_ptr = walk_page_table(child, addr, true)?;
+                *child_pte_ptr = Pte::new(phys_addr, flags);
+
+                // TODO: Increment reference count for shared page
+                // For MVP, we copy on first write without refcounting
+            }
+        }
+
+        addr += PAGE_SIZE as u64;
+    }
+
+    Ok(())
+}
+

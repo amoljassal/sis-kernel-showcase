@@ -239,12 +239,34 @@ impl Task {
         let mm = MemoryManager::new_user().expect("Failed to allocate page table for child");
         let kstack = Self::alloc_kstack().expect("Failed to allocate kernel stack for child");
 
-        // Copy parent's VMAs (COW will be set up later)
+        // Copy parent's address space layout
         let mut child_mm = mm;
         child_mm.brk = parent.mm.brk;
         child_mm.brk_start = parent.mm.brk_start;
         child_mm.stack_top = parent.mm.stack_top;
+        child_mm.mmap_base = parent.mm.mmap_base;
         child_mm.vmas = parent.mm.vmas.clone();
+
+        // Copy parent's page tables with COW (if parent has a page table)
+        if parent.mm.page_table != 0 {
+            let parent_pt = parent.mm.page_table as *mut crate::mm::paging::PageTable;
+            let child_pt = child_mm.page_table as *mut crate::mm::paging::PageTable;
+
+            // Copy page tables for each VMA
+            for vma in &parent.mm.vmas {
+                let is_writable = vma.flags.contains(VmaFlags::WRITE);
+                let _ = crate::mm::paging::copy_page_table_for_fork(
+                    parent_pt,
+                    child_pt,
+                    vma.start,
+                    vma.end,
+                    is_writable,
+                );
+            }
+
+            // Flush TLB to ensure COW permissions take effect
+            crate::mm::paging::flush_tlb_all();
+        }
 
         // Child gets same trap frame but x0 (return value) will be set to 0 in fork syscall
         let mut child_tf = parent.trap_frame;
