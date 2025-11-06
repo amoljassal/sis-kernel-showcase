@@ -57,3 +57,18 @@ pub use aslr::{
     randomize_address_space, is_aslr_enabled,
     AslrConfig,
 };
+
+/// Allocate physically contiguous pages and return physical address
+///
+/// Used by DMA devices that need contiguous physical memory
+pub fn alloc_phys_pages(num_pages: usize) -> Option<PhysAddr> {
+    let page = alloc_pages(num_pages)?;
+    Some(page as u64)
+}
+
+/// Convert physical address to virtual address
+///
+/// Assumes direct mapping: phys_addr + KERNEL_BASE = virt_addr
+pub fn phys_to_virt(phys: PhysAddr) -> usize {
+    (phys as usize).wrapping_add(KERNEL_BASE)
+}
