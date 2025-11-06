@@ -216,7 +216,42 @@ curl -s http://localhost:8871/api/v1/qemu/status | jq
 # }
 ```
 
-**Next:** Phase 3 - Shell API Endpoints (execute, self-check, abort)
+### GUI-Kernel Integration - Phase 3: Shell API Endpoints (COMPLETE ✅)
+
+**Status:** VERIFIED - All shell API endpoints implemented and tested
+
+Phase 3 provides REST API endpoints for executing shell commands, running self-checks, and managing kernel operations.
+
+**Implemented:**
+- ✅ `/api/v1/shell/exec` - Execute arbitrary shell commands with timeout
+- ✅ `/api/v1/shell/selfcheck` - Run kernel self-diagnostic tests
+- ✅ `/api/v1/shell/selfcheck/cancel` - Cancel running self-check operations
+- ✅ Proper HTTP status codes (200, 404, 503) with problem+json error format
+- ✅ Shell readiness validation before accepting commands
+- ✅ Timeout handling and error reporting
+
+**Testing:**
+```bash
+# Execute shell command
+curl -X POST http://localhost:8871/api/v1/shell/exec \
+  -H "Content-Type: application/json" \
+  -d '{"command": "help", "timeout_ms": 5000}'
+# Response: {"command":"help","output":["sis> help"],"success":true,"execution_time_ms":0}
+
+# Run self-check (requires shell ready)
+curl -X POST http://localhost:8871/api/v1/shell/selfcheck
+
+# Cancel self-check
+curl -X POST http://localhost:8871/api/v1/shell/selfcheck/cancel
+```
+
+**Architecture:**
+- `shell_handlers.rs` - API handlers for exec, selfcheck, and cancel (crates/daemon/src/api/shell_handlers.rs:46-178)
+- `QemuSupervisor::execute_command()` - Command execution with mode-aware routing (crates/daemon/src/qemu/supervisor.rs:801)
+- `QemuSupervisor::run_self_check()` - Self-check orchestration (crates/daemon/src/qemu/supervisor.rs:878)
+- `QemuSupervisor::cancel_self_check()` - Cancellation logic (crates/daemon/src/qemu/supervisor.rs:852)
+
+**Next:** Phase 4 - WebSocket Events & Real-time Updates
 
 See `docs/plans/GUI-KERNEL-INTEGRATION-PLAN.md` for complete roadmap.
 
