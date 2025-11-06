@@ -200,3 +200,55 @@ pub fn init_virtio_blk() {
         crate::info!("virtio-blk: Initialized {} block device(s)", blk_count);
     }
 }
+
+/// Initialize virtio-net devices (Phase C)
+pub fn init_virtio_net() {
+    use crate::virtio::{VirtIOMMIOTransport, VirtIODeviceType};
+    use crate::drivers::virtio_net::register_virtio_net;
+
+    // QEMU virt machine VirtIO MMIO address range
+    const VIRTIO_MMIO_BASE: u64 = 0x0a000000;
+    const VIRTIO_MMIO_SIZE: u64 = 0x200;
+    const VIRTIO_MMIO_COUNT: usize = 32;
+
+    let mut net_count = 0;
+
+    for i in 0..VIRTIO_MMIO_COUNT {
+        let base = VIRTIO_MMIO_BASE + (i as u64 * VIRTIO_MMIO_SIZE);
+        let irq = Some(16 + i as u32);
+
+        // Try to probe this address
+        match VirtIOMMIOTransport::new(base, VIRTIO_MMIO_SIZE, irq) {
+            Ok(transport) => {
+                // Check if it's a network device
+                if transport.device_type() == VirtIODeviceType::NetworkCard {
+                    crate::info!("virtio-net: Found network device at 0x{:x}", base);
+
+                    // Register the network device
+                    let name = alloc::format!("eth{}", net_count);
+                    match register_virtio_net(transport, name.clone()) {
+                        Ok(dev) => {
+                            let mac = dev.mac_address();
+                            crate::info!("virtio-net: Registered {} (MAC: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x})",
+                                       name, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+                            net_count += 1;
+                        }
+                        Err(e) => {
+                            crate::warn!("virtio-net: Failed to initialize {}: {:?}", name, e);
+                        }
+                    }
+                }
+            }
+            Err(_) => {
+                // Not a valid VirtIO device at this address, continue
+                continue;
+            }
+        }
+    }
+
+    if net_count == 0 {
+        crate::info!("virtio-net: No network devices found");
+    } else {
+        crate::info!("virtio-net: Initialized {} network device(s)", net_count);
+    }
+}

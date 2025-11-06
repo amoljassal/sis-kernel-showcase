@@ -123,6 +123,11 @@ impl VirtQueue {
         self.used_base
     }
 
+    /// Get all queue addresses (descriptor table, available ring, used ring)
+    pub fn get_addresses(&self) -> (u64, u64, u64) {
+        (self.desc_table_addr(), self.avail_ring_addr(), self.used_ring_addr())
+    }
+
     /// Allocate a descriptor from the free list
     pub fn alloc_desc(&mut self) -> Option<u16> {
         self.free_list.pop()
