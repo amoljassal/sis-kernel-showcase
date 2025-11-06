@@ -278,6 +278,13 @@ impl QemuSupervisor {
             .map(|p| p.pid())
             .or_else(|| state.child.as_ref().and_then(|c| c.id()));
 
+        // Get live count from LiveProcess if available, otherwise use supervisor's count
+        let lines_processed = if let Some(ref live) = state.live_process {
+            live.lines_processed().await
+        } else {
+            state.lines_processed
+        };
+
         QemuStatus {
             state: state.state,
             mode: state.mode.clone(),
@@ -289,7 +296,7 @@ impl QemuSupervisor {
                 .map(|c| c.features.clone())
                 .unwrap_or_default(),
             error: state.last_error.clone(),
-            lines_processed: state.lines_processed,
+            lines_processed,
             events_emitted: state.events_emitted,
         }
     }

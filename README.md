@@ -198,6 +198,24 @@ curl -X POST http://localhost:8871/api/v1/shell/execute \
 - `CommandTracker` - Correlation engine (crates/daemon/src/qemu/live.rs:37-149)
 - `QemuSupervisor::execute_command()` - Mode-aware router (crates/daemon/src/qemu/supervisor.rs:794-831)
 
+**Verification (Phase 2.1-2.2):**
+- ✅ **Configuration alignment** - QemuConfig defaults to `["llm", "crypto-real"]` matching production command
+- ✅ **Stdout capture** - Verified 451+ lines successfully captured from kernel boot to shell prompt
+- ✅ **Status reporting** - API correctly reports `lines_processed` by querying LiveProcess directly
+- ✅ **Pipe connectivity** - Added `exec` to uefi_run.sh for proper stdin/stdout/stderr piping
+- ✅ **Debug instrumentation** - Comprehensive logging in stdout_task for diagnostics (RUST_LOG=debug)
+
+```bash
+# Status API now shows live stdout capture metrics
+curl -s http://localhost:8871/api/v1/qemu/status | jq
+# {
+#   "state": "running",
+#   "features": ["llm", "crypto-real"],
+#   "lines_processed": 451,  // ✅ Live count from kernel output
+#   "events_emitted": 0
+# }
+```
+
 **Next:** Phase 3 - Shell API Endpoints (execute, self-check, abort)
 
 See `docs/plans/GUI-KERNEL-INTEGRATION-PLAN.md` for complete roadmap.

@@ -419,24 +419,28 @@ async fn process_stdout(
     lines_processed: Arc<Mutex<u64>>,
     command_tracker: CommandTracker,
 ) -> Result<()> {
+    info!("[STDOUT_TASK] Starting stdout reader task");
     let mut reader = BufReader::new(stdout);
     let mut line = String::new();
     let mut count = 0u64;
 
+    info!("[STDOUT_TASK] Entering read loop");
     loop {
         line.clear();
+        debug!("[STDOUT_TASK] Awaiting read_line (count={})", count);
         match reader.read_line(&mut line).await {
             Ok(0) => {
                 // EOF - process exited
-                info!("QEMU stdout closed (EOF), processed {} lines", count);
+                info!("[STDOUT_TASK] EOF received after {} lines", count);
                 let _ = event_tx.send(QemuEvent::StateChanged {
                     state: super::types::QemuState::Idle,
                     timestamp: chrono::Utc::now(),
                 });
                 break;
             }
-            Ok(_) => {
+            Ok(n) => {
                 count += 1;
+                debug!("[STDOUT_TASK] Read {} bytes, line {}: {}", n, count, line.trim_end());
                 *lines_processed.lock().await = count;
 
                 // Check buffer limit
@@ -466,7 +470,7 @@ async fn process_stdout(
                 }
             }
             Err(e) => {
-                error!("Error reading stdout: {}", e);
+                error!("[STDOUT_TASK] Error reading stdout: {}", e);
                 break;
             }
         }
