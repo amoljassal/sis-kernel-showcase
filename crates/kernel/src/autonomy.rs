@@ -2007,7 +2007,10 @@ pub fn autonomous_decision_tick() {
             crate::uart_print(b"\n");
         }
     } else if tick_index == 6 {
-        unsafe { crate::uart_print(b"[AUTONOMY] Running silently (use 'autoctl status' to check)\n"); }
+        unsafe {
+            crate::uart_print(b"[AUTONOMY] Running silently (use 'autoctl status' to check)\n");
+            crate::uart_print(b"sis> ");
+        }
         crate::trace::metrics_set_enabled(false);
     }
 

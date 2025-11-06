@@ -872,6 +872,7 @@ impl Shell {
                     let ctl_on: u64 = 1; // ENABLE=1, IMASK=0
                     core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl_on);
                     core::arch::asm!("isb");
+                    crate::uart_print(b"[AUTOCTL] Command complete\n");
                 }
             }
             "off" => {
@@ -907,6 +908,7 @@ impl Shell {
                     core::arch::asm!("isb");
                     crate::uart_print(b"[AUTOCTL] EL1 physical timer stopped and cleared\n");
                     crate::uart_print(b"[AUTOCTL] Metrics re-enabled for manual testing\n");
+                    crate::uart_print(b"[AUTOCTL] Command complete\n");
                 }
             }
             "reset" => {
