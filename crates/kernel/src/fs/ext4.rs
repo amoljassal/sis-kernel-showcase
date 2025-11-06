@@ -11,7 +11,7 @@ use crate::block::BlockDevice;
 use crate::vfs::{Inode, InodeOps, InodeType, DirEntry};
 use super::jbd2::{Journal, TransactionHandle, JBD2_MAGIC_NUMBER};
 use alloc::sync::Arc;
-use alloc::vec::Vec;
+use alloc::vec::{self, Vec};
 use alloc::string::String;
 use spin::Mutex;
 
@@ -107,7 +107,7 @@ impl Ext4Superblock {
 /// ext4 filesystem structure
 pub struct Ext4FileSystem {
     /// Block device
-    pub device: Arc<dyn BlockDevice>,
+    pub device: Arc<BlockDevice>,
     /// Superblock
     pub superblock: Mutex<Ext4Superblock>,
     /// Journal (if enabled)
@@ -118,7 +118,7 @@ pub struct Ext4FileSystem {
 
 impl Ext4FileSystem {
     /// Mount ext4 filesystem
-    pub fn mount(device: Arc<dyn BlockDevice>) -> Result<Arc<Self>> {
+    pub fn mount(device: Arc<BlockDevice>) -> Result<Arc<Self>> {
         crate::info!("ext4: Mounting filesystem...");
 
         // Read superblock (at offset 1024)

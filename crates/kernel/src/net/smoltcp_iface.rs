@@ -8,7 +8,7 @@ use smoltcp::iface::{Interface, Config, SocketSet};
 use smoltcp::wire::{HardwareAddress, EthernetAddress, IpCidr, IpAddress, Ipv4Address};
 use crate::drivers::virtio_net;
 use crate::lib::error::{Result, Errno};
-use alloc::vec::Vec;
+use alloc::vec::{self, Vec};
 use spin::Mutex;
 use alloc::sync::Arc;
 
