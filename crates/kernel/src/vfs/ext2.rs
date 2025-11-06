@@ -470,7 +470,7 @@ impl Ext2InodeOps {
 }
 
 impl InodeOps for Ext2InodeOps {
-    fn read(&self, offset: u64, buf: &mut [u8]) -> Result<usize, Errno> {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> Result<usize> {
         let inode = self.inode_data.lock();
         self.fs.read_inode_data(&inode, offset, buf)
     }
