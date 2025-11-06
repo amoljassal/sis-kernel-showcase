@@ -1,0 +1,1 @@
+{"rustc":12523111956916064048,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[18146157946071636764,"build_script_build",false,476502567971789849]],"local":[{"RerunIfEnvChanged":{"var":"ICU4X_DATA_DIR","val":null}}],"rustflags":[],"config":0,"compile_kind":0}
