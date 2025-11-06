@@ -6,6 +6,7 @@ use super::{Inode, InodeType, InodeOps, Ino, DirEntry, alloc_ino, S_IFCHR, S_IFD
 use super::file::FileOps;
 use crate::lib::error::Errno;
 use alloc::sync::Arc;
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;

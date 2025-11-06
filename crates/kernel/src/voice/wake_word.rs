@@ -136,38 +136,38 @@ impl Default for WakeWordDetector {
     }
 }
 
-/// Integration points for future implementation
-///
-/// When integrating with actual speech recognition:
-///
-/// 1. Whisper Integration (STT - Speech to Text):
-///    ```rust
-///    pub fn transcribe_audio(audio: &[i16]) -> Result<String> {
-///        // Send audio to Whisper API or local model
-///        // Return transcribed text
-///    }
-///    ```
-///
-/// 2. OpenAI TTS Integration (Text to Speech):
-///    ```rust
-///    pub fn synthesize_speech(text: &str) -> Result<Vec<i16>> {
-///        // Send text to TTS API
-///        // Return synthesized audio samples
-///    }
-///    ```
-///
-/// 3. Wake Word Detection:
-///    - Use Pocketsphinx or Picovoice Porcupine
-///    - Train custom wake word model
-///    - Low power consumption for always-on detection
-///
-/// 4. Voice Activity Detection:
-///    - Already implemented in audio::vad module
-///    - Use to segment speech from silence
-///    - Reduces STT processing cost
-///
-/// 5. Audio Pipeline:
-///    ```
-///    Microphone → VAD → Wake Word Detector → STT (Whisper) →
-///    JARVIS Logic → TTS → Speaker
-///    ```
+// Integration points for future implementation
+//
+// When integrating with actual speech recognition:
+//
+// 1. Whisper Integration (STT - Speech to Text):
+//    ```rust
+//    pub fn transcribe_audio(audio: &[i16]) -> Result<String> {
+//        // Send audio to Whisper API or local model
+//        // Return transcribed text
+//    }
+//    ```
+//
+// 2. OpenAI TTS Integration (Text to Speech):
+//    ```rust
+//    pub fn synthesize_speech(text: &str) -> Result<Vec<i16>> {
+//        // Send text to TTS API
+//        // Return synthesized audio samples
+//    }
+//    ```
+//
+// 3. Wake Word Detection:
+//    - Use Pocketsphinx or Picovoice Porcupine
+//    - Train custom wake word model
+//    - Low power consumption for always-on detection
+//
+// 4. Voice Activity Detection:
+//    - Already implemented in audio::vad module
+//    - Use to segment speech from silence
+//    - Reduces STT processing cost
+//
+// 5. Audio Pipeline:
+//    ```text
+//    Microphone → VAD → Wake Word Detector → STT (Whisper) →
+//    JARVIS Logic → TTS → Speaker
+//    ```

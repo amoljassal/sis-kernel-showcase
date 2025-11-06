@@ -4,6 +4,7 @@
 use super::{Inode, InodeType, InodeOps, Ino, DirEntry, alloc_ino, S_IFDIR, S_IFCHR};
 use crate::lib::error::Errno;
 use alloc::sync::Arc;
+use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
