@@ -172,17 +172,40 @@ pub extern "C" fn handle_irq(frame: &mut TrapFrame) {
     }
 
     if irq_num == 30 {
-        // Timer interrupt - call scheduler tick
-        crate::process::scheduler::timer_tick();
+        // Timer interrupt - call scheduler tick (use SMP scheduler if available)
+        if crate::smp::num_cpus() > 1 {
+            crate::process::scheduler_smp::timer_tick();
+        } else {
+            crate::process::scheduler::timer_tick();
+        }
+    } else if irq_num < 16 {
+        // Software Generated Interrupt (SGI) - IPI
+        if crate::smp::ipi::handle_ipi(irq_num) {
+            // IPI handled successfully
+        } else {
+            crate::warn!("Unexpected SGI: {}", irq_num);
+        }
     } else {
         // Unknown interrupt
         crate::warn!("Unexpected IRQ: {}", irq_num);
     }
 
     // 3. Check if reschedule is needed (before EOI so we can handle it)
-    if crate::process::scheduler::need_resched() {
+    let need_resched = if crate::smp::num_cpus() > 1 {
+        crate::process::scheduler_smp::need_resched()
+    } else {
+        crate::process::scheduler::need_resched()
+    };
+
+    if need_resched {
         // Save current task's trap frame
-        if let Some(pid) = crate::process::scheduler::current_pid() {
+        let current_pid = if crate::smp::num_cpus() > 1 {
+            crate::process::scheduler_smp::current_pid()
+        } else {
+            crate::process::scheduler::current_pid()
+        };
+
+        if let Some(pid) = current_pid {
             let mut table = crate::process::get_process_table();
             if let Some(ref mut t) = *table {
                 if let Some(task) = t.get_mut(pid) {
@@ -191,8 +214,12 @@ pub extern "C" fn handle_irq(frame: &mut TrapFrame) {
             }
         }
 
-        // Schedule next task
-        crate::process::scheduler::schedule();
+        // Schedule next task (use SMP scheduler if available)
+        if crate::smp::num_cpus() > 1 {
+            crate::process::scheduler_smp::schedule();
+        } else {
+            crate::process::scheduler::schedule();
+        }
 
         // Load next task's trap frame (already set by scheduler via set_elr/spsr/sp_el0)
         // When we return via ERET, we'll enter the new task
