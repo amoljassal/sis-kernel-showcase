@@ -65,6 +65,16 @@ pub fn syscall_dispatcher(nr: usize, args: &[u64; 6]) -> isize {
         40 => sys_mount(args[0] as *const u8, args[1] as *const u8, args[2] as *const u8, args[3] as u64, args[4] as *const u8),
         39 => sys_umount2(args[0] as *const u8, args[1] as i32),
 
+        // Socket operations (Phase C)
+        198 => sys_socket(args[0] as i32, args[1] as i32, args[2] as i32),
+        200 => sys_bind(args[0] as i32, args[1] as *const u8, args[2] as u32),
+        201 => sys_listen(args[0] as i32, args[1] as i32),
+        202 => sys_accept(args[0] as i32, args[1] as *mut u8, args[2] as *mut u32),
+        203 => sys_connect(args[0] as i32, args[1] as *const u8, args[2] as u32),
+        206 => sys_sendto(args[0] as i32, args[1] as *const u8, args[2] as usize, args[3] as i32, args[4] as *const u8, args[5] as u32),
+        207 => sys_recvfrom(args[0] as i32, args[1] as *mut u8, args[2] as usize, args[3] as i32, args[4] as *mut u8, args[5] as *mut u32),
+        210 => sys_shutdown(args[0] as i32, args[1] as i32),
+
         // Unimplemented
         _ => {
             crate::warn!("Unimplemented syscall: {}", nr);
@@ -1190,6 +1200,137 @@ pub fn sys_umount2(target: *const u8, flags: i32) -> Result<isize> {
     crate::mm::sync_all()?;
 
     crate::info!("umount: successfully unmounted {}", target_str);
+
+    Ok(0)
+}
+
+/// sys_socket - Create a socket (Phase C)
+///
+/// Arguments:
+/// - domain: Address family (AF_INET = 2)
+/// - type: Socket type (SOCK_STREAM = 1, SOCK_DGRAM = 2)
+/// - protocol: Protocol (usually 0)
+pub fn sys_socket(domain: i32, sock_type: i32, protocol: i32) -> Result<isize> {
+    crate::info!("socket: domain={} type={} protocol={}", domain, sock_type, protocol);
+
+    // For Phase C, we'll return a placeholder FD
+    // Full implementation would create a socket and register it with the process
+
+    // Simplified: just return success for now
+    // Real implementation needs:
+    // 1. Create Socket struct
+    // 2. Allocate FD from process table
+    // 3. Store socket in process file descriptor table
+
+    Ok(3) // Return FD 3 (placeholder)
+}
+
+/// sys_bind - Bind socket to address (Phase C)
+pub fn sys_bind(sockfd: i32, addr: *const u8, addrlen: u32) -> Result<isize> {
+    if addr.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    crate::info!("bind: sockfd={} addrlen={}", sockfd, addrlen);
+
+    // Simplified for Phase C
+    // Real implementation needs:
+    // 1. Get socket from FD
+    // 2. Parse sockaddr structure
+    // 3. Bind to smoltcp socket
+
+    Ok(0)
+}
+
+/// sys_listen - Listen for connections (Phase C)
+pub fn sys_listen(sockfd: i32, backlog: i32) -> Result<isize> {
+    crate::info!("listen: sockfd={} backlog={}", sockfd, backlog);
+
+    // Simplified for Phase C
+    Ok(0)
+}
+
+/// sys_accept - Accept connection (Phase C)
+pub fn sys_accept(sockfd: i32, addr: *mut u8, addrlen: *mut u32) -> Result<isize> {
+    crate::info!("accept: sockfd={}", sockfd);
+
+    // Simplified for Phase C
+    // Return new FD for accepted connection
+    Ok(4)
+}
+
+/// sys_connect - Connect to remote address (Phase C)
+pub fn sys_connect(sockfd: i32, addr: *const u8, addrlen: u32) -> Result<isize> {
+    if addr.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    crate::info!("connect: sockfd={} addrlen={}", sockfd, addrlen);
+
+    // Simplified for Phase C
+    // Real implementation needs:
+    // 1. Parse sockaddr
+    // 2. Initiate TCP connection via smoltcp
+    // 3. Wait for connection establishment
+
+    Ok(0)
+}
+
+/// sys_sendto - Send data on socket (Phase C)
+pub fn sys_sendto(
+    sockfd: i32,
+    buf: *const u8,
+    len: usize,
+    flags: i32,
+    dest_addr: *const u8,
+    addrlen: u32,
+) -> Result<isize> {
+    if buf.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    crate::info!("sendto: sockfd={} len={} flags={}", sockfd, len, flags);
+
+    // Simplified for Phase C
+    // Real implementation needs:
+    // 1. Get socket from FD
+    // 2. Copy data from userspace
+    // 3. Send via smoltcp TCP/UDP socket
+
+    Ok(len as isize)
+}
+
+/// sys_recvfrom - Receive data from socket (Phase C)
+pub fn sys_recvfrom(
+    sockfd: i32,
+    buf: *mut u8,
+    len: usize,
+    flags: i32,
+    src_addr: *mut u8,
+    addrlen: *mut u32,
+) -> Result<isize> {
+    if buf.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    crate::info!("recvfrom: sockfd={} len={} flags={}", sockfd, len, flags);
+
+    // Simplified for Phase C
+    // Real implementation needs:
+    // 1. Get socket from FD
+    // 2. Receive from smoltcp socket
+    // 3. Copy to userspace buffer
+    // 4. Fill in source address if provided
+
+    Ok(0) // Return 0 bytes read for now
+}
+
+/// sys_shutdown - Shutdown socket (Phase C)
+pub fn sys_shutdown(sockfd: i32, how: i32) -> Result<isize> {
+    crate::info!("shutdown: sockfd={} how={}", sockfd, how);
+
+    // Simplified for Phase C
+    // Real implementation: close TX/RX/both sides of socket
 
     Ok(0)
 }
