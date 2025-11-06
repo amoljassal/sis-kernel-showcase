@@ -122,3 +122,34 @@ impl Default for Theme {
         Self::dark()
     }
 }
+
+/// Theme mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThemeMode {
+    Dark,
+    Light,
+}
+
+impl ThemeMode {
+    /// Toggle between dark and light mode
+    pub fn toggle(&self) -> Self {
+        match self {
+            ThemeMode::Dark => ThemeMode::Light,
+            ThemeMode::Light => ThemeMode::Dark,
+        }
+    }
+
+    /// Get theme for this mode
+    pub fn theme(&self) -> Theme {
+        match self {
+            ThemeMode::Dark => Theme::dark(),
+            ThemeMode::Light => Theme::light(),
+        }
+    }
+}
+
+impl Default for ThemeMode {
+    fn default() -> Self {
+        ThemeMode::Dark
+    }
+}

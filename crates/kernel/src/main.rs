@@ -48,6 +48,8 @@ pub mod audio;
 pub mod voice;
 // Camera Infrastructure (Phase G.5)
 pub mod camera;
+// Animation System (Phase G.6)
+pub mod animation;
 // Device drivers (Phase A1)
 pub mod drivers;
 // Initial RAM filesystem
