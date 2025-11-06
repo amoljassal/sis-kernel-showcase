@@ -5,6 +5,9 @@ pub mod uaccess;
 
 use crate::lib::error::{Errno, Result};
 use alloc::format;
+use alloc::sync::Arc;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 /// Syscall error type (alias for Errno)
 pub type SyscallError = Errno;

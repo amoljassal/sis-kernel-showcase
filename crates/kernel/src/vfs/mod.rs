@@ -158,3 +158,66 @@ fn split_path(path: &str) -> Result<(&str, &str), Errno> {
         Err(Errno::EINVAL)
     }
 }
+
+/// Create a directory
+pub fn mkdir(path: &str, mode: u32) -> Result<(), Errno> {
+    let root = get_root().ok_or(Errno::ENOENT)?;
+
+    // Split path into parent and name
+    let (parent_path, name) = split_path(path)?;
+
+    // Walk to parent
+    let parent = if parent_path == "/" {
+        root
+    } else {
+        path_walk(root, parent_path)?
+    };
+
+    // Create directory in parent (mode with S_IFDIR bit set)
+    parent.create(name, mode | S_IFDIR)?;
+    Ok(())
+}
+
+/// Remove a directory
+pub fn rmdir(path: &str) -> Result<(), Errno> {
+    let root = get_root().ok_or(Errno::ENOENT)?;
+
+    // Split path into parent and name
+    let (parent_path, name) = split_path(path)?;
+
+    // Walk to parent
+    let parent = if parent_path == "/" {
+        root
+    } else {
+        path_walk(root, parent_path)?
+    };
+
+    // Get the directory inode
+    let dir_inode = parent.lookup(name)?;
+
+    // Verify it's a directory
+    if !dir_inode.is_dir() {
+        return Err(Errno::ENOTDIR);
+    }
+
+    // Remove directory from parent
+    parent.unlink(name)
+}
+
+/// Remove a file
+pub fn unlink(path: &str) -> Result<(), Errno> {
+    let root = get_root().ok_or(Errno::ENOENT)?;
+
+    // Split path into parent and name
+    let (parent_path, name) = split_path(path)?;
+
+    // Walk to parent
+    let parent = if parent_path == "/" {
+        root
+    } else {
+        path_walk(root, parent_path)?
+    };
+
+    // Remove file from parent
+    parent.unlink(name)
+}

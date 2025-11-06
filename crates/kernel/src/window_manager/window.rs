@@ -5,6 +5,7 @@
 use crate::graphics::{Color, Rect};
 use alloc::vec::Vec;
 use alloc::string::String;
+use alloc::boxed::Box;
 use core::any::Any;
 
 /// Window identifier

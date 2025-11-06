@@ -69,12 +69,12 @@ impl BufferHead {
     }
 
     /// Get immutable reference to data
-    pub fn data(&self) -> alloc::sync::MutexGuard<Vec<u8>> {
+    pub fn data(&self) -> spin::MutexGuard<Vec<u8>> {
         self.data.lock()
     }
 
     /// Get mutable reference to data (marks dirty)
-    pub fn data_mut(&self) -> alloc::sync::MutexGuard<Vec<u8>> {
+    pub fn data_mut(&self) -> spin::MutexGuard<Vec<u8>> {
         self.mark_dirty();
         self.data.lock()
     }
