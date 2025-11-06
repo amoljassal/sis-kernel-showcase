@@ -55,6 +55,8 @@ pub struct MemoryManager {
     pub brk_start: u64,
     /// Stack top
     pub stack_top: u64,
+    /// Mmap base address (for ASLR, Phase D)
+    pub mmap_base: u64,
     /// List of VMAs (will be implemented in mm/address_space.rs)
     pub vmas: Vec<Vma>,
 }
@@ -63,11 +65,20 @@ impl MemoryManager {
     /// Allocate a new user address space with page table
     pub fn new_user() -> Result<Self, KernelError> {
         let page_table = crate::mm::alloc_user_page_table()?;
+
+        // Use ASLR if enabled (Phase D)
+        let (stack_top, heap_start, mmap_base) = if crate::mm::is_aslr_enabled() {
+            crate::mm::randomize_address_space()
+        } else {
+            (crate::mm::USER_STACK_TOP, crate::mm::USER_HEAP_START, crate::mm::USER_MMAP_BASE)
+        };
+
         Ok(Self {
             page_table,
-            brk: crate::mm::USER_HEAP_START,
-            brk_start: crate::mm::USER_HEAP_START,
-            stack_top: crate::mm::USER_STACK_TOP,
+            brk: heap_start,
+            brk_start: heap_start,
+            stack_top,
+            mmap_base,
             vmas: Vec::new(),
         })
     }

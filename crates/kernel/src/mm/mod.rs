@@ -13,6 +13,7 @@ pub mod paging;
 pub mod address_space;
 pub mod fault;
 pub mod page_cache;
+pub mod aslr;  // Phase D: Address Space Layout Randomization
 
 // Re-export commonly used items
 pub use page::{
@@ -50,4 +51,9 @@ pub use page_cache::{
     init_page_cache, get_buffer, put_buffer,
     sync_all, sync_device, invalidate_device,
     cache_stats, BufferHead, CacheKey, CacheStats,
+};
+
+pub use aslr::{
+    randomize_address_space, is_aslr_enabled,
+    AslrConfig,
 };
