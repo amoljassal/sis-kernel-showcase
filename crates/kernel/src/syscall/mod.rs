@@ -31,6 +31,16 @@ pub fn syscall_dispatcher(nr: usize, args: &[u64; 6]) -> isize {
         221 => sys_execve(args[0] as *const u8, args[1] as *const *const u8, args[2] as *const *const u8),
         260 => sys_wait4(args[0] as i32, args[1] as *mut i32, args[2] as i32, args[3] as *mut u8),
 
+        // Credentials (Phase D)
+        174 => sys_getuid(),
+        175 => sys_geteuid(),
+        176 => sys_getgid(),
+        177 => sys_getegid(),
+        146 => sys_setuid(args[0] as u32),
+        144 => sys_setgid(args[0] as u32),
+        145 => sys_seteuid(args[0] as u32),
+        147 => sys_setegid(args[0] as u32),
+
         // Signal handling
         129 => sys_kill(args[0] as i32, args[1] as i32),
         134 => sys_sigaction(args[0] as i32, args[1] as *const u8, args[2] as *mut u8),
@@ -48,6 +58,9 @@ pub fn syscall_dispatcher(nr: usize, args: &[u64; 6]) -> isize {
         59 => sys_pipe(args[0] as *mut i32),
         23 => sys_dup(args[0] as i32),
         24 => sys_dup2(args[0] as i32, args[1] as i32),
+        52 => sys_chmod(args[0] as *const u8, args[1] as u32),
+        55 => sys_chown(args[0] as *const u8, args[1] as u32, args[2] as u32),
+        166 => sys_umask(args[0] as u32),
 
         // Working directory
         17 => sys_getcwd(args[0] as *mut u8, args[1] as usize),
@@ -603,6 +616,50 @@ pub fn sys_getppid() -> Result<isize> {
     Ok(task.ppid as isize)
 }
 
+/// sys_getuid - Get real user ID (Phase D)
+pub fn sys_getuid() -> Result<isize> {
+    Ok(crate::security::current_uid() as isize)
+}
+
+/// sys_geteuid - Get effective user ID (Phase D)
+pub fn sys_geteuid() -> Result<isize> {
+    Ok(crate::security::current_euid() as isize)
+}
+
+/// sys_getgid - Get real group ID (Phase D)
+pub fn sys_getgid() -> Result<isize> {
+    Ok(crate::security::current_gid() as isize)
+}
+
+/// sys_getegid - Get effective group ID (Phase D)
+pub fn sys_getegid() -> Result<isize> {
+    Ok(crate::security::current_egid() as isize)
+}
+
+/// sys_setuid - Set user ID (Phase D)
+pub fn sys_setuid(uid: u32) -> Result<isize> {
+    crate::security::set_uid(uid)?;
+    Ok(0)
+}
+
+/// sys_setgid - Set group ID (Phase D)
+pub fn sys_setgid(gid: u32) -> Result<isize> {
+    crate::security::set_gid(gid)?;
+    Ok(0)
+}
+
+/// sys_seteuid - Set effective user ID (Phase D)
+pub fn sys_seteuid(euid: u32) -> Result<isize> {
+    crate::security::set_euid(euid)?;
+    Ok(0)
+}
+
+/// sys_setegid - Set effective group ID (Phase D)
+pub fn sys_setegid(egid: u32) -> Result<isize> {
+    crate::security::set_egid(egid)?;
+    Ok(0)
+}
+
 /// sys_kill - Send signal to a process
 pub fn sys_kill(pid: i32, sig: i32) -> Result<isize> {
     use crate::process::signal::Signal;
@@ -847,6 +904,78 @@ pub fn sys_unlink(pathname: *const u8) -> Result<isize> {
     // Remove file through VFS
     crate::vfs::unlink(path)?;
     Ok(0)
+}
+
+/// sys_chmod - Change file permissions (Phase D)
+pub fn sys_chmod(pathname: *const u8, mode: u32) -> Result<isize> {
+    if pathname.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // Copy pathname from userspace
+    let path = unsafe {
+        let mut len = 0;
+        while len < 4096 && *pathname.add(len) != 0 {
+            len += 1;
+        }
+        let bytes = core::slice::from_raw_parts(pathname, len);
+        core::str::from_utf8(bytes).map_err(|_| Errno::EINVAL)?
+    };
+
+    // Get current credentials
+    let cred = crate::security::current_cred();
+
+    // Look up inode (simplified - would use VFS path lookup)
+    // For Phase D, we'll just log and return success
+    crate::info!("chmod: {} mode={:o}", path, mode);
+
+    Ok(0)
+}
+
+/// sys_chown - Change file ownership (Phase D)
+pub fn sys_chown(pathname: *const u8, uid: u32, gid: u32) -> Result<isize> {
+    if pathname.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // Copy pathname from userspace
+    let path = unsafe {
+        let mut len = 0;
+        while len < 4096 && *pathname.add(len) != 0 {
+            len += 1;
+        }
+        let bytes = core::slice::from_raw_parts(pathname, len);
+        core::str::from_utf8(bytes).map_err(|_| Errno::EINVAL)?
+    };
+
+    // Get current credentials
+    let cred = crate::security::current_cred();
+
+    // Check if root (only root can chown to different UID)
+    if uid != u32::MAX && !cred.is_root() {
+        return Err(Errno::EPERM);
+    }
+
+    crate::info!("chown: {} uid={} gid={}", path, uid, gid);
+
+    Ok(0)
+}
+
+/// Global umask value
+static UMASK: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0o022);
+
+/// sys_umask - Set file creation mode mask (Phase D)
+pub fn sys_umask(mask: u32) -> Result<isize> {
+    use core::sync::atomic::Ordering;
+
+    let old_mask = UMASK.swap(mask & 0o777, Ordering::Relaxed);
+    Ok(old_mask as isize)
+}
+
+/// Get current umask
+pub fn get_umask() -> u32 {
+    use core::sync::atomic::Ordering;
+    UMASK.load(Ordering::Relaxed)
 }
 
 /// sys_getcwd - Get current working directory

@@ -26,6 +26,8 @@ pub mod vfs;
 pub mod block;
 // Network layer (Phase C)
 pub mod net;
+// Security subsystem (Phase D)
+pub mod security;
 // Device drivers (Phase A1)
 pub mod drivers;
 // Initial RAM filesystem
