@@ -173,7 +173,10 @@ pub fn enqueue_on(cpu_id: usize, pid: Pid) {
 
     percpu.update_load();
 
-    // TODO: Send IPI to wake up target CPU if idle
+    // Send IPI to wake up target CPU if idle
+    if percpu.is_idle() {
+        super::ipi::send_reschedule_ipi(cpu_id);
+    }
 }
 
 /// Dequeue next task from current CPU's runqueue

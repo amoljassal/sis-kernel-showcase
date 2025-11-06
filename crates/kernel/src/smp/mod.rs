@@ -3,6 +3,7 @@
 /// Manages multiple CPU cores with per-CPU data, runqueues, and load balancing.
 
 pub mod percpu;
+pub mod ipi;
 
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use spin::Mutex;
