@@ -433,7 +433,7 @@ pub fn sys_fstat(fd: i32, statbuf: *mut u8) -> Result<isize> {
     let task = table.get(pid).ok_or(Errno::ESRCH)?;
 
     let file = task.files.get(fd)?;
-    let meta = file.inode.getattr()?;
+    let meta = file.getattr()?;
 
     // Fill stat structure (simplified for Phase A1)
     // struct stat is large, we'll fill the important fields
@@ -476,12 +476,12 @@ pub fn sys_getdents64(fd: i32, dirp: *mut u8, count: usize) -> Result<isize> {
     let file = task.files.get(fd)?;
 
     // Check if directory
-    if !file.inode.is_dir() {
+    if !file.is_dir()? {
         return Err(Errno::ENOTDIR);
     }
 
     // Read directory entries
-    let entries = file.inode.readdir()?;
+    let entries = file.readdir()?;
 
     // Fill linux_dirent64 structures
     let mut offset = 0usize;
@@ -692,7 +692,7 @@ pub fn sys_execve(
 
         let console_file = alloc::sync::Arc::new(crate::vfs::File::new(
             console_inode,
-            crate::vfs::OpenFlags::RDWR,
+            crate::vfs::OpenFlags::O_RDWR,
             &crate::drivers::char::CONSOLE_OPS,
         ));
 

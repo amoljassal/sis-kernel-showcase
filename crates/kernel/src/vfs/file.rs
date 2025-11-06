@@ -204,6 +204,30 @@ impl File {
     pub fn advance_offset(&self, n: usize) {
         self.offset.fetch_add(n as u64, Ordering::AcqRel);
     }
+
+    /// Get inode attributes (delegate to inode)
+    pub fn getattr(&self) -> Result<super::inode::InodeMeta, Errno> {
+        let inode = self.inode.as_ref().ok_or(Errno::EBADF)?;
+        inode.getattr()
+    }
+
+    /// Check if this is a directory (delegate to inode)
+    pub fn is_dir(&self) -> Result<bool, Errno> {
+        let inode = self.inode.as_ref().ok_or(Errno::EBADF)?;
+        Ok(inode.is_dir())
+    }
+
+    /// Read directory entries (delegate to inode)
+    pub fn readdir(&self) -> Result<alloc::vec::Vec<super::inode::DirEntry>, Errno> {
+        let inode = self.inode.as_ref().ok_or(Errno::EBADF)?;
+        inode.readdir()
+    }
+
+    /// Get file size (delegate to inode)
+    pub fn size(&self) -> Result<u64, Errno> {
+        let inode = self.inode.as_ref().ok_or(Errno::EBADF)?;
+        Ok(inode.size())
+    }
 }
 
 impl core::fmt::Debug for File {
@@ -248,7 +272,7 @@ impl FileOps for DefaultFileOps {
         const SEEK_END: i32 = 2;
 
         let current = file.offset() as i64;
-        let size = file.inode.size() as i64;
+        let size = file.size()? as i64;
 
         let new_offset = match whence {
             SEEK_SET => offset,
