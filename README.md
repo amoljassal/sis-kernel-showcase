@@ -127,6 +127,38 @@ pnpm -F desktop build
 
 See `docs/guides/DIRECTORY_RESTRUCTURE.md` for complete migration details.
 
+### GUI-Kernel Integration - Phase 1: Live Mode (COMPLETE ✅)
+
+**Status:** IMPLEMENTED - Live QEMU process management
+
+Phase 1 implements live kernel interaction, transitioning from replay-based demonstration to real-time QEMU process control.
+
+**Implemented:**
+- ✅ **LiveProcess module** - Spawns and manages QEMU via uefi_run.sh
+- ✅ **Async stdout/stderr capture** - Line-by-line event streaming
+- ✅ **Process lifecycle management** - Start, stop, health monitoring
+- ✅ **Mode tracking** - API reports Live vs Replay mode with PID
+- ✅ **Event broadcasting** - Real-time kernel output via WebSocket
+- ✅ **Graceful shutdown** - Timeout-based process cleanup
+
+**Testing:**
+```bash
+# Start QEMU in live mode
+curl -X POST http://localhost:8871/api/v1/qemu/run \
+  -H "Content-Type: application/json" \
+  -d '{"features": ["llm"]}'
+
+# Check status (shows mode:live with PID)
+curl -s http://localhost:8871/api/v1/qemu/status | jq
+
+# Stop QEMU
+curl -X POST http://localhost:8871/api/v1/qemu/stop
+```
+
+**Next:** Phase 2 - Bidirectional Communication (stdin commands, response correlation)
+
+See `docs/plans/GUI-KERNEL-INTEGRATION-PLAN.md` for complete roadmap.
+
 **Phase 5: Safety Controls (IMPLEMENTED ✅)**
 
 1. **memctl query-mode on/off** - Dry-run mode for memory operations

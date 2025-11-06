@@ -169,12 +169,13 @@ pub async fn qemu_run(
     Json(config): Json<QemuConfig>,
 ) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
     let (supervisor, _) = &state;
+    // Use run_live() for Phase 1 testing (will add mode detection later)
     supervisor
-        .run(config)
+        .run_live(config)
         .await
         .map(|_| {
             Json(SuccessResponse {
-                message: "QEMU started".to_string(),
+                message: "QEMU started in live mode".to_string(),
             })
         })
         .map_err(|e| {
