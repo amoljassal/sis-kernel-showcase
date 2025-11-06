@@ -23,7 +23,7 @@ pub mod ptmx;
 pub mod ptsfs;
 pub mod ext2;
 
-pub use inode::{Inode, InodeType, InodeOps, Ino, DirEntry, alloc_ino};
+pub use inode::{Inode, InodeType, InodeOps, Ino, DirEntry, alloc_ino, InodeMeta};
 pub use file::{File, FileOps, OpenFlags, PipeEnd, PtyEnd};
 pub use mount::{Mount, init_vfs, mount, get_root, get_mounts, set_root, path_lookup};
 pub use pipe::{create_pipe, PipeReader, PipeWriter};
@@ -37,6 +37,18 @@ pub use ext2::mount_ext2;
 pub fn init() -> Result<(), Errno> {
     init_vfs();
     Ok(())
+}
+
+/// Filesystem trait - marker trait for filesystem implementations (Phase B)
+///
+/// Implemented by specific filesystems like Ext2FileSystem, TmpFS, etc.
+/// Used to identify filesystem-specific structures and provide common interface.
+pub trait FileSystem: Send + Sync {
+    /// Get filesystem name
+    fn name(&self) -> &str;
+
+    /// Get root inode of this filesystem
+    fn root_inode(&self) -> Result<Arc<Inode>, Errno>;
 }
 
 use crate::lib::error::Errno;
