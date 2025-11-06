@@ -11,7 +11,8 @@ use crate::block::BlockDevice;
 use crate::vfs::{Inode, InodeOps, InodeType, DirEntry};
 use super::jbd2::{Journal, TransactionHandle, JBD2_MAGIC_NUMBER};
 use alloc::sync::Arc;
-use alloc::vec::{self, Vec};
+use alloc::vec;
+use alloc::vec::Vec;
 use alloc::string::String;
 use spin::Mutex;
 

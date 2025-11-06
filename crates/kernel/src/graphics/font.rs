@@ -3,7 +3,8 @@
 /// Provides simple bitmap font support for text rendering
 
 use alloc::collections::BTreeMap;
-use alloc::vec::{self, Vec};
+use alloc::vec;
+use alloc::vec::Vec;
 
 /// A single glyph (character) in a font
 #[derive(Debug, Clone)]

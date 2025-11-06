@@ -6,7 +6,8 @@
 use crate::lib::error::{Result, Errno};
 use crate::block::BlockDevice;
 use alloc::sync::Arc;
-use alloc::vec::{self, Vec};
+use alloc::vec;
+use alloc::vec::Vec;
 use alloc::collections::VecDeque;
 use spin::Mutex;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};

@@ -8,7 +8,8 @@ pub mod partition;
 use crate::lib::error::{Errno, Result};
 use alloc::string::String;
 use alloc::sync::Arc;
-use alloc::vec::{self, Vec};
+use alloc::vec;
+use alloc::vec::Vec;
 use alloc::collections::VecDeque;
 use spin::Mutex;
 
