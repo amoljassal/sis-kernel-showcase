@@ -12,6 +12,7 @@ pub mod buddy;
 pub mod paging;
 pub mod address_space;
 pub mod fault;
+pub mod page_cache;
 
 // Re-export commonly used items
 pub use page::{
@@ -43,4 +44,10 @@ pub use address_space::{
 pub use fault::{
     handle_page_fault, setup_cow_for_fork,
     FaultType, parse_fault_type, is_write_fault,
+};
+
+pub use page_cache::{
+    init_page_cache, get_buffer, put_buffer,
+    sync_all, sync_device, invalidate_device,
+    cache_stats, BufferHead, CacheKey, CacheStats,
 };

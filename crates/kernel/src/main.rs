@@ -305,6 +305,11 @@ mod bringup {
 
         super::uart_print(b"VFS: READY\n");
 
+        // Initialize page cache (Phase B)
+        super::uart_print(b"PAGE CACHE: INIT\n");
+        crate::mm::init_page_cache(1024); // Cache up to 1024 blocks (512KB)
+        super::uart_print(b"PAGE CACHE: READY\n");
+
         // Initialize virtio-blk devices (Phase B)
         super::uart_print(b"BLOCK: PROBING VIRTIO-BLK DEVICES\n");
         crate::arch::aarch64::init_virtio_blk();
