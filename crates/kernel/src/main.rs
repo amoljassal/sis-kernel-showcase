@@ -351,6 +351,11 @@ mod bringup {
             super::uart_print(b"NET: NO DEVICE (SKIP)\n");
         }
 
+        // Initialize entropy source (Phase D)
+        super::uart_print(b"RANDOM: INIT PRNG\n");
+        crate::security::init_random();
+        super::uart_print(b"RANDOM: READY\n");
+
         // TODO: Unpack initramfs (when INITRAMFS_DATA is available)
         // super::uart_print(b"INITRAMFS: UNPACKING\n");
         // let initramfs_data = &INITRAMFS_DATA;
