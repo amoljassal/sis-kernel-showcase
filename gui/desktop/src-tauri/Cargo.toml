@@ -1,0 +1,30 @@
+[package]
+name = "sis-desktop"
+version = "0.1.0"
+edition = "2021"
+authors = ["SIS Kernel Team"]
+description = "SIS Kernel Desktop App"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "1.5", features = [
+  "shell-open",
+  "window-close",
+  "window-hide",
+  "window-maximize",
+  "window-minimize",
+  "window-show",
+  "window-start-dragging",
+  "window-unmaximize",
+  "window-unminimize"
+] }
+tokio = { version = "1.35", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+anyhow = "1.0"
+
+[features]
+custom-protocol = [ "tauri/custom-protocol" ]

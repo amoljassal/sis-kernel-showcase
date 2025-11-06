@@ -1,0 +1,229 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img [ref=e7]
+        - heading "SIS Kernel" [level=1] [ref=e9]
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - generic [ref=e12]: "Daemon:"
+          - generic [ref=e13]: Running
+        - generic [ref=e14]:
+          - generic [ref=e15]: "QEMU:"
+          - generic [ref=e16]: Idle
+  - main [ref=e17]:
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - heading "QEMU Profile" [level=3] [ref=e21]
+          - generic [ref=e22]:
+            - generic [ref=e23]:
+              - generic [ref=e24]: Feature Flags
+              - generic [ref=e25]:
+                - generic [ref=e26] [cursor=pointer]:
+                  - checkbox "LLM Support Enable LLM subsystem" [ref=e27]
+                  - generic [ref=e28]:
+                    - paragraph [ref=e29]: LLM Support
+                    - paragraph [ref=e30]: Enable LLM subsystem
+                - generic [ref=e31] [cursor=pointer]:
+                  - checkbox "Graph Demo Include graph computation demos" [ref=e32]
+                  - generic [ref=e33]:
+                    - paragraph [ref=e34]: Graph Demo
+                    - paragraph [ref=e35]: Include graph computation demos
+                - generic [ref=e36] [cursor=pointer]:
+                  - checkbox "Verbose Performance Detailed performance metrics" [ref=e37]
+                  - generic [ref=e38]:
+                    - paragraph [ref=e39]: Verbose Performance
+                    - paragraph [ref=e40]: Detailed performance metrics
+                - generic [ref=e41] [cursor=pointer]:
+                  - checkbox "VirtIO Console Enable VirtIO console driver" [ref=e42]
+                  - generic [ref=e43]:
+                    - paragraph [ref=e44]: VirtIO Console
+                    - paragraph [ref=e45]: Enable VirtIO console driver
+                - generic [ref=e46] [cursor=pointer]:
+                  - checkbox "Deterministic Scheduler CBS+EDF scheduling" [ref=e47]
+                  - generic [ref=e48]:
+                    - paragraph [ref=e49]: Deterministic Scheduler
+                    - paragraph [ref=e50]: CBS+EDF scheduling
+                - generic [ref=e51] [cursor=pointer]:
+                  - checkbox "All Demos Enable all demo commands" [ref=e52]
+                  - generic [ref=e53]:
+                    - paragraph [ref=e54]: All Demos
+                    - paragraph [ref=e55]: Enable all demo commands
+            - generic [ref=e56]:
+              - generic [ref=e57]: Custom Environment
+              - textbox "KEY=VALUE (one per line)" [ref=e58]
+            - generic [ref=e60]:
+              - generic [ref=e61]: Save Current Profile
+              - button "Save" [ref=e62] [cursor=pointer]:
+                - img [ref=e63]
+                - text: Save
+            - button "Run QEMU" [ref=e68] [cursor=pointer]:
+              - img [ref=e69]
+              - text: Run QEMU
+        - generic [ref=e71]:
+          - generic [ref=e72]:
+            - heading "Boot Progress" [level=3] [ref=e73]
+            - generic [ref=e74]: 0 / 9
+          - generic [ref=e75]:
+            - generic [ref=e76]:
+              - img [ref=e78]
+              - generic [ref=e80]:
+                - paragraph [ref=e81]: Kernel entry point
+                - paragraph [ref=e82]: KERNEL(U)
+            - generic [ref=e86]:
+              - paragraph [ref=e87]: Stack initialized
+              - paragraph [ref=e88]: STACK OK
+            - generic [ref=e92]:
+              - paragraph [ref=e93]: MMU control register
+              - paragraph [ref=e94]: "MMU: SCTLR"
+            - generic [ref=e98]:
+              - paragraph [ref=e99]: MMU enabled
+              - paragraph [ref=e100]: MMU ON
+            - generic [ref=e104]:
+              - paragraph [ref=e105]: UART driver ready
+              - paragraph [ref=e106]: "UART: READY"
+            - generic [ref=e110]:
+              - paragraph [ref=e111]: GIC initialized
+              - paragraph [ref=e112]: "GIC: INIT"
+            - generic [ref=e116]:
+              - paragraph [ref=e117]: Exception vectors
+              - paragraph [ref=e118]: VECTORS OK
+            - generic [ref=e122]:
+              - paragraph [ref=e123]: Shell launching
+              - paragraph [ref=e124]: LAUNCHING SHELL
+            - generic [ref=e128]:
+              - paragraph [ref=e129]: Shell ready
+              - paragraph [ref=e130]: sis> prompt
+        - generic [ref=e131]:
+          - heading "Shell Command" [level=3] [ref=e132]
+          - generic [ref=e134]:
+            - textbox "Enter shell command (e.g., help, info, autoctl status)" [disabled] [ref=e135]
+            - button "Execute" [disabled] [ref=e136]:
+              - img [ref=e137]
+              - text: Execute
+        - generic [ref=e140]:
+          - generic [ref=e141]:
+            - heading "Self-Check Tests" [level=3] [ref=e142]
+            - button "Run Self-Check" [disabled] [ref=e144]:
+              - img [ref=e145]
+              - text: Run Self-Check
+          - paragraph [ref=e149]: Click "Run Self-Check" to test kernel functionality
+        - generic [ref=e150]:
+          - generic [ref=e151]:
+            - heading "Replay Controls" [level=3] [ref=e152]
+            - generic [ref=e153]:
+              - generic [ref=e154]: "Mode:"
+              - generic [ref=e155]: Idle
+          - generic [ref=e156]:
+            - text: Speed
+            - generic [ref=e157]:
+              - button "Instant" [ref=e158] [cursor=pointer]:
+                - img [ref=e159]
+                - text: Instant
+              - button "Fast" [ref=e161] [cursor=pointer]:
+                - img [ref=e162]
+                - text: Fast
+              - button "Real-time" [ref=e165] [cursor=pointer]:
+                - img [ref=e166]
+                - text: Real-time
+          - generic [ref=e169]:
+            - text: Sample Log
+            - combobox [ref=e170]:
+              - option "Boot (Minimal)" [selected]
+              - option "Boot (With Metrics)"
+              - option "Self-Check"
+          - button "Start Replay" [ref=e172] [cursor=pointer]:
+            - img [ref=e173]
+            - text: Start Replay
+        - generic [ref=e175]:
+          - generic [ref=e176]:
+            - img [ref=e177]
+            - heading "Terminal" [level=3] [ref=e179]
+          - generic [ref=e184]:
+            - generic:
+              - textbox "Terminal input"
+      - generic [ref=e206]:
+        - tablist [ref=e207]:
+          - tab "Dashboard" [selected] [ref=e208] [cursor=pointer]:
+            - img [ref=e209]
+            - text: Dashboard
+          - tab "Metrics" [ref=e211] [cursor=pointer]:
+            - img [ref=e212]
+            - text: Metrics
+          - tab "Graph" [ref=e215] [cursor=pointer]:
+            - img [ref=e216]
+            - text: Graph
+          - tab "Scheduling" [ref=e221] [cursor=pointer]:
+            - img [ref=e222]
+            - text: Scheduling
+          - tab "LLM" [ref=e225] [cursor=pointer]:
+            - img [ref=e226]
+            - text: LLM
+          - tab "Logs" [ref=e229] [cursor=pointer]:
+            - img [ref=e230]
+            - text: Logs
+          - tab "Crashes" [ref=e233] [cursor=pointer]:
+            - img [ref=e234]
+            - text: Crashes
+          - tab "Autonomy" [ref=e236] [cursor=pointer]:
+            - img [ref=e237]
+            - text: Autonomy
+          - tab "What-If" [ref=e239] [cursor=pointer]:
+            - img [ref=e240]
+            - text: What-If
+          - tab "Memory" [ref=e245] [cursor=pointer]:
+            - img [ref=e246]
+            - text: Memory
+          - tab "API Explorer" [ref=e248] [cursor=pointer]:
+            - img [ref=e249]
+            - text: API Explorer
+          - tab "Boot Timeline" [ref=e252] [cursor=pointer]:
+            - img [ref=e253]
+            - text: Boot Timeline
+          - tab "Alerts" [ref=e256] [cursor=pointer]:
+            - img [ref=e257]
+            - text: Alerts
+          - tab "Settings" [ref=e260] [cursor=pointer]:
+            - img [ref=e261]
+            - text: Settings
+        - tabpanel "Dashboard" [ref=e264]:
+          - generic [ref=e265]:
+            - generic [ref=e266]:
+              - generic [ref=e267]:
+                - img [ref=e268]
+                - generic [ref=e270]: QEMU
+                - generic [ref=e271]: idle
+              - generic [ref=e272]:
+                - img [ref=e273]
+                - generic [ref=e275]: Shell
+                - generic [ref=e276]: not ready
+              - generic [ref=e277]:
+                - img [ref=e278]
+                - generic [ref=e281]: Replay
+                - generic [ref=e282]: idle
+              - generic [ref=e283]:
+                - img [ref=e284]
+                - generic [ref=e287]: Autonomy
+                - generic [ref=e288]: disabled
+            - generic [ref=e289]:
+              - generic [ref=e290]:
+                - heading "NN Inference (μs)" [level=4] [ref=e292]
+                - generic [ref=e294]: Start QEMU to see metrics
+              - generic [ref=e295]:
+                - heading "IRQ Latency (ns)" [level=4] [ref=e297]
+                - generic [ref=e299]: Start QEMU to see metrics
+              - generic [ref=e300]:
+                - heading "Memory Alloc (ns)" [level=4] [ref=e302]
+                - generic [ref=e304]: Start QEMU to see metrics
+              - generic [ref=e305]:
+                - heading "Context Switch (ns)" [level=4] [ref=e307]
+                - generic [ref=e309]: Start QEMU to see metrics
+  - contentinfo [ref=e310]:
+    - generic [ref=e311]:
+      - generic [ref=e312]: "Lines: 0 | Events: 0"
+      - generic [ref=e313]: Daemon v0.1.0
+```
