@@ -2,7 +2,11 @@
 members = [
   "crates/kernel",
   "crates/uefi-boot",
-  "crates/testing"
+  "crates/testing",
+  "crates/daemon"
+]
+exclude = [
+  "gui/desktop/src-tauri"
 ]
 resolver = "2"
 [profile.dev.package.bootloader]
