@@ -146,3 +146,57 @@ pub fn flush_icache_range(addr: u64, len: usize) {
         );
     }
 }
+
+/// Initialize VirtIO block devices (Phase B)
+///
+/// Probes QEMU virt machine VirtIO MMIO addresses for block devices
+pub fn init_virtio_blk() {
+    use crate::virtio::{VirtIOMMIOTransport, VirtIODeviceType};
+    use crate::drivers::virtio_blk::register_virtio_blk;
+
+    // QEMU virt machine VirtIO MMIO address range
+    // Base: 0x0a000000, size: 0x200 (512 bytes), IRQ: 16+N
+    const VIRTIO_MMIO_BASE: u64 = 0x0a000000;
+    const VIRTIO_MMIO_SIZE: u64 = 0x200;
+    const VIRTIO_MMIO_COUNT: usize = 32; // QEMU supports up to 32 VirtIO devices
+
+    let mut blk_count = 0;
+
+    for i in 0..VIRTIO_MMIO_COUNT {
+        let base = VIRTIO_MMIO_BASE + (i as u64 * VIRTIO_MMIO_SIZE);
+        let irq = Some(16 + i as u32);
+
+        // Try to probe this address
+        match VirtIOMMIOTransport::new(base, VIRTIO_MMIO_SIZE, irq) {
+            Ok(transport) => {
+                // Check if it's a block device
+                if transport.device_type() == VirtIODeviceType::BlockDevice {
+                    crate::info!("virtio-blk: Found block device at 0x{:x}", base);
+
+                    // Register the block device
+                    let name = alloc::format!("vd{}", (b'a' + blk_count as u8) as char);
+                    match register_virtio_blk(transport, name.clone()) {
+                        Ok(dev) => {
+                            crate::info!("virtio-blk: Registered {} ({} MB)",
+                                       name, dev.capacity_bytes() / 1024 / 1024);
+                            blk_count += 1;
+                        }
+                        Err(e) => {
+                            crate::warn!("virtio-blk: Failed to initialize {}: {:?}", name, e);
+                        }
+                    }
+                }
+            }
+            Err(_) => {
+                // Not a valid VirtIO device at this address, continue
+                continue;
+            }
+        }
+    }
+
+    if blk_count == 0 {
+        crate::info!("virtio-blk: No block devices found");
+    } else {
+        crate::info!("virtio-blk: Initialized {} block device(s)", blk_count);
+    }
+}
