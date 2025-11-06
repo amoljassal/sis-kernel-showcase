@@ -7,6 +7,7 @@ use crate::lib::error::{KernelError, Errno};
 use crate::arch::TrapFrame;
 use alloc::string::String;
 use alloc::vec::Vec;
+use alloc::vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 pub type Pid = u32;

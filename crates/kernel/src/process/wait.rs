@@ -6,6 +6,7 @@
 use super::task::{Pid, Task, ProcessState};
 use super::pid::get_process_table;
 use crate::lib::error::{KernelError, Errno};
+use alloc::vec;
 
 /// Options for wait4
 pub const WNOHANG: i32 = 1;

@@ -25,7 +25,7 @@ pub mod ext2;
 
 pub use inode::{Inode, InodeType, InodeOps, Ino, DirEntry, alloc_ino};
 pub use file::{File, FileOps, OpenFlags, PipeEnd, PtyEnd};
-pub use mount::{Mount, init_vfs, mount, get_root, get_mounts};
+pub use mount::{Mount, init_vfs, mount, get_root, get_mounts, set_root, path_lookup};
 pub use pipe::{create_pipe, PipeReader, PipeWriter};
 pub use procfs::mount_procfs;
 pub use ptmx::open_ptmx;

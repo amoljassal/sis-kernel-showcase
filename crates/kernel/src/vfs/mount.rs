@@ -100,3 +100,44 @@ pub fn get_mounts() -> Vec<Mount> {
     let vfs = VFS.read();
     vfs.as_ref().map(|t| t.list()).unwrap_or_default()
 }
+
+/// Set root inode (used during initialization)
+pub fn set_root(root: Arc<Inode>) {
+    let mut vfs = VFS.write();
+    if let Some(ref mut table) = *vfs {
+        table.root = Some(root);
+    }
+}
+
+/// Path lookup - resolve a path to an inode
+///
+/// Starts from the given root inode and walks the path components
+/// to find the target inode.
+pub fn path_lookup(root: &Arc<Inode>, path: &str) -> Result<Arc<Inode>, Errno> {
+    use super::InodeType;
+
+    // Handle empty or root path
+    if path.is_empty() || path == "/" {
+        return Ok(root.clone());
+    }
+
+    // Remove leading slash and split into components
+    let path = path.strip_prefix('/').unwrap_or(path);
+    let components: Vec<&str> = path.split('/').filter(|c| !c.is_empty()).collect();
+
+    let mut current = root.clone();
+
+    // Walk each path component
+    for component in components {
+        // Ensure current is a directory
+        let meta = current.metadata()?;
+        if meta.inode_type != InodeType::Directory {
+            return Err(Errno::ENOTDIR);
+        }
+
+        // Look up the next component
+        current = current.lookup(component)?;
+    }
+
+    Ok(current)
+}

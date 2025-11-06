@@ -6,6 +6,7 @@
 use crate::lib::error::{Result, Errno};
 use crate::block::{BlockDevice, register_block_device};
 use alloc::sync::Arc;
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 

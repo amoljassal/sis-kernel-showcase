@@ -193,42 +193,42 @@ pub fn capture_frame() -> Result<Frame> {
     }
 }
 
-/// Integration points for future computer vision:
-///
-/// 1. Object Detection:
-///    ```rust
-///    pub fn detect_objects(frame: &Frame) -> Vec<Detection> {
-///        // Run YOLOv5 or similar model
-///        // Return bounding boxes and classes
-///    }
-///    ```
-///
-/// 2. Face Detection:
-///    ```rust
-///    pub fn detect_faces(frame: &Frame) -> Vec<FaceRect> {
-///        // Run face detection model
-///        // Return face locations
-///    }
-///    ```
-///
-/// 3. Optical Character Recognition:
-///    ```rust
-///    pub fn recognize_text(frame: &Frame) -> Vec<TextBlock> {
-///        // Run OCR model (Tesseract or similar)
-///        // Return recognized text and locations
-///    }
-///    ```
-///
-/// 4. Scene Understanding:
-///    ```rust
-///    pub fn understand_scene(frame: &Frame) -> SceneDescription {
-///        // Run multimodal vision-language model
-///        // Return semantic description of scene
-///    }
-///    ```
-///
-/// 5. Vision Pipeline:
-///    ```
-///    Camera → Frame Capture → Preprocessing → Vision Model →
-///    JARVIS Context → Voice/Visual Response
-///    ```
+// Integration points for future computer vision:
+//
+// 1. Object Detection:
+//    ```rust
+//    pub fn detect_objects(frame: &Frame) -> Vec<Detection> {
+//        // Run YOLOv5 or similar model
+//        // Return bounding boxes and classes
+//    }
+//    ```
+//
+// 2. Face Detection:
+//    ```rust
+//    pub fn detect_faces(frame: &Frame) -> Vec<FaceRect> {
+//        // Run face detection model
+//        // Return face locations
+//    }
+//    ```
+//
+// 3. Optical Character Recognition:
+//    ```rust
+//    pub fn recognize_text(frame: &Frame) -> Vec<TextBlock> {
+//        // Run OCR model (Tesseract or similar)
+//        // Return recognized text and locations
+//    }
+//    ```
+//
+// 4. Scene Understanding:
+//    ```rust
+//    pub fn understand_scene(frame: &Frame) -> SceneDescription {
+//        // Run multimodal vision-language model
+//        // Return semantic description of scene
+//    }
+//    ```
+//
+// 5. Vision Pipeline:
+//    ```text
+//    Camera → Frame Capture → Preprocessing → Vision Model →
+//    JARVIS Context → Voice/Visual Response
+//    ```

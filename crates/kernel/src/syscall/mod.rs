@@ -4,6 +4,163 @@
 pub mod uaccess;
 
 use crate::lib::error::{Errno, Result};
+use alloc::format;
+
+/// Syscall error type (alias for Errno)
+pub type SyscallError = Errno;
+
+/// Syscall frame - represents CPU state during syscall entry
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct SyscallFrame {
+    /// General purpose registers x0-x30
+    pub gpr: [u64; 31],
+    /// User stack pointer (SP_EL0)
+    pub sp_el0: u64,
+    /// Exception link register (return address)
+    pub elr_el1: u64,
+    /// Saved program status register
+    pub spsr_el1: u64,
+}
+
+/// Syscall numbers (AArch64 Linux syscall numbers)
+#[repr(usize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+pub enum SyscallNumber {
+    // File I/O
+    OpenAt = 56,
+    Close = 57,
+    Lseek = 62,
+    Read = 63,
+    Write = 64,
+    ReadLinkAt = 78,
+    Fstat = 80,
+    GetDents64 = 61,
+
+    // Process management
+    Exit = 93,
+    GetPid = 172,
+    GetPPid = 173,
+    Fork = 220,
+    Execve = 221,
+    Wait4 = 260,
+
+    // Credentials
+    GetUid = 174,
+    GetEuid = 175,
+    GetGid = 176,
+    GetEgid = 177,
+    SetUid = 146,
+    SetGid = 144,
+    SetEuid = 145,
+    SetEgid = 147,
+
+    // Signals
+    Kill = 129,
+    SigAction = 134,
+    SigReturn = 139,
+
+    // Memory management
+    Brk = 214,
+    Mmap = 222,
+    Munmap = 215,
+    Mprotect = 226,
+
+    // File operations
+    Mkdir = 34,
+    Rmdir = 35,
+    Unlink = 10,
+    Pipe = 59,
+    Dup = 23,
+    Dup2 = 24,
+    Chmod = 52,
+    Chown = 55,
+    Umask = 166,
+    GetRandom = 278,
+
+    // Working directory
+    GetCwd = 17,
+    Chdir = 49,
+
+    // I/O operations
+    Ioctl = 29,
+    Ppoll = 73,
+
+    // Time operations
+    ClockGetTime = 113,
+    Nanosleep = 101,
+
+    // Filesystem operations
+    Mount = 40,
+    Umount2 = 39,
+
+    // Socket operations
+    Socket = 198,
+    Bind = 200,
+    Listen = 201,
+    Accept = 202,
+    Connect = 203,
+    SendTo = 206,
+    RecvFrom = 207,
+    Shutdown = 210,
+}
+
+/// Handle a syscall from userspace
+///
+/// Takes a syscall frame containing register state and dispatches
+/// to the appropriate handler. Returns result in x0 or error.
+pub fn handle_syscall(frame: &mut SyscallFrame) -> Result<u64> {
+    let nr = frame.gpr[8] as usize; // x8 contains syscall number
+    let args = [
+        frame.gpr[0], // x0
+        frame.gpr[1], // x1
+        frame.gpr[2], // x2
+        frame.gpr[3], // x3
+        frame.gpr[4], // x4
+        frame.gpr[5], // x5
+    ];
+
+    let result = syscall_dispatcher(nr, &args);
+
+    if result < 0 {
+        Err(Errno::from_negated_i32(result as i32))
+    } else {
+        Ok(result as u64)
+    }
+}
+
+/// Run a syscall microbenchmark
+#[allow(dead_code)]
+pub fn run_syscall_microbenchmark(_nr: SyscallNumber, _iterations: usize) {
+    // Stub implementation for now
+    crate::warn!("Syscall microbenchmark not yet implemented");
+}
+
+/// Print cycle counter value
+#[allow(dead_code)]
+pub fn print_cycles(_label: &str) {
+    // Stub implementation for now
+}
+
+/// Print syscall performance report
+#[allow(dead_code)]
+pub fn print_syscall_performance_report() {
+    // Stub implementation for now
+}
+
+/// Reset syscall metrics
+#[allow(dead_code)]
+pub fn reset_syscall_metrics() {
+    // Stub implementation for now
+}
+
+/// Read cycle counter
+#[allow(dead_code)]
+pub fn read_cycle_counter() -> u64 {
+    // Stub implementation for now
+    0
+}
 
 /// Syscall dispatcher - routes syscall number to appropriate handler
 ///
