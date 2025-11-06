@@ -34,6 +34,8 @@ pub mod smp;
 pub mod fs;
 // Graphics layer (Phase G.0)
 pub mod graphics;
+// Window manager (Phase G.1)
+pub mod window_manager;
 // Device drivers (Phase A1)
 pub mod drivers;
 // Initial RAM filesystem
@@ -384,6 +386,22 @@ mod bringup {
                 super::uart_print(b"GRAPHICS: TEST PASSED\n");
             } else {
                 super::uart_print(b"GRAPHICS: TEST FAILED\n");
+            }
+
+            // Initialize window manager (Phase G.1)
+            super::uart_print(b"WM: INIT WINDOW MANAGER\n");
+            if let Ok(()) = crate::window_manager::init() {
+                super::uart_print(b"WM: READY\n");
+
+                // Run window manager test
+                super::uart_print(b"WM: RUNNING TEST\n");
+                if let Ok(()) = crate::window_manager::test_window_manager() {
+                    super::uart_print(b"WM: TEST PASSED\n");
+                } else {
+                    super::uart_print(b"WM: TEST FAILED\n");
+                }
+            } else {
+                super::uart_print(b"WM: INIT FAILED\n");
             }
         } else {
             super::uart_print(b"GRAPHICS: NO GPU (SKIP)\n");
