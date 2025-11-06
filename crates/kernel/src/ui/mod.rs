@@ -10,8 +10,8 @@ pub mod layout;
 
 pub use event::{InputEvent, EventResponse, SizeConstraints, Size, MouseButton, KeyCode, KeyModifiers};
 pub use widget::{Widget, WidgetState, Padding};
-pub use theme::Theme;
-pub use widgets::{Label, TextAlignment, Button, Panel, TextBox};
+pub use theme::{Theme, ThemeMode};
+pub use widgets::{Label, TextAlignment, Button, Panel, TextBox, Spinner, ProgressBar, DotsIndicator, PulseIndicator};
 pub use layout::{VStack, HStack};
 
 use crate::graphics::{self, DrawContext, create_system_font, Color, Rect};

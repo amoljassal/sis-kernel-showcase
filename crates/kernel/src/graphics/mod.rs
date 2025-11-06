@@ -5,10 +5,12 @@
 pub mod color;
 pub mod primitives;
 pub mod font;
+pub mod icons;
 
 pub use color::Color;
 pub use primitives::{DrawContext, Rect};
 pub use font::{Font, Glyph, create_system_font, create_display_font};
+pub use icons::{Icon, IconType, IconSize};
 
 use crate::drivers::virtio_gpu;
 use crate::lib::error::Result;
