@@ -6,11 +6,13 @@ pub mod terminal;
 pub mod ai_insights;
 pub mod file_manager;
 pub mod settings;
+pub mod ai_dashboard;
 
 pub use terminal::TerminalApp;
 pub use ai_insights::AIInsightsApp;
 pub use file_manager::FileManagerApp;
 pub use settings::SettingsApp;
+pub use ai_dashboard::AIDashboardApp;
 
 use crate::window_manager::{WindowManager, WindowSpec, WindowDecoration};
 use crate::ui::{Theme, Widget};
