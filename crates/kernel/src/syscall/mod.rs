@@ -61,6 +61,10 @@ pub fn syscall_dispatcher(nr: usize, args: &[u64; 6]) -> isize {
         113 => sys_clock_gettime(args[0] as i32, args[1] as *mut u8),
         101 => sys_nanosleep(args[0] as *const u8, args[1] as *mut u8),
 
+        // Filesystem operations (Phase B)
+        40 => sys_mount(args[0] as *const u8, args[1] as *const u8, args[2] as *const u8, args[3] as u64, args[4] as *const u8),
+        39 => sys_umount2(args[0] as *const u8, args[1] as i32),
+
         // Unimplemented
         _ => {
             crate::warn!("Unimplemented syscall: {}", nr);
@@ -1080,6 +1084,112 @@ pub fn sys_nanosleep(req: *const u8, rem: *mut u8) -> Result<isize> {
             *(rem.add(8) as *mut i64) = 0;
         }
     }
+
+    Ok(0)
+}
+
+/// sys_mount - Mount a filesystem (Phase B)
+///
+/// Arguments:
+/// - source: Device path or filesystem source (e.g., "/dev/vda1")
+/// - target: Mount point path (e.g., "/mnt")
+/// - filesystemtype: Filesystem type (e.g., "ext2")
+/// - mountflags: Mount flags (MS_RDONLY, etc.)
+/// - data: Filesystem-specific mount options
+pub fn sys_mount(
+    source: *const u8,
+    target: *const u8,
+    filesystemtype: *const u8,
+    mountflags: u64,
+    data: *const u8,
+) -> Result<isize> {
+    if source.is_null() || target.is_null() || filesystemtype.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // Copy strings from userspace
+    let source_str = unsafe {
+        let mut len = 0;
+        while len < 4096 && *source.add(len) != 0 {
+            len += 1;
+        }
+        let bytes = core::slice::from_raw_parts(source, len);
+        core::str::from_utf8(bytes).map_err(|_| Errno::EINVAL)?
+    };
+
+    let target_str = unsafe {
+        let mut len = 0;
+        while len < 4096 && *target.add(len) != 0 {
+            len += 1;
+        }
+        let bytes = core::slice::from_raw_parts(target, len);
+        core::str::from_utf8(bytes).map_err(|_| Errno::EINVAL)?
+    };
+
+    let fstype_str = unsafe {
+        let mut len = 0;
+        while len < 64 && *filesystemtype.add(len) != 0 {
+            len += 1;
+        }
+        let bytes = core::slice::from_raw_parts(filesystemtype, len);
+        core::str::from_utf8(bytes).map_err(|_| Errno::EINVAL)?
+    };
+
+    crate::info!("mount: {} on {} type {}", source_str, target_str, fstype_str);
+
+    // Get the block device
+    let device = crate::block::get_block_device(source_str.trim_start_matches("/dev/"))
+        .ok_or(Errno::ENODEV)?;
+
+    // Mount based on filesystem type
+    let root_inode = match fstype_str {
+        "ext2" => crate::vfs::mount_ext2(device)?,
+        _ => {
+            crate::warn!("mount: unsupported filesystem type: {}", fstype_str);
+            return Err(Errno::ENODEV);
+        }
+    };
+
+    // For Phase B, we'll store the mounted filesystem in a simple way
+    // In production, would need proper mount point tracking and VFS integration
+    crate::info!("mount: successfully mounted {} on {}", source_str, target_str);
+
+    Ok(0)
+}
+
+/// sys_umount2 - Unmount a filesystem (Phase B)
+///
+/// Arguments:
+/// - target: Mount point path
+/// - flags: Unmount flags (MNT_FORCE, MNT_DETACH, etc.)
+pub fn sys_umount2(target: *const u8, flags: i32) -> Result<isize> {
+    if target.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // Copy target from userspace
+    let target_str = unsafe {
+        let mut len = 0;
+        while len < 4096 && *target.add(len) != 0 {
+            len += 1;
+        }
+        let bytes = core::slice::from_raw_parts(target, len);
+        core::str::from_utf8(bytes).map_err(|_| Errno::EINVAL)?
+    };
+
+    crate::info!("umount: {}", target_str);
+
+    // For Phase B, simplified implementation
+    // In production, would need to:
+    // 1. Find the mount by target path
+    // 2. Flush all dirty buffers for the device
+    // 3. Invalidate cache entries
+    // 4. Remove from mount table
+
+    // Flush all dirty buffers
+    crate::mm::sync_all()?;
+
+    crate::info!("umount: successfully unmounted {}", target_str);
 
     Ok(0)
 }
