@@ -32,3 +32,8 @@ pub fn set_current_pid(pid: Pid) {
         scheduler::set_current(pid);
     }
 }
+
+pub fn count_processes() -> usize {
+    let table = get_process_table();
+    table.lock().len()
+}

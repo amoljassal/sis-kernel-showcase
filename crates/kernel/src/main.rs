@@ -38,6 +38,8 @@ pub mod graphics;
 pub mod window_manager;
 // UI Toolkit (Phase G.2)
 pub mod ui;
+// Desktop Applications (Phase G.3)
+pub mod applications;
 // Device drivers (Phase A1)
 pub mod drivers;
 // Initial RAM filesystem
@@ -414,6 +416,22 @@ mod bringup {
                         super::uart_print(b"UI: TEST PASSED\n");
                     } else {
                         super::uart_print(b"UI: TEST FAILED\n");
+                    }
+
+                    // Test desktop applications (Phase G.3)
+                    super::uart_print(b"APPS: TESTING APPLICATIONS\n");
+                    if let Ok(()) = crate::applications::test_applications() {
+                        super::uart_print(b"APPS: TESTS PASSED\n");
+                    } else {
+                        super::uart_print(b"APPS: TESTS FAILED\n");
+                    }
+
+                    // Launch all applications in windows
+                    super::uart_print(b"APPS: LAUNCHING ALL APPS\n");
+                    if let Ok(()) = crate::applications::launch_all_apps() {
+                        super::uart_print(b"APPS: ALL APPS RUNNING\n");
+                    } else {
+                        super::uart_print(b"APPS: LAUNCH FAILED\n");
                     }
                 } else {
                     super::uart_print(b"UI: INIT FAILED\n");
