@@ -3,6 +3,8 @@
 /// Provides a unified interface for block devices (virtio-blk, SCSI, etc.)
 /// with request queuing and synchronous I/O operations.
 
+pub mod partition;
+
 use crate::lib::error::{Errno, Result};
 use alloc::string::String;
 use alloc::sync::Arc;

@@ -313,5 +313,21 @@ pub fn register_virtio_blk(transport: VirtIOMMIOTransport, name: String) -> Resu
         &VIRTIO_BLK_OPS,
     );
 
-    Ok(register_block_device(block_dev))
+    let dev = register_block_device(block_dev);
+
+    // Probe for partitions
+    crate::info!("virtio-blk: probing partitions on {}", dev.name);
+    match crate::block::partition::register_partitions(&dev) {
+        Ok(partitions) => {
+            if !partitions.is_empty() {
+                crate::info!("virtio-blk: found {} partition(s) on {}",
+                           partitions.len(), dev.name);
+            }
+        }
+        Err(e) => {
+            crate::warn!("virtio-blk: partition probing failed: {:?}", e);
+        }
+    }
+
+    Ok(dev)
 }
