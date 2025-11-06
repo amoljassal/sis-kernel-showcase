@@ -32,6 +32,8 @@ pub mod security;
 pub mod smp;
 // Filesystem layer with journaling (Phase F)
 pub mod fs;
+// Graphics layer (Phase G.0)
+pub mod graphics;
 // Device drivers (Phase A1)
 pub mod drivers;
 // Initial RAM filesystem
@@ -365,6 +367,27 @@ mod bringup {
         super::uart_print(b"SMP: INIT MULTI-CORE\n");
         crate::smp::init();
         super::uart_print(b"SMP: READY\n");
+
+        // Initialize virtio-gpu devices (Phase G.0)
+        super::uart_print(b"GPU: PROBING VIRTIO-GPU DEVICES\n");
+        crate::arch::aarch64::init_virtio_gpu();
+        super::uart_print(b"GPU: READY\n");
+
+        // Initialize graphics subsystem (Phase G.0)
+        super::uart_print(b"GRAPHICS: INIT\n");
+        if let Ok(()) = crate::graphics::init() {
+            super::uart_print(b"GRAPHICS: READY\n");
+
+            // Run graphics test
+            super::uart_print(b"GRAPHICS: RUNNING TEST\n");
+            if let Ok(()) = crate::graphics::test_graphics() {
+                super::uart_print(b"GRAPHICS: TEST PASSED\n");
+            } else {
+                super::uart_print(b"GRAPHICS: TEST FAILED\n");
+            }
+        } else {
+            super::uart_print(b"GRAPHICS: NO GPU (SKIP)\n");
+        }
 
         // TODO: Unpack initramfs (when INITRAMFS_DATA is available)
         // super::uart_print(b"INITRAMFS: UNPACKING\n");

@@ -253,3 +253,53 @@ pub fn init_virtio_net() {
         crate::info!("virtio-net: Initialized {} network device(s)", net_count);
     }
 }
+
+/// Initialize virtio-gpu devices (Phase G.0)
+pub fn init_virtio_gpu() {
+    use crate::virtio::{VirtIOMMIOTransport, VirtIODeviceType};
+    use crate::drivers::virtio_gpu;
+
+    // QEMU virt machine VirtIO MMIO address range
+    const VIRTIO_MMIO_BASE: u64 = 0x0a000000;
+    const VIRTIO_MMIO_SIZE: u64 = 0x200;
+    const VIRTIO_MMIO_COUNT: usize = 32;
+
+    let mut gpu_count = 0;
+
+    for i in 0..VIRTIO_MMIO_COUNT {
+        let base = VIRTIO_MMIO_BASE + (i as u64 * VIRTIO_MMIO_SIZE);
+        let irq = Some(16 + i as u32);
+
+        // Try to probe this address
+        match VirtIOMMIOTransport::new(base, VIRTIO_MMIO_SIZE, irq) {
+            Ok(transport) => {
+                // Check if it's a GPU device
+                if transport.device_type() == VirtIODeviceType::GPU {
+                    crate::info!("virtio-gpu: Found GPU device at 0x{:x}", base);
+
+                    // Initialize the GPU device
+                    match virtio_gpu::init(transport) {
+                        Ok(()) => {
+                            crate::info!("virtio-gpu: Device initialized successfully");
+                            gpu_count += 1;
+                            break; // Only need one GPU
+                        }
+                        Err(e) => {
+                            crate::warn!("virtio-gpu: Failed to initialize: {:?}", e);
+                        }
+                    }
+                }
+            }
+            Err(_) => {
+                // Not a valid VirtIO device at this address, continue
+                continue;
+            }
+        }
+    }
+
+    if gpu_count == 0 {
+        crate::info!("virtio-gpu: No GPU devices found");
+    } else {
+        crate::info!("virtio-gpu: Initialized {} GPU device(s)", gpu_count);
+    }
+}
