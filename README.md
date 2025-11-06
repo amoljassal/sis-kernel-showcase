@@ -251,7 +251,57 @@ curl -X POST http://localhost:8871/api/v1/shell/selfcheck/cancel
 - `QemuSupervisor::run_self_check()` - Self-check orchestration (crates/daemon/src/qemu/supervisor.rs:878)
 - `QemuSupervisor::cancel_self_check()` - Cancellation logic (crates/daemon/src/qemu/supervisor.rs:852)
 
-**Next:** Phase 4 - WebSocket Events & Real-time Updates
+### GUI-Kernel Integration - Phase 4: WebSocket Events & Real-time Updates (COMPLETE)
+
+**Status:** IMPLEMENTED - WebSocket event streaming with backpressure handling
+
+Phase 4 provides real-time event streaming from the kernel to connected GUI clients via WebSocket.
+
+**Implemented:**
+- WebSocket endpoint at `/events` for event streaming
+- Broadcast channel for multi-client support
+- Backpressure handling with lag detection and notification
+- Multiple event types: StateChanged, Parsed, RawLine, MetricBatch, SelfCheckStarted
+- Client connection/disconnection management
+- Graceful error handling and cleanup
+
+**Event Types:**
+- `StateChanged` - QEMU state transitions (idle, starting, running, stopping, failed)
+- `Parsed` - Structured events parsed from kernel output
+- `RawLine` - Raw stdout/stderr lines with timestamp
+- `MetricBatch` - Batched metrics emitted every 100ms
+- `SelfCheckStarted` - Self-check operation initiated
+
+**Testing:**
+```bash
+# Connect to WebSocket (requires WebSocket client)
+# ws://localhost:8871/events
+
+# Example with Python websockets library:
+import asyncio, websockets, json
+
+async def listen():
+    async with websockets.connect("ws://localhost:8871/events") as ws:
+        async for message in ws:
+            event = json.loads(message)
+            print(f"Event: {event}")
+
+asyncio.run(listen())
+```
+
+**Verification:**
+- WebSocket clients connect successfully (verified in daemon logs)
+- Connection endpoint responsive at ws://127.0.0.1:8871/events
+- Backpressure handling prevents memory issues with slow clients
+- Clean disconnect on client termination
+
+**Architecture:**
+- `ws.rs` - WebSocket handler with event subscription (crates/daemon/src/api/ws.rs:12-100)
+- `QemuSupervisor::subscribe()` - Event subscription for clients (crates/daemon/src/qemu/supervisor.rs)
+- `broadcast::channel` - Tokio broadcast channel for multi-client event distribution
+- Event emission at key points: state changes, stdout lines, parsed events, metrics
+
+**Next:** Phase 5 - Advanced GUI Features
 
 See `docs/plans/GUI-KERNEL-INTEGRATION-PLAN.md` for complete roadmap.
 
