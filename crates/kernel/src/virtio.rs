@@ -245,6 +245,61 @@ impl VirtIOMMIOTransport {
     pub fn is_failed(&self) -> bool {
         (self.read_reg(VirtIOMMIOOffset::Status) & VirtIOStatus::Failed as u32) != 0
     }
+
+    /// Read byte from device configuration space
+    pub fn read_config_u8(&self, offset: usize) -> u8 {
+        unsafe {
+            let addr = self.base_addr + VirtIOMMIOOffset::Config as u64 + offset as u64;
+            ptr::read_volatile(addr as *const u8)
+        }
+    }
+
+    /// Read 16-bit word from device configuration space
+    pub fn read_config_u16(&self, offset: usize) -> u16 {
+        unsafe {
+            let addr = self.base_addr + VirtIOMMIOOffset::Config as u64 + offset as u64;
+            ptr::read_volatile(addr as *const u16)
+        }
+    }
+
+    /// Read 32-bit word from device configuration space
+    pub fn read_config_u32(&self, offset: usize) -> u32 {
+        unsafe {
+            let addr = self.base_addr + VirtIOMMIOOffset::Config as u64 + offset as u64;
+            ptr::read_volatile(addr as *const u32)
+        }
+    }
+
+    /// Setup a virtqueue (Phase C helper)
+    pub fn setup_queue(&mut self, queue: &mut crate::virtio::virtqueue::VirtQueue) -> DriverResult<()> {
+        // Select the queue
+        self.write_reg(VirtIOMMIOOffset::QueueSel, queue.index as u32);
+
+        // Check if queue is available
+        let max_size = self.read_reg(VirtIOMMIOOffset::QueueNumMax);
+        if max_size == 0 {
+            return Err(DriverError::InvalidQueue);
+        }
+
+        // Set queue size
+        self.write_reg(VirtIOMMIOOffset::QueueNum, queue.size as u32);
+
+        // Get queue physical addresses
+        let (desc_addr, avail_addr, used_addr) = queue.get_addresses();
+
+        // Set queue addresses (VirtIO 1.0 format)
+        self.write_reg(VirtIOMMIOOffset::QueueDescLow, (desc_addr & 0xFFFFFFFF) as u32);
+        self.write_reg(VirtIOMMIOOffset::QueueDescHigh, (desc_addr >> 32) as u32);
+        self.write_reg(VirtIOMMIOOffset::QueueAvailLow, (avail_addr & 0xFFFFFFFF) as u32);
+        self.write_reg(VirtIOMMIOOffset::QueueAvailHigh, (avail_addr >> 32) as u32);
+        self.write_reg(VirtIOMMIOOffset::QueueUsedLow, (used_addr & 0xFFFFFFFF) as u32);
+        self.write_reg(VirtIOMMIOOffset::QueueUsedHigh, (used_addr >> 32) as u32);
+
+        // Mark queue as ready
+        self.write_reg(VirtIOMMIOOffset::QueueReady, 1);
+
+        Ok(())
+    }
 }
 
 /// VirtIO device discovery for QEMU ARM64 virt machine

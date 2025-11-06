@@ -315,6 +315,11 @@ mod bringup {
         crate::arch::aarch64::init_virtio_blk();
         super::uart_print(b"BLOCK: READY\n");
 
+        // Initialize virtio-net devices (Phase C)
+        super::uart_print(b"NET: PROBING VIRTIO-NET DEVICES\n");
+        crate::arch::aarch64::init_virtio_net();
+        super::uart_print(b"NET: READY\n");
+
         // TODO: Unpack initramfs (when INITRAMFS_DATA is available)
         // super::uart_print(b"INITRAMFS: UNPACKING\n");
         // let initramfs_data = &INITRAMFS_DATA;
