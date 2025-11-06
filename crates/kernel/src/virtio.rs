@@ -3,6 +3,8 @@
 //! Implements VirtIO 1.0+ specification for paravirtualized I/O devices
 //! Supports MMIO transport with device discovery and management
 
+pub mod virtqueue;
+
 use crate::driver::{DeviceId, DeviceInfo, DriverError, DriverResult};
 use core::ptr;
 

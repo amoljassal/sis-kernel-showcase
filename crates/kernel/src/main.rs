@@ -305,6 +305,11 @@ mod bringup {
 
         super::uart_print(b"VFS: READY\n");
 
+        // Initialize virtio-blk devices (Phase B)
+        super::uart_print(b"BLOCK: PROBING VIRTIO-BLK DEVICES\n");
+        crate::arch::aarch64::init_virtio_blk();
+        super::uart_print(b"BLOCK: READY\n");
+
         // TODO: Unpack initramfs (when INITRAMFS_DATA is available)
         // super::uart_print(b"INITRAMFS: UNPACKING\n");
         // let initramfs_data = &INITRAMFS_DATA;
