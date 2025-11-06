@@ -3,13 +3,14 @@
 
 pub mod trap;
 pub mod timer;
+pub mod psci;  // Phase E: SMP CPU bring-up
 
 // TODO: Add in later phases:
-// pub mod psci;    // SMP CPU bring-up (Phase E)
 // pub mod gicv3;   // Interrupt controller (Phase E)
 // pub mod mmu;     // Page tables, TLB (Phase A1)
 
 pub use trap::*;
+pub use psci::{psci_version, cpu_on, cpu_off, system_reset, system_off, get_mpidr, current_cpu_id};
 
 /// CPU context for context switching
 /// Contains callee-saved registers that must be preserved across function calls
