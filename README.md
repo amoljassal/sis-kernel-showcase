@@ -368,7 +368,72 @@ curl -s http://localhost:8871/api/v1/qemu/status | jq
 - Error handling: Verified
 - Performance validation: Exceeded targets
 
-**Next:** GUI Frontend Integration
+### GUI-Kernel Integration - Phase 6: GUI Frontend Integration (COMPLETE)
+
+**Status:** VERIFIED - GUI successfully connected to live backend
+
+Phase 6 connects the React-based web GUI to the live kernel backend, enabling full bidirectional control and monitoring.
+
+**Frontend Architecture:**
+- **Framework:** React 18 + TypeScript + Vite
+- **Location:** `gui/desktop/`
+- **API Client:** Axios-based REST client (`src/lib/api.ts`)
+- **WebSocket:** Real-time event streaming (`src/lib/useWebSocket.ts`)
+- **State Management:** TanStack Query + Zustand
+- **UI Components:** Radix UI + Tailwind CSS
+
+**Integration Points:**
+
+1. **REST API Client** - gui/desktop/src/lib/api.ts
+   - Configured for `http://127.0.0.1:8871`
+   - All endpoints wired up: QEMU control, shell commands, metrics, autonomy, etc.
+   - Type-safe interfaces matching backend schemas
+   - Request ID tracking for debugging
+
+2. **WebSocket Connection** - gui/desktop/src/lib/useWebSocket.ts
+   - Connects to `ws://127.0.0.1:8871/events`
+   - Auto-reconnect on disconnect (3s delay)
+   - Handles all event types: state_changed, parsed, raw_line, metric_batch, crashes
+   - Proper error handling and connection status
+
+3. **Main Application** - gui/desktop/src/App.tsx
+   - Health check polling (5s interval)
+   - QEMU status polling (1s interval)
+   - Start/stop control via qemuApi
+   - Real-time terminal output via WebSocket
+   - Dashboard with metrics, logs, autonomy, LLM, graphs, etc.
+
+**GUI Features:**
+- Live kernel terminal with xterm.js
+- Real-time metrics visualization (Recharts)
+- Autonomy decision monitoring and approval workflows
+- LLM inference panel with streaming tokens
+- Graph builder for dataflow programming
+- Scheduler control panel
+- Crash capture and incident management
+- API explorer for testing endpoints
+
+**Verification:**
+- API client correctly configured for all Phase 3 endpoints
+- WebSocket hook matches Phase 4 event streaming spec
+- Health check working (`http://localhost:8871/health`)
+- All UI components consume live backend APIs
+- Built artifacts ready in `gui/desktop/dist/`
+
+**Running the GUI:**
+```bash
+cd gui/desktop
+pnpm install
+pnpm dev
+```
+
+**Complete Integration Stack:**
+- QEMU Process Management
+- Bidirectional Communication
+- Shell API Endpoints
+- WebSocket Events
+- Integration Testing
+- GUI Frontend Integration
 
 See `docs/plans/GUI-KERNEL-INTEGRATION-PLAN.md` for complete roadmap.
 
