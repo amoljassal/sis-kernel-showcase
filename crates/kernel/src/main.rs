@@ -40,6 +40,8 @@ pub mod window_manager;
 pub mod ui;
 // Desktop Applications (Phase G.3)
 pub mod applications;
+// AI Integration UI (Phase G.4)
+pub mod ai_ui;
 // Device drivers (Phase A1)
 pub mod drivers;
 // Initial RAM filesystem
