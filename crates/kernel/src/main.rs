@@ -42,6 +42,12 @@ pub mod ui;
 pub mod applications;
 // AI Integration UI (Phase G.4)
 pub mod ai_ui;
+// Audio Infrastructure (Phase G.5)
+pub mod audio;
+// Voice UI (Phase G.5)
+pub mod voice;
+// Camera Infrastructure (Phase G.5)
+pub mod camera;
 // Device drivers (Phase A1)
 pub mod drivers;
 // Initial RAM filesystem
