@@ -285,6 +285,7 @@ mod bringup {
         // Initialize scheduler
         super::uart_print(b"SCHEDULER: INIT\n");
         crate::process::scheduler::init();
+        crate::process::scheduler_smp::init();
         super::uart_print(b"SCHEDULER: READY\n");
 
         // Initialize VFS
