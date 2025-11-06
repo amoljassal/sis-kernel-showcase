@@ -157,6 +157,15 @@ impl FileTable {
         let file = self.get(oldfd)?;
         self.alloc_fd(file)
     }
+
+    /// Set a specific FD to a file (for dup2)
+    pub fn set(&mut self, fd: i32, file: alloc::sync::Arc<crate::vfs::File>) -> Result<(), Errno> {
+        if fd < 0 || fd as usize >= self.fds.len() {
+            return Err(Errno::EBADF);
+        }
+        self.fds[fd as usize] = Some(file);
+        Ok(())
+    }
 }
 
 impl core::fmt::Debug for FileTable {
