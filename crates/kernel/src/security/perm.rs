@@ -5,6 +5,7 @@
 use crate::lib::error::{Result, Errno};
 use crate::security::Credentials;
 use crate::vfs::Inode;
+use alloc::vec::Vec;
 
 /// Permission bits
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
