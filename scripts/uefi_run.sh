@@ -167,7 +167,7 @@ if [[ "${VIRTIO:-}" != "" ]]; then
   QEMU_DEVICES+=( -device virtconsole,chardev=datactl,name=sis.datactl )
 fi
 
-qemu-system-aarch64 \
+exec qemu-system-aarch64 \
   "${QEMU_DEVICES[@]}" \
   -rtc base=utc \
   -no-reboot \

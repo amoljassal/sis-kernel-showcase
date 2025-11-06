@@ -355,7 +355,7 @@ pub async fn spawn_qemu(
     // Build command
     let mut cmd = Command::new("bash");
     cmd.arg(&script)
-        .arg("run") // Use 'run' command (builds + runs)
+        // Note: script doesn't parse arguments, just builds+runs QEMU
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

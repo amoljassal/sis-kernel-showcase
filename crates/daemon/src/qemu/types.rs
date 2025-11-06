@@ -21,11 +21,17 @@ pub enum QemuMode {
     },
 }
 
+/// Default features for QEMU (llm + crypto-real for full functionality)
+fn default_features() -> Vec<String> {
+    vec!["llm".to_string(), "crypto-real".to_string()]
+}
+
 /// QEMU run configuration
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct QemuConfig {
     /// Feature flags to enable (e.g., "llm", "graph-demo", "perf-verbose")
-    #[serde(default)]
+    /// Defaults to ["llm", "crypto-real"] for full functionality
+    #[serde(default = "default_features")]
     pub features: Vec<String>,
 
     /// Environment variable overrides
@@ -44,7 +50,7 @@ pub struct QemuConfig {
 impl Default for QemuConfig {
     fn default() -> Self {
         Self {
-            features: vec![],
+            features: default_features(),
             env: HashMap::new(),
             args: vec![],
             working_dir: None,
