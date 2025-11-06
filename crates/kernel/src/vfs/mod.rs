@@ -17,6 +17,7 @@ pub mod pipe;
 pub mod procfs;
 pub mod ptmx;
 pub mod ptsfs;
+pub mod ext2;
 
 pub use inode::{Inode, InodeType, InodeOps, Ino, DirEntry, alloc_ino};
 pub use file::{File, FileOps, OpenFlags, PipeEnd, PtyEnd};
@@ -25,6 +26,7 @@ pub use pipe::{create_pipe, PipeReader, PipeWriter};
 pub use procfs::mount_procfs;
 pub use ptmx::open_ptmx;
 pub use ptsfs::mount_ptsfs;
+pub use ext2::mount_ext2;
 
 use crate::lib::error::Errno;
 use alloc::sync::Arc;
