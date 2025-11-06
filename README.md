@@ -155,7 +155,50 @@ curl -s http://localhost:8871/api/v1/qemu/status | jq
 curl -X POST http://localhost:8871/api/v1/qemu/stop
 ```
 
-**Next:** Phase 2 - Bidirectional Communication (stdin commands, response correlation)
+### GUI-Kernel Integration - Phase 2: Bidirectional Communication (COMPLETE ✅)
+
+**Status:** IMPLEMENTED - Command execution with response correlation
+
+Phase 2 implements bidirectional communication, enabling the GUI to send commands to the live kernel and receive structured responses.
+
+**Implemented:**
+- ✅ **Command-response correlation** - UUID-based tracking with timeout (5s default)
+- ✅ **CommandTracker** - Manages pending commands and matches responses
+- ✅ **execute_command_with_response()** - Async command execution with response
+- ✅ **Mode-aware routing** - Live mode uses LiveProcess, Replay uses ShellExecutor
+- ✅ **Timeout handling** - Automatic timeout with partial output capture
+- ✅ **Output buffering** - Per-command output collection
+
+**How it works:**
+1. GUI sends command via `/api/v1/shell/execute`
+2. CommandTracker assigns UUID and sends to kernel stdin
+3. Stdout processor feeds output lines to CommandTracker
+4. Heuristic matching (oldest pending command gets output)
+5. Completion detected by "OK", "ERROR", or "sis>" prompt
+6. Response returned to GUI with success/output/timing
+
+**Testing:**
+```bash
+# Execute kernel command (live mode)
+curl -X POST http://localhost:8871/api/v1/shell/execute \
+  -H "Content-Type: application/json" \
+  -d '{"command": "cap list", "timeout_ms": 5000}'
+
+# Example response:
+# {
+#   "command": "cap list",
+#   "success": true,
+#   "output": ["Available capabilities:", "- memory", "- process", "..."],
+#   "execution_time_ms": 42
+# }
+```
+
+**Architecture:**
+- `LiveProcess::execute_command_with_response()` - Public API (crates/daemon/src/qemu/live.rs:261-283)
+- `CommandTracker` - Correlation engine (crates/daemon/src/qemu/live.rs:37-149)
+- `QemuSupervisor::execute_command()` - Mode-aware router (crates/daemon/src/qemu/supervisor.rs:794-831)
+
+**Next:** Phase 3 - Shell API Endpoints (execute, self-check, abort)
 
 See `docs/plans/GUI-KERNEL-INTEGRATION-PLAN.md` for complete roadmap.
 

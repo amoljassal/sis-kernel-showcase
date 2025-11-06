@@ -807,10 +807,26 @@ impl QemuSupervisor {
             anyhow::bail!("System busy: {}", reason);
         }
 
-        let executor = self.shell_executor.lock().await;
-        match executor.as_ref() {
-            Some(exec) => exec.execute(request).await,
-            None => Err(anyhow::anyhow!("Shell not ready or QEMU not running")),
+        // Route to appropriate executor based on mode
+        let state = self.state.read().await;
+        match &state.mode {
+            Some(QemuMode::Live { .. }) => {
+                // Use LiveProcess for direct command execution
+                if let Some(ref live_process) = state.live_process {
+                    live_process.execute_command_with_response(request.command).await
+                } else {
+                    Err(anyhow::anyhow!("Live mode enabled but process not available"))
+                }
+            }
+            Some(QemuMode::Replay { .. }) | None => {
+                // Use ShellExecutor for replay mode
+                drop(state); // Release read lock
+                let executor = self.shell_executor.lock().await;
+                match executor.as_ref() {
+                    Some(exec) => exec.execute(request).await,
+                    None => Err(anyhow::anyhow!("Shell not ready or QEMU not running")),
+                }
+            }
         }
     }
 
