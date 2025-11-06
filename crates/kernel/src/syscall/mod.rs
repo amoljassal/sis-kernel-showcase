@@ -1012,7 +1012,7 @@ pub fn sys_dup(oldfd: i32) -> Result<isize> {
     let task = table.get_mut(pid).ok_or(Errno::ESRCH)?;
 
     // Get the file from oldfd
-    let file = task.files.get(oldfd).ok_or(Errno::EBADF)?;
+    let file = task.files.get(oldfd)?;
 
     // Allocate new FD
     let newfd = task.files.alloc_fd(file.clone())?;
@@ -1032,12 +1032,12 @@ pub fn sys_dup2(oldfd: i32, newfd: i32) -> Result<isize> {
 
     // If oldfd == newfd, just validate and return
     if oldfd == newfd {
-        task.files.get(oldfd).ok_or(Errno::EBADF)?;
+        task.files.get(oldfd)?;
         return Ok(newfd as isize);
     }
 
     // Get the file from oldfd
-    let file = task.files.get(oldfd).ok_or(Errno::EBADF)?;
+    let file = task.files.get(oldfd)?;
 
     // Close newfd if it's open
     let _ = task.files.close(newfd);
@@ -1339,7 +1339,7 @@ pub fn sys_ioctl(fd: i32, cmd: u64, arg: u64) -> Result<isize> {
     let task = table.get(&pid).ok_or(Errno::ESRCH)?;
 
     // Get file
-    let file = task.files.get(fd).ok_or(Errno::EBADF)?;
+    let file = task.files.get(fd)?;
 
     // Call file's ioctl
     file.ioctl(cmd as u32, arg as usize)
