@@ -50,6 +50,7 @@ pub fn syscall_dispatcher(nr: usize, args: &[u64; 6]) -> isize {
         214 => sys_brk(args[0] as *const u8),
         222 => sys_mmap(args[0] as *mut u8, args[1] as usize, args[2] as i32, args[3] as i32, args[4] as i32, args[5] as i64),
         215 => sys_munmap(args[0] as *mut u8, args[1] as usize),
+        226 => sys_mprotect(args[0] as *mut u8, args[1] as usize, args[2] as i32),
 
         // File operations
         34 => sys_mkdir(args[0] as *const u8, args[1] as u32),
@@ -605,6 +606,53 @@ pub fn sys_munmap(addr: *mut u8, length: usize) -> Result<isize> {
     let task = table.get_mut(pid).ok_or(Errno::ESRCH)?;
 
     task.mm.do_munmap(addr as u64, length as u64)?;
+    Ok(0)
+}
+
+/// sys_mprotect - Change memory protection (Phase D)
+///
+/// Change the protection flags of memory pages.
+/// Enforces W^X policy (pages cannot be both writable and executable).
+pub fn sys_mprotect(addr: *mut u8, len: usize, prot: i32) -> Result<isize> {
+    use crate::mm::paging::{PAGE_SIZE, PROT_NONE, PROT_READ, PROT_WRITE, PROT_EXEC};
+
+    // Validate address alignment
+    let start_addr = addr as u64;
+    if (start_addr & (PAGE_SIZE as u64 - 1)) != 0 {
+        return Err(Errno::EINVAL);
+    }
+
+    // Validate length
+    if len == 0 {
+        return Ok(0);
+    }
+
+    // Round up length to page boundary
+    let end_addr = start_addr + ((len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)) as u64;
+
+    // Validate protection flags
+    if (prot & !(PROT_NONE | PROT_READ | PROT_WRITE | PROT_EXEC)) != 0 {
+        return Err(Errno::EINVAL);
+    }
+
+    // Get current task's page table
+    let pid = crate::process::current_pid();
+    let table = crate::process::get_process_table();
+    let table = table.as_ref().ok_or(Errno::ESRCH)?;
+    let task = table.get(&pid).ok_or(Errno::ESRCH)?;
+
+    // Get page table root
+    let ttbr0 = task.mm.ttbr0;
+    if ttbr0 == 0 {
+        return Err(Errno::EFAULT);
+    }
+
+    let page_table = ttbr0 as *mut crate::mm::paging::PageTable;
+
+    // Change protection for the range
+    crate::mm::paging::change_page_protection(page_table, start_addr, end_addr, prot)
+        .map_err(|e| Errno::from(e))?;
+
     Ok(0)
 }
 
