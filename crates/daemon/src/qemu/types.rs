@@ -4,6 +4,23 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use utoipa::ToSchema;
 
+/// QEMU operating mode
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(tag = "mode", rename_all = "lowercase")]
+pub enum QemuMode {
+    /// Live mode - real QEMU process
+    Live {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pid: Option<u32>,
+    },
+    /// Replay mode - reading from log files
+    Replay {
+        source: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        speed: Option<String>,
+    },
+}
+
 /// QEMU run configuration
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct QemuConfig {
@@ -57,6 +74,10 @@ pub struct QemuStatus {
     /// Current state
     pub state: QemuState,
 
+    /// Operating mode (live or replay)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<QemuMode>,
+
     /// Process ID (if running)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
@@ -84,6 +105,7 @@ impl Default for QemuStatus {
     fn default() -> Self {
         Self {
             state: QemuState::Idle,
+            mode: None,
             pid: None,
             uptime_secs: None,
             features: vec![],

@@ -1,8 +1,9 @@
 //! QEMU supervisor implementation
 
+use super::live::{spawn_qemu, LiveProcess};
 use super::shell::{ShellCommandRequest, ShellCommandResponse};
 use super::shell_executor::ShellExecutor;
-use super::types::{QemuConfig, QemuState, QemuStatus};
+use super::types::{QemuConfig, QemuMode, QemuState, QemuStatus};
 use crate::metrics::MetricsStore;
 use crate::parser::{BootStatus, LineParser, ParsedEvent};
 use anyhow::{Context, Result};
@@ -172,8 +173,10 @@ pub struct GraphChannel {
 #[derive(Debug)]
 struct SupervisorState {
     state: QemuState,
+    mode: Option<QemuMode>,
     config: Option<QemuConfig>,
     child: Option<Child>,
+    live_process: Option<LiveProcess>,
     start_time: Option<Instant>,
     lines_processed: u64,
     events_emitted: u64,
@@ -188,8 +191,10 @@ impl Default for SupervisorState {
     fn default() -> Self {
         Self {
             state: QemuState::Idle,
+            mode: None,
             config: None,
             child: None,
+            live_process: None,
             start_time: None,
             lines_processed: 0,
             events_emitted: 0,
@@ -265,9 +270,18 @@ impl QemuSupervisor {
     /// Get current status
     pub async fn status(&self) -> QemuStatus {
         let state = self.state.read().await;
+
+        // Get PID from either live_process or child
+        let pid = state
+            .live_process
+            .as_ref()
+            .map(|p| p.pid())
+            .or_else(|| state.child.as_ref().and_then(|c| c.id()));
+
         QemuStatus {
             state: state.state,
-            pid: state.child.as_ref().and_then(|c| c.id()),
+            mode: state.mode.clone(),
+            pid,
             uptime_secs: state.start_time.map(|t| t.elapsed().as_secs()),
             features: state
                 .config
@@ -394,6 +408,71 @@ impl QemuSupervisor {
         Ok(())
     }
 
+    /// Start QEMU in live mode (using LiveProcess)
+    #[tracing::instrument(
+        skip(self, config),
+        fields(
+            run_id = tracing::field::Empty,
+            transport = "qemu-live",
+            qemu_pid = tracing::field::Empty,
+            features = ?config.features,
+            profile = tracing::field::Empty,
+        )
+    )]
+    pub async fn run_live(&self, config: QemuConfig) -> Result<()> {
+        let mut state = self.state.write().await;
+
+        // Check if already running
+        if state.state != QemuState::Idle {
+            anyhow::bail!("QEMU already running or in transition");
+        }
+
+        // Generate run_id and set transport
+        let run_id = uuid::Uuid::new_v4().to_string();
+        state.run_id = Some(run_id.clone());
+        state.transport = "qemu-live".to_string();
+
+        // Record run_id and profile in span
+        tracing::Span::current().record("run_id", &run_id);
+        tracing::Span::current().record("profile", &state.profile);
+
+        info!("Starting QEMU in live mode with features: {:?}", config.features);
+
+        // Store config
+        state.config = Some(config.clone());
+        state.start_time = Some(Instant::now());
+        state.state = QemuState::Starting;
+
+        // Drop the write lock before spawning
+        drop(state);
+
+        // Spawn QEMU process
+        let live_process = spawn_qemu(&config, self.event_tx.clone()).await?;
+        let pid = live_process.pid();
+
+        info!("QEMU live process spawned with PID: {}", pid);
+        tracing::Span::current().record("qemu_pid", pid);
+
+        // Update state with live process
+        let mut state = self.state.write().await;
+        state.live_process = Some(live_process);
+        state.mode = Some(QemuMode::Live { pid: Some(pid) });
+        state.state = QemuState::Running;
+
+        // Emit state changed event (already emitted by spawn_qemu, but redundant is fine)
+        let _ = self.event_tx.send(QemuEvent::StateChanged {
+            state: QemuState::Running,
+            timestamp: chrono::Utc::now(),
+        });
+
+        info!("QEMU live mode started successfully");
+
+        // Spawn metrics batch emitter
+        self.spawn_metrics_emitter();
+
+        Ok(())
+    }
+
     /// Stop QEMU
     pub async fn stop(&self) -> Result<()> {
         let mut state = self.state.write().await;
@@ -412,7 +491,15 @@ impl QemuSupervisor {
             timestamp: chrono::Utc::now(),
         });
 
-        // Kill child process
+        // Stop live process if present
+        if let Some(mut live_process) = state.live_process.take() {
+            debug!("Stopping live QEMU process {}", live_process.pid());
+            drop(state); // Release lock while stopping
+            let _ = live_process.stop().await;
+            state = self.state.write().await; // Reacquire lock
+        }
+
+        // Kill child process if present (legacy mode)
         if let Some(mut child) = state.child.take() {
             if let Some(pid) = child.id() {
                 debug!("Killing QEMU process {}", pid);
@@ -422,6 +509,7 @@ impl QemuSupervisor {
         }
 
         state.state = QemuState::Idle;
+        state.mode = None;
         state.config = None;
         state.start_time = None;
         state.run_id = None;
