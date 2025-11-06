@@ -71,7 +71,7 @@ Phase 4 transformed the SIS kernel from an experimental prototype into a product
 - Week 8-11 AI results validation
 - Phase 4 completion report
 
-See `docs/PHASE4-COMPLETION-REPORT.md` for complete details.
+See `docs/results/PHASE4-COMPLETION-REPORT.md` for complete details.
 
 ## Phase 5: UX Safety Enhancements (COMPLETE ✅)
 
@@ -125,7 +125,7 @@ cd gui/desktop && pnpm dev
 pnpm -F desktop build
 ```
 
-See `docs/DIRECTORY_RESTRUCTURE.md` for complete migration details.
+See `docs/guides/DIRECTORY_RESTRUCTURE.md` for complete migration details.
 
 **Phase 5: Safety Controls (IMPLEMENTED ✅)**
 
@@ -302,8 +302,8 @@ autoctl whatif mem=80 frag=70    # Re-check if it would execute now
 ```
 
 **Documentation:**
-- Phase 5 testing guide: `docs/PHASE5-TESTING-GUIDE.md`
-- Phase 5 test results: `docs/PHASE5-TEST-RESULTS.md`
+- Phase 5 testing guide: `docs/guides/PHASE5-TESTING-GUIDE.md`
+- Phase 5 test results: `docs/results/PHASE5-TEST-RESULTS.md`
 - Phase 6 implementation plan: `docs/plans/PHASE6-EXPLAINABILITY-PLAN.md`
 - UX enhancements assessment: `docs/plans/UX-ENHANCEMENTS-ASSESSMENT.md`
 - Complete feature specifications with pros/cons analysis
@@ -1141,7 +1141,7 @@ pnpm -F desktop build
 # Point web server to gui/desktop/dist/
 ```
 
-See `docs/DIRECTORY_RESTRUCTURE.md` for architecture details and `gui/desktop/README.md` for development guide.
+See `docs/guides/DIRECTORY_RESTRUCTURE.md` for architecture details and `gui/desktop/README.md` for development guide.
 
 ## LLM Service (feature: `llm`)
 
@@ -4887,7 +4887,7 @@ Comprehensive guides for all aspects of the SIS Kernel:
   - 92%+ congestion prediction accuracy, TCP-friendly
 
 **Phase 6 - Web GUI Management:**
-- `docs/DIRECTORY_RESTRUCTURE.md` - Industry-standard directory reorganization
+- `docs/guides/DIRECTORY_RESTRUCTURE.md` - Industry-standard directory reorganization
   - Before/after structure comparison
   - Rationale for crates/, gui/, samples/ layout
   - Migration impact and verification tests
