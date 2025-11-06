@@ -22,6 +22,7 @@ impl MemoryManager {
             brk: USER_HEAP_START,
             brk_start: USER_HEAP_START,
             stack_top: USER_STACK_TOP,
+            mmap_base: USER_MMAP_BASE,
             vmas: Vec::new(),
         }
     }
@@ -144,10 +145,10 @@ impl MemoryManager {
 
     /// Find a free region of the given size
     fn find_free_region(&self, size: u64) -> Result<u64, Errno> {
-        let mut addr = USER_MMAP_BASE;
+        let mut addr = self.mmap_base;
 
         for vma in &self.vmas {
-            if vma.start >= USER_MMAP_BASE {
+            if vma.start >= self.mmap_base {
                 if vma.start - addr >= size {
                     return Ok(addr);
                 }
@@ -165,10 +166,10 @@ impl MemoryManager {
 
     /// Set up initial user stack
     pub fn setup_stack(&mut self) -> Result<(), KernelError> {
-        let stack_start = USER_STACK_TOP - USER_STACK_SIZE;
+        let stack_start = self.stack_top - USER_STACK_SIZE;
         let vma = Vma {
             start: stack_start,
-            end: USER_STACK_TOP,
+            end: self.stack_top,
             flags: VmaFlags::READ | VmaFlags::WRITE | VmaFlags::ANONYMOUS,
             offset: 0,
         };
