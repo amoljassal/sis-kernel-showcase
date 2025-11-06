@@ -310,14 +310,20 @@ autoctl whatif mem=80 frag=70    # Re-check if it would execute now
 
 ## Current Stats
 
-- Rust LOC: 47,964
-- Shell scripts LOC: 1,045
-- TOML LOC: 274
-- All text (incl. docs/notes): 393,213
+- **Rust LOC: 81,976** (39,848 kernel + 6,681 daemon + 34,772 testing + 675 uefi-boot)
+- **TypeScript/JavaScript LOC: 10,844** (Web GUI - React/TypeScript SPA)
+- **Shell scripts LOC: 3,932**
+- **TOML LOC: 394**
+- **All text (incl. docs/notes): 519,012**
 
-- Shell top-level commands: 71
-- Shell first-level subcommands: 94
-- Shell total commands including subcommands: 165
+- **Shell top-level commands: 71**
+- **Shell first-level subcommands: 94**
+- **Shell total commands including subcommands: 165**
+
+**Phase 6 additions:**
+- sisctl daemon: 6,681 lines of Rust (HTTP/WebSocket server, QEMU management, API handlers)
+- Web GUI: 10,844 lines of TypeScript/React (dashboards, components, E2E tests)
+- Testing framework expansion: 34,772 lines (up from previous phases)
 
 ## Project Structure
 
