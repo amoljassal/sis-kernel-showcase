@@ -36,6 +36,8 @@ pub mod fs;
 pub mod graphics;
 // Window manager (Phase G.1)
 pub mod window_manager;
+// UI Toolkit (Phase G.2)
+pub mod ui;
 // Device drivers (Phase A1)
 pub mod drivers;
 // Initial RAM filesystem
@@ -399,6 +401,22 @@ mod bringup {
                     super::uart_print(b"WM: TEST PASSED\n");
                 } else {
                     super::uart_print(b"WM: TEST FAILED\n");
+                }
+
+                // Initialize UI toolkit (Phase G.2)
+                super::uart_print(b"UI: INIT TOOLKIT\n");
+                if let Ok(()) = crate::ui::init() {
+                    super::uart_print(b"UI: READY\n");
+
+                    // Run UI toolkit test
+                    super::uart_print(b"UI: RUNNING TEST\n");
+                    if let Ok(()) = crate::ui::test_ui_toolkit() {
+                        super::uart_print(b"UI: TEST PASSED\n");
+                    } else {
+                        super::uart_print(b"UI: TEST FAILED\n");
+                    }
+                } else {
+                    super::uart_print(b"UI: INIT FAILED\n");
                 }
             } else {
                 super::uart_print(b"WM: INIT FAILED\n");
