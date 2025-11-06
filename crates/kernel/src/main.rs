@@ -28,6 +28,8 @@ pub mod block;
 pub mod net;
 // Security subsystem (Phase D)
 pub mod security;
+// SMP subsystem (Phase E)
+pub mod smp;
 // Device drivers (Phase A1)
 pub mod drivers;
 // Initial RAM filesystem
@@ -355,6 +357,11 @@ mod bringup {
         super::uart_print(b"RANDOM: INIT PRNG\n");
         crate::security::init_random();
         super::uart_print(b"RANDOM: READY\n");
+
+        // Initialize SMP (Phase E)
+        super::uart_print(b"SMP: INIT MULTI-CORE\n");
+        crate::smp::init();
+        super::uart_print(b"SMP: READY\n");
 
         // TODO: Unpack initramfs (when INITRAMFS_DATA is available)
         // super::uart_print(b"INITRAMFS: UNPACKING\n");
