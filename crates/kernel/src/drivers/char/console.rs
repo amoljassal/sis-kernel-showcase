@@ -120,14 +120,8 @@ pub struct RandomOps;
 
 impl FileOps for RandomOps {
     fn read(&self, _file: &File, buf: &mut [u8]) -> Result<usize, Errno> {
-        // Simple PRNG based on time/jitter
-        // For Phase A1, use a very basic generator
-        // TODO: Use proper CSPRNG in production
-
-        for byte in buf.iter_mut() {
-            *byte = get_random_byte();
-        }
-
+        // Use Phase D entropy source
+        crate::security::fill_random_bytes(buf);
         Ok(buf.len())
     }
 
@@ -138,19 +132,3 @@ impl FileOps for RandomOps {
 }
 
 pub static RANDOM_OPS: RandomOps = RandomOps;
-
-/// Simple PRNG for random bytes
-fn get_random_byte() -> u8 {
-    // Very simple: use cycle counter as entropy source
-    let cycles: u64;
-    unsafe {
-        core::arch::asm!("mrs {}, PMCCNTR_EL0", out(reg) cycles);
-    }
-
-    // Mix with a static counter
-    static mut SEED: u64 = 0x123456789ABCDEF0;
-    unsafe {
-        SEED = SEED.wrapping_mul(6364136223846793005).wrapping_add(cycles);
-        (SEED >> 32) as u8
-    }
-}

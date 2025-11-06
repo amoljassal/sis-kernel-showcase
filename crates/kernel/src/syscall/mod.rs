@@ -61,6 +61,7 @@ pub fn syscall_dispatcher(nr: usize, args: &[u64; 6]) -> isize {
         52 => sys_chmod(args[0] as *const u8, args[1] as u32),
         55 => sys_chown(args[0] as *const u8, args[1] as u32, args[2] as u32),
         166 => sys_umask(args[0] as u32),
+        278 => sys_getrandom(args[0] as *mut u8, args[1] as usize, args[2] as u32),
 
         // Working directory
         17 => sys_getcwd(args[0] as *mut u8, args[1] as usize),
@@ -976,6 +977,34 @@ pub fn sys_umask(mask: u32) -> Result<isize> {
 pub fn get_umask() -> u32 {
     use core::sync::atomic::Ordering;
     UMASK.load(Ordering::Relaxed)
+}
+
+/// sys_getrandom - Get random bytes (Phase D)
+///
+/// Fills buffer with random bytes from kernel PRNG.
+/// Flags are currently ignored (MVP implementation).
+pub fn sys_getrandom(buf: *mut u8, buflen: usize, flags: u32) -> Result<isize> {
+    if buf.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    if buflen == 0 {
+        return Ok(0);
+    }
+
+    // Convert to slice
+    let buffer = unsafe {
+        core::slice::from_raw_parts_mut(buf, buflen)
+    };
+
+    // Fill with random bytes from Phase D entropy source
+    crate::security::fill_random_bytes(buffer);
+
+    // Flags (GRND_RANDOM, GRND_NONBLOCK) are ignored for MVP
+    // Our PRNG is always non-blocking
+    let _ = flags;
+
+    Ok(buflen as isize)
 }
 
 /// sys_getcwd - Get current working directory
