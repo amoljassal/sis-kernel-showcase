@@ -24,6 +24,8 @@ pub mod mm;
 pub mod vfs;
 // Block layer (Phase B)
 pub mod block;
+// Network layer (Phase C)
+pub mod net;
 // Device drivers (Phase A1)
 pub mod drivers;
 // Initial RAM filesystem
@@ -318,7 +320,34 @@ mod bringup {
         // Initialize virtio-net devices (Phase C)
         super::uart_print(b"NET: PROBING VIRTIO-NET DEVICES\n");
         crate::arch::aarch64::init_virtio_net();
-        super::uart_print(b"NET: READY\n");
+        super::uart_print(b"NET: DRIVER READY\n");
+
+        // Initialize network interface (smoltcp)
+        super::uart_print(b"NET: INIT INTERFACE\n");
+        if let Ok(()) = crate::net::init_network() {
+            super::uart_print(b"NET: INTERFACE READY\n");
+
+            // Try DHCP configuration
+            super::uart_print(b"NET: STARTING DHCP\n");
+            let mut dhcp_client = crate::net::dhcp::DhcpClient::new();
+            match dhcp_client.acquire_lease() {
+                Ok(config) => {
+                    super::uart_print(b"NET: DHCP LEASE ACQUIRED\n");
+                    if let Err(e) = dhcp_client.apply_config(&config) {
+                        crate::warn!("net: Failed to apply DHCP config: {:?}", e);
+                    }
+                }
+                Err(e) => {
+                    crate::warn!("net: DHCP failed: {:?}, using static IP", e);
+                    // Fall back to static IP for testing
+                    let _ = crate::net::smoltcp_iface::set_ip_address([10, 0, 2, 15], 24);
+                    let _ = crate::net::smoltcp_iface::set_gateway([10, 0, 2, 2]);
+                }
+            }
+            super::uart_print(b"NET: CONFIGURED\n");
+        } else {
+            super::uart_print(b"NET: NO DEVICE (SKIP)\n");
+        }
 
         // TODO: Unpack initramfs (when INITRAMFS_DATA is available)
         // super::uart_print(b"INITRAMFS: UNPACKING\n");
