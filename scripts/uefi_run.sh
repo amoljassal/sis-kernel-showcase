@@ -144,11 +144,19 @@ else
   QEMU_DEVICES+=( -device virtio-blk-pci,drive=esp,id=boot-disk,disable-legacy=on )
 fi
 
-QEMU_DEVICES+=(
-  -device virtio-rng-pci,id=rng0,disable-legacy=on
-  -device virtio-net-pci,netdev=net0,id=net0,disable-legacy=on
-  -netdev user,id=net0
-)
+# RNG always present (PCI is fine for rng)
+QEMU_DEVICES+=( -device virtio-rng-pci,id=rng0,disable-legacy=on )
+
+# Networking (MMIO virtio-net-device) unless disabled
+if [[ "${QEMU_NET:-1}" != "0" ]]; then
+  QEMU_DEVICES+=( -device virtio-net-device,netdev=n0 )
+  QEMU_DEVICES+=( -netdev user,id=n0 )
+fi
+
+# GPU (MMIO virtio-gpu-device) unless disabled
+if [[ "${QEMU_GPU:-1}" != "0" ]]; then
+  QEMU_DEVICES+=( -device virtio-gpu-device )
+fi
 
 # Add virtio-serial only if VIRTIO=1
 if [[ "${VIRTIO:-}" != "" ]]; then

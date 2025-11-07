@@ -403,6 +403,13 @@ pub fn sys_write(fd: i32, buf: *const u8, count: usize) -> Result<isize> {
         return Ok(0);
     }
 
+    // Fast-path stdout/stderr to UART console during bring-up
+    if fd == 1 || fd == 2 {
+        let data = unsafe { core::slice::from_raw_parts(buf, count) };
+        unsafe { crate::uart_print(data); }
+        return Ok(count as isize);
+    }
+
     // Get file from FD table
     let pid = crate::process::current_pid();
     let table = crate::process::get_process_table();

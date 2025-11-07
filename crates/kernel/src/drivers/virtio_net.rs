@@ -71,13 +71,16 @@ impl VirtioNetDevice {
             return Err(Errno::EINVAL);
         }
 
-        // Negotiate features
+        // Basic status + feature negotiation (use generic helper)
+        // For now, we only require basic features (0)
+        let driver_features: u32 = 0;
+        transport_ref
+            .init_device(driver_features)
+            .map_err(|_| Errno::EIO)?;
+
+        // Log device features for visibility
         let device_features = transport_ref.read_reg(VirtIOMMIOOffset::DeviceFeatures);
         crate::info!("virtio-net: device features = 0x{:08x}", device_features);
-
-        // For now, we only require basic features
-        let driver_features = 0; // No special features yet
-        transport_ref.write_reg(VirtIOMMIOOffset::DriverFeatures, driver_features);
 
         // Read configuration space for MAC address
         let mac = Self::read_mac(&transport_ref);
@@ -96,8 +99,7 @@ impl VirtioNetDevice {
         transport_ref.setup_queue(&mut tx_queue).map_err(|_| Errno::EIO)?;
 
         // Set device status to DRIVER_OK
-        let status = transport_ref.read_reg(VirtIOMMIOOffset::Status);
-        transport_ref.write_reg(VirtIOMMIOOffset::Status, status | 0x4); // DRIVER_OK
+        transport_ref.driver_ready();
 
         let device = Self {
             transport: Arc::new(Mutex::new(transport_ref)),
@@ -185,13 +187,15 @@ impl VirtioNetDevice {
         // Notify device
         transport.write_reg(VirtIOMMIOOffset::QueueNotify, 1);
 
-        // Wait for completion (synchronous for now)
+        // Wait for completion (bounded spin to avoid deadlock if device not consuming)
+        let mut spins: usize = 0;
         loop {
             if let Some((completed_id, _len)) = tx_queue.get_used_buf() {
-                if completed_id == desc_id {
-                    break;
-                }
+                if completed_id == desc_id { break; }
             }
+            core::hint::spin_loop();
+            spins = spins.wrapping_add(1);
+            if spins > 5_000_000 { return Err(Errno::ETIMEDOUT); }
         }
 
         Ok(())
