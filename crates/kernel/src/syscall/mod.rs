@@ -798,7 +798,7 @@ pub fn sys_mprotect(addr: *mut u8, len: usize, prot: i32) -> Result<isize> {
     let task = table.get(&pid).ok_or(Errno::ESRCH)?;
 
     // Get page table root
-    let ttbr0 = task.mm.ttbr0;
+    let ttbr0 = task.mm.page_table;
     if ttbr0 == 0 {
         return Err(Errno::EFAULT);
     }
