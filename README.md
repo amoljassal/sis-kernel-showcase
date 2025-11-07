@@ -44,8 +44,14 @@ Press Ctrl+C to stop all services. The script handles graceful shutdown of all c
 - `dt-override`: Enables optional Device Tree override path and platform banner during bring-up.
 - `graphctl-framed`: Uses framed control for `graphctl add-channel`/`add-operator` (default ON in QEMU runner).
 
+Build-time feature hygiene:
+- `bringup`: Enable AArch64 bring‑up markers and relaxed warning gate (suppressed when `strict` is set).
+- `strict`: Deny warnings for CI/hardening; use once the bring‑up cycle is stable.
+- `hardware`, `virtio-snd`: Optional flags to gate hardware‑specific code paths and silence `cfg` warnings (placeholders for future work).
+
 Runtime toggles:
 - `metricsctl on|off|status`: Controls UART metric emission at runtime (default: on). Snapshot functions currently return 0 entries until capture is re-enabled in a future phase.
+- `autoctl on|off|status|interval <ms>`: Controls the autonomous decision timer. In bring‑up builds, autonomy is auto‑enabled at boot; use `autoctl off` to disable.
 
 Crypto notes:
 - When `crypto-real` is ON and `SIS_ED25519_PUBKEY` is set, model verification uses real SHA-256 and Ed25519 (`model.rs`).
@@ -356,6 +362,10 @@ TCP/IP network stack based on smoltcp with DHCP autoconfiguration.
 - Network predictor AI (Week 11) enhances flow control
 - Packet processing metrics feed into AI network agent
 - Socket layer bridges kernel and user space
+
+Notes under QEMU:
+- The UEFI runner exposes a `virtio-net-device` (MMIO) by default for AArch64 `virt` machine.
+- DHCP may time out under QEMU user networking; the kernel will fall back to a static IP (10.0.2.15/24, gateway 10.0.2.2).
 
 **Performance Metrics:**
 - Network packets processed: 12,000,000+ (1hr benchmark)
@@ -5523,6 +5533,8 @@ BRINGUP=1 ./scripts/uefi_run.sh
 #  - PERF=1 enables perf-verbose (PMU programming + extra logs)
 #  - DETERMINISTIC=1 enables Phase 2 deterministic scheduler and model security
 #  - VIRTIO=1 enables the virtio-console driver path and adds QEMU virtio-serial devices (off by default)
+#  - QEMU_NET=0 disables the default MMIO virtio‑net device (enabled by default)
+#  - QEMU_GPU=0 disables the default MMIO virtio‑gpu device (enabled by default)
 #  - SIS_FEATURES allows arbitrary feature list (e.g., "llm,crypto-real" for production cryptography)
 #
 # Available features:
@@ -5803,7 +5815,7 @@ Quick, copy-paste steps to record a short demo video or try locally.
 - Build and boot: `BRINGUP=1 ./scripts/uefi_run.sh`
 - In the SIS shell:
   - `memctl approval on`       # Enable approval mode
-  - `autoctl on`                # Start autonomy
+  - `autoctl on`                # Start autonomy (bring‑up builds auto‑enable at boot; use `autoctl off` to disable)
   - Wait ~5 seconds for operations to queue
   - `memctl approvals`          # List pending operations (shows risk scores)
   - `memctl approve 1`          # Approve exactly 1 operation

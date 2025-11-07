@@ -19,6 +19,11 @@ pub enum PtyEnd {
     Slave(crate::drivers::char::pty::PtySlave),
 }
 
+// Network socket endpoint (UDP/TCP)
+pub enum SocketEnd {
+    Udp(crate::net::socket::SocketHandle),
+}
+
 bitflags::bitflags! {
     /// File open flags
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +92,7 @@ pub struct File {
     pub fops: &'static dyn FileOps,
     pub pipe: Option<PipeEnd>,
     pub pty: Option<PtyEnd>,
+    pub socket: Option<SocketEnd>,
 }
 
 impl File {
@@ -101,6 +107,7 @@ impl File {
             fops: &DefaultFileOps,
             pipe: None,
             pty: None,
+            socket: None,
         }
     }
 
@@ -113,6 +120,7 @@ impl File {
             fops,
             pipe: None,
             pty: None,
+            socket: None,
         }
     }
 
@@ -125,6 +133,7 @@ impl File {
             fops: &PipeFileOps,
             pipe: Some(PipeEnd::Reader(reader)),
             pty: None,
+            socket: None,
         }
     }
 
@@ -137,6 +146,7 @@ impl File {
             fops: &PipeFileOps,
             pipe: Some(PipeEnd::Writer(writer)),
             pty: None,
+            socket: None,
         }
     }
 
@@ -149,6 +159,7 @@ impl File {
             fops: &PtyFileOps,
             pipe: None,
             pty: Some(PtyEnd::Master(master)),
+            socket: None,
         }
     }
 
@@ -161,6 +172,20 @@ impl File {
             fops: &PtyFileOps,
             pipe: None,
             pty: Some(PtyEnd::Slave(slave)),
+            socket: None,
+        }
+    }
+
+    /// Create a file wrapping a UDP socket handle
+    pub fn from_udp_socket(handle: crate::net::socket::SocketHandle) -> Self {
+        Self {
+            inode: None,
+            offset: AtomicU64::new(0),
+            flags: OpenFlags::O_RDWR,
+            fops: &SocketFileOps,
+            pipe: None,
+            pty: None,
+            socket: Some(SocketEnd::Udp(handle)),
         }
     }
 
@@ -239,6 +264,8 @@ impl core::fmt::Debug for File {
             d.field("type", &"pipe");
         } else if self.pty.is_some() {
             d.field("type", &"pty");
+        } else if self.socket.is_some() {
+            d.field("type", &"socket");
         }
         d.field("offset", &self.offset())
             .field("flags", &self.flags)
@@ -397,5 +424,20 @@ impl FileOps for PtyFileOps {
             }
             None => Err(Errno::EBADF),
         }
+    }
+}
+
+/// Socket file operations (minimal; prefer sendto/recvfrom syscalls)
+struct SocketFileOps;
+
+impl FileOps for SocketFileOps {
+    fn read(&self, _file: &File, _buf: &mut [u8]) -> Result<usize, Errno> {
+        // Use recvfrom syscall instead of read
+        Err(Errno::ENOTSUP)
+    }
+
+    fn write(&self, _file: &File, _buf: &[u8]) -> Result<usize, Errno> {
+        // Use sendto syscall instead of write
+        Err(Errno::ENOTSUP)
     }
 }

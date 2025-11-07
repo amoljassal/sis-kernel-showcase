@@ -52,7 +52,9 @@ pub enum Errno {
     ENOSYS = 38,    // Function not implemented
     EMSGSIZE = 90,  // Message too long
     ENOTSUP = 95,   // Operation not supported
+    EAFNOSUPPORT = 97, // Address family not supported
     EADDRNOTAVAIL = 99, // Cannot assign requested address
+    ENOTSOCK = 88,  // Socket operation on non-socket
     ETIMEDOUT = 110, // Connection timed out
 }
 
