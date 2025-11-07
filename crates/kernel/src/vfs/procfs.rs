@@ -81,27 +81,50 @@ impl InodeOps for ProcfsRoot {
         }
     }
 
-    fn readdir(&self, offset: usize) -> Result<Option<DirEntry>> {
-        let entries = vec![
-            (".", 1),
-            ("..", 1),
-            ("cpuinfo", 2),
-            ("meminfo", 3),
-            ("uptime", 4),
-            ("mounts", 5),
-        ];
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::EROFS)
+    }
 
-        if offset >= entries.len() {
-            // TODO: Add PID directories dynamically
-            return Ok(None);
-        }
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        let mut entries = Vec::new();
 
-        let (name, ino) = entries[offset];
-        Ok(Some(DirEntry {
-            ino,
-            name: name.to_string(),
-            itype: if offset < 2 { InodeType::Directory } else { InodeType::Regular },
-        }))
+        // Add . and ..
+        entries.push(DirEntry {
+            ino: 1,
+            name: ".".to_string(),
+            itype: InodeType::Directory,
+        });
+        entries.push(DirEntry {
+            ino: 1,
+            name: "..".to_string(),
+            itype: InodeType::Directory,
+        });
+
+        // Add static files
+        entries.push(DirEntry {
+            ino: 2,
+            name: "cpuinfo".to_string(),
+            itype: InodeType::Regular,
+        });
+        entries.push(DirEntry {
+            ino: 3,
+            name: "meminfo".to_string(),
+            itype: InodeType::Regular,
+        });
+        entries.push(DirEntry {
+            ino: 4,
+            name: "uptime".to_string(),
+            itype: InodeType::Regular,
+        });
+        entries.push(DirEntry {
+            ino: 5,
+            name: "mounts".to_string(),
+            itype: InodeType::Regular,
+        });
+
+        // TODO: Add PID directories dynamically
+
+        Ok(entries)
     }
 
     fn read(&self, _offset: u64, _buf: &mut [u8]) -> Result<usize> {
@@ -159,6 +182,18 @@ impl InodeOps for CpuInfoFile {
     fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
         Err(Errno::EACCES)
     }
+
+    fn lookup(&self, _name: &str) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        Err(Errno::ENOTDIR)
+    }
 }
 
 /// /proc/meminfo file
@@ -215,6 +250,18 @@ impl InodeOps for MemInfoFile {
     fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
         Err(Errno::EACCES)
     }
+
+    fn lookup(&self, _name: &str) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        Err(Errno::ENOTDIR)
+    }
 }
 
 /// /proc/uptime file
@@ -255,6 +302,18 @@ impl InodeOps for UptimeFile {
     fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
         Err(Errno::EACCES)
     }
+
+    fn lookup(&self, _name: &str) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        Err(Errno::ENOTDIR)
+    }
 }
 
 /// /proc/mounts file
@@ -294,6 +353,18 @@ impl InodeOps for MountsFile {
 
     fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
         Err(Errno::EACCES)
+    }
+
+    fn lookup(&self, _name: &str) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        Err(Errno::ENOTDIR)
     }
 }
 
@@ -344,26 +415,48 @@ impl InodeOps for ProcPidDir {
         }
     }
 
-    fn readdir(&self, offset: usize) -> Result<Option<DirEntry>> {
-        let entries = vec![
-            (".", 100 + self.pid as u64),
-            ("..", 1),
-            ("cmdline", 200 + self.pid as u64),
-            ("stat", 300 + self.pid as u64),
-            ("status", 400 + self.pid as u64),
-            ("maps", 500 + self.pid as u64),
-        ];
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::EROFS)
+    }
 
-        if offset >= entries.len() {
-            return Ok(None);
-        }
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        let mut entries = Vec::new();
 
-        let (name, ino) = entries[offset];
-        Ok(Some(DirEntry {
-            ino,
-            name: name.to_string(),
-            itype: if offset < 2 { InodeType::Directory } else { InodeType::Regular },
-        }))
+        // Add . and ..
+        entries.push(DirEntry {
+            ino: 100 + self.pid as u64,
+            name: ".".to_string(),
+            itype: InodeType::Directory,
+        });
+        entries.push(DirEntry {
+            ino: 1,
+            name: "..".to_string(),
+            itype: InodeType::Directory,
+        });
+
+        // Add per-process files
+        entries.push(DirEntry {
+            ino: 200 + self.pid as u64,
+            name: "cmdline".to_string(),
+            itype: InodeType::Regular,
+        });
+        entries.push(DirEntry {
+            ino: 300 + self.pid as u64,
+            name: "stat".to_string(),
+            itype: InodeType::Regular,
+        });
+        entries.push(DirEntry {
+            ino: 400 + self.pid as u64,
+            name: "status".to_string(),
+            itype: InodeType::Regular,
+        });
+        entries.push(DirEntry {
+            ino: 500 + self.pid as u64,
+            name: "maps".to_string(),
+            itype: InodeType::Regular,
+        });
+
+        Ok(entries)
     }
 
     fn read(&self, _offset: u64, _buf: &mut [u8]) -> Result<usize> {
@@ -419,6 +512,18 @@ impl InodeOps for ProcPidCmdline {
 
     fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
         Err(Errno::EACCES)
+    }
+
+    fn lookup(&self, _name: &str) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        Err(Errno::ENOTDIR)
     }
 }
 
@@ -479,6 +584,18 @@ impl InodeOps for ProcPidStat {
 
     fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
         Err(Errno::EACCES)
+    }
+
+    fn lookup(&self, _name: &str) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        Err(Errno::ENOTDIR)
     }
 }
 
@@ -545,6 +662,18 @@ impl InodeOps for ProcPidStatus {
 
     fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
         Err(Errno::EACCES)
+    }
+
+    fn lookup(&self, _name: &str) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        Err(Errno::ENOTDIR)
     }
 }
 
@@ -616,6 +745,18 @@ impl InodeOps for ProcPidMaps {
 
     fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
         Err(Errno::EACCES)
+    }
+
+    fn lookup(&self, _name: &str) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        Err(Errno::ENOTDIR)
     }
 }
 
