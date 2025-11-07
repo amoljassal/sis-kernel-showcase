@@ -52,7 +52,7 @@ static HEAP_STATS: Mutex<HeapStats> = Mutex::new(HeapStats {
 
 /// Heap configuration
 const HEAP_START: usize = 0x444_44440_0000;
-const HEAP_SIZE: usize = 100 * 1024; // 100 KiB heap
+const HEAP_SIZE: usize = 4 * 1024 * 1024; // 4 MiB heap for bringup
 
 /// Heap initialization status (lock-free, avoids potential early boot stalls)
 static HEAP_INIT_DONE: AtomicBool = AtomicBool::new(false);

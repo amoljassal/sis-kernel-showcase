@@ -297,6 +297,10 @@ pub fn init_exception_vectors() {
         asm!("msr SCTLR_EL1, {}", in(reg) sctlr);
         asm!("isb");
 
-        crate::info!("VBAR_EL1 set to {:#x}", vbar_addr);
+        // Avoid formatted logging in early bringup (heap not initialized yet)
+        #[cfg(not(feature = "bringup"))]
+        {
+            crate::info!("VBAR_EL1 set to {:#x}", vbar_addr);
+        }
     }
 }

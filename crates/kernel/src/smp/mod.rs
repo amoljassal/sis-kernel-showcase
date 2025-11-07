@@ -149,6 +149,12 @@ pub fn init() {
     // Initialize per-CPU data for boot CPU
     percpu::init_percpu(0);
 
+    // If PSCI is not available on this platform/firmware, stay single-core
+    if !crate::platform::active().psci_available() {
+        crate::warn!("SMP: PSCI not available; running in single-core mode");
+        return;
+    }
+
     // Detect number of CPUs from device tree or hardcode for QEMU
     // For now, we'll try to bring up CPUs 1-3 (total 4 CPUs)
     let target_cpus = 4;
