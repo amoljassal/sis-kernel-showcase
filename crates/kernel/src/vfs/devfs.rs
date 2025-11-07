@@ -171,8 +171,11 @@ impl InodeOps for DevfsCharDev {
 
         // Create a temporary File for the FileOps call
         // This is a bit awkward but maintains the FileOps interface
+        // SAFETY: This `DevfsCharDev` is allocated as a leaked 'static in add_char_device,
+        // so promoting `&self` to a 'static reference is sound for the lifetime of the inode.
+        let ops_static: &'static DevfsCharDev = unsafe { &*(self as *const DevfsCharDev) };
         let file = crate::vfs::File::new_with_ops(
-            Arc::new(Inode::new(InodeType::CharDevice, self.mode, self)),
+            Arc::new(Inode::new(InodeType::CharDevice, self.mode, ops_static as &'static dyn InodeOps)),
             crate::vfs::OpenFlags::O_RDONLY,
             self.fops,
         );
@@ -184,8 +187,9 @@ impl InodeOps for DevfsCharDev {
         // For character devices, offset is typically ignored
         let _ = offset;
 
+        let ops_static: &'static DevfsCharDev = unsafe { &*(self as *const DevfsCharDev) };
         let file = crate::vfs::File::new_with_ops(
-            Arc::new(Inode::new(InodeType::CharDevice, self.mode, self)),
+            Arc::new(Inode::new(InodeType::CharDevice, self.mode, ops_static as &'static dyn InodeOps)),
             crate::vfs::OpenFlags::O_WRONLY,
             self.fops,
         );

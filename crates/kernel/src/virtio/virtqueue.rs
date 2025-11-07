@@ -252,6 +252,38 @@ impl VirtQueue {
         // For now, always notify (optimization: check used_event)
         true
     }
+
+    /// Add a descriptor chain consisting of read-only and write-only slices
+    /// Convenience wrapper over `add_buf` for common patterns
+    pub fn add_chain(&mut self, reads: &[&[u8]], writes: &[&mut [u8]]) -> Result<u16> {
+        let mut buffers: alloc::vec::Vec<(u64, u32, bool)> = alloc::vec::Vec::new();
+        for s in reads {
+            buffers.push((s.as_ptr() as u64, s.len() as u32, false));
+        }
+        // `writes` is a slice of mutable slices; iterating yields `&(&mut [u8])`.
+        // Safely recover the inner `&mut [u8]` for pointer extraction.
+        for s in writes {
+            // SAFETY: `s` refers to a unique &mut [u8] element inside `writes`.
+            // We transiently obtain the inner &mut [u8] to read its pointer/len.
+            let w: &mut [u8] = unsafe { &mut *(*s as *const [u8] as *mut [u8]) };
+            buffers.push((w.as_mut_ptr() as u64, w.len() as u32, true));
+        }
+        self.add_buf(&buffers)
+    }
+
+    /// Busy-wait for at least one used buffer to appear
+    pub fn wait_for_used(&mut self) -> Result<()> {
+        // Simple bounded spin-wait; replace with IRQ/notify integration later
+        let mut spins = 0usize;
+        while self.get_used_buf().is_none() {
+            core::hint::spin_loop();
+            spins = spins.wrapping_add(1);
+            if spins > 1_000_000 {
+                return Err(Errno::ETIMEDOUT);
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Drop for VirtQueue {
