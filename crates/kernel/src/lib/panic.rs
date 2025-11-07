@@ -97,12 +97,11 @@ fn print_panic_info(info: &PanicInfo) {
             crate::uart_print(b"  Location: <unknown>\n");
         }
 
-        // Message
-        if let Some(message) = info.message() {
-            let mut buffer = alloc::string::String::new();
-            let _ = write!(&mut buffer, "  Message:  {}\n", message);
-            crate::uart_print(buffer.as_bytes());
-        } else if let Some(payload) = info.payload().downcast_ref::<&str>() {
+        // Message (best-effort from payload)
+        if let Some(payload) = info.payload().downcast_ref::<&str>() {
+            let msg = alloc::format!("  Message:  {}\n", payload);
+            crate::uart_print(msg.as_bytes());
+        } else if let Some(payload) = info.payload().downcast_ref::<alloc::string::String>() {
             let msg = alloc::format!("  Message:  {}\n", payload);
             crate::uart_print(msg.as_bytes());
         } else {
@@ -266,17 +265,19 @@ fn print_system_state() {
         crate::uart_print(msg.as_bytes());
 
         // Heap statistics
-        if let Ok(stats) = crate::heap::heap_stats() {
-            let current_mb = stats.bytes_allocated / (1024 * 1024);
-            let peak_mb = stats.peak_bytes / (1024 * 1024);
+        {
+            let stats = crate::heap::get_heap_stats();
+            let current_mb = stats.current_allocated() / (1024 * 1024);
+            let peak_mb = stats.peak_allocated() / (1024 * 1024);
+            let allocs = stats.total_allocations();
+            let deallocs = stats.total_deallocations();
+            let failures = stats.allocation_failures();
             let msg = alloc::format!(
                 "  Heap usage:   {} MB current, {} MB peak\n\
                  Allocations: {} allocs, {} deallocs, {} active\n\
                  Failures:    {}\n",
-                current_mb, peak_mb,
-                stats.alloc_count, stats.dealloc_count,
-                stats.alloc_count.saturating_sub(stats.dealloc_count),
-                stats.failure_count
+                current_mb, peak_mb, allocs, deallocs,
+                allocs.saturating_sub(deallocs), failures
             );
             crate::uart_print(msg.as_bytes());
         }
