@@ -760,7 +760,9 @@ mod bringup {
         r#"
         .balign 2048
         .global VECTORS
+        .global exception_vector_table
     VECTORS:
+    exception_vector_table = VECTORS
         // Each entry MUST be 0x80 (128) bytes apart!
 
         // Current EL with SP0 (EL1t) - We don't use these
@@ -910,8 +912,8 @@ mod bringup {
         
         // Call system call handler
         mov x0, sp
-        bl syscall_handler
-        
+        bl handle_sync_exception
+
         // Restore all registers
         ldp x0, x1, [sp, #(32 * 8)]
         msr elr_el1, x0
@@ -977,8 +979,8 @@ mod bringup {
         
         // Call system call handler
         mov x0, sp
-        bl syscall_handler
-        
+        bl handle_sync_exception
+
         // Restore all registers
         ldp x0, x1, [sp, #(32 * 8)]
         msr elr_el1, x0
