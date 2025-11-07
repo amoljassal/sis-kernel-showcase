@@ -192,6 +192,7 @@ impl VirtioGpu {
     pub fn new(transport: VirtIOMMIOTransport) -> Result<Arc<Mutex<Self>>> {
         let transport = Arc::new(Mutex::new(transport));
 
+        crate::info!("virtio-gpu: initializing device");
         // Reset device
         {
             let t = transport.lock();
@@ -205,13 +206,17 @@ impl VirtioGpu {
             t.write_reg(VirtIOMMIOOffset::Status, status);
         }
 
-        // Negotiate features (disable VIRGL 3D, enable EDID)
+        // Negotiate features (disable VIRGL 3D, enable EDID, ack VERSION_1 if offered)
         {
             let t = transport.lock();
 
             // Read device features
             t.write_reg(VirtIOMMIOOffset::DeviceFeaturesSel, 0);
             let device_features = t.read_reg(VirtIOMMIOOffset::DeviceFeatures);
+            crate::info!("virtio-gpu: device features=0x{:08x}", device_features);
+            t.write_reg(VirtIOMMIOOffset::DeviceFeaturesSel, 1);
+            let device_features_hi = t.read_reg(VirtIOMMIOOffset::DeviceFeatures);
+            crate::info!("virtio-gpu: device features[63:32]=0x{:08x}", device_features_hi);
 
             // We want EDID but not VIRGL
             let mut driver_features = 0u32;
@@ -222,6 +227,15 @@ impl VirtioGpu {
             // Write driver features
             t.write_reg(VirtIOMMIOOffset::DriverFeaturesSel, 0);
             t.write_reg(VirtIOMMIOOffset::DriverFeatures, driver_features);
+            crate::info!("virtio-gpu: driver features=0x{:08x}", driver_features);
+
+            // High feature word: ack VERSION_1 if offered
+            let mut driver_features_hi = 0u32;
+            // VIRTIO_F_VERSION_1 is bit 32 overall -> bit 0 in the high 32-bit word
+            if (device_features_hi & 0x1) != 0 { driver_features_hi |= 0x1; }
+            t.write_reg(VirtIOMMIOOffset::DriverFeaturesSel, 1);
+            t.write_reg(VirtIOMMIOOffset::DriverFeatures, driver_features_hi);
+            crate::info!("virtio-gpu: driver features[63:32]=0x{:08x}", driver_features_hi);
 
             // Features OK
             let status = t.read_reg(VirtIOMMIOOffset::Status) | VirtIOStatus::FeaturesOK as u32;
@@ -233,16 +247,48 @@ impl VirtioGpu {
             }
         }
 
-        // Create virtqueues (control queue 0, cursor queue 1)
-        let control_queue = {
-            let _t = transport.lock();
-            VirtQueue::new(0, 64).map_err(|_| Errno::ENOMEM)?
+        // Create virtqueues (control queue 0, cursor queue 1) and program MMIO
+        // Read QueueNumMax to choose a valid size.
+        let mmio_ver = transport.lock().version();
+        let use_legacy = mmio_ver == 1;
+        if use_legacy { crate::info!("virtio-gpu: MMIO version=1 (legacy path)"); }
+
+        let (mut control_queue, mut cursor_queue) = {
+            let t = transport.lock();
+            // Control queue
+            t.write_reg(VirtIOMMIOOffset::QueueSel, 0);
+            let cq_max = t.read_reg(VirtIOMMIOOffset::QueueNumMax);
+            if cq_max == 0 { crate::warn!("virtio-gpu: control queue not available"); return Err(Errno::EIO); }
+            // Prefer full size on GPU
+            let cq_size = cq_max as u16;
+            crate::info!("virtio-gpu: control queue max={}, using {}", cq_max, cq_size);
+            drop(t);
+            let cq = if use_legacy { VirtQueue::new_contiguous(0, cq_size) } else { VirtQueue::new(0, cq_size) };
+            let cq = cq.map_err(|_| Errno::ENOMEM)?;
+
+            let t = transport.lock();
+            // Cursor queue
+            t.write_reg(VirtIOMMIOOffset::QueueSel, 1);
+            let kq_max = t.read_reg(VirtIOMMIOOffset::QueueNumMax);
+            if kq_max == 0 { crate::warn!("virtio-gpu: cursor queue not available"); return Err(Errno::EIO); }
+            let kq_size = core::cmp::min(256u16, kq_max as u16);
+            crate::info!("virtio-gpu: cursor queue max={}, using {}", kq_max, kq_size);
+            drop(t);
+            let kq = if use_legacy { VirtQueue::new_contiguous(1, kq_size) } else { VirtQueue::new(1, kq_size) };
+            let kq = kq.map_err(|_| Errno::ENOMEM)?;
+            (cq, kq)
         };
 
-        let cursor_queue = {
-            let t = transport.lock();
-            VirtQueue::new(1, 16).map_err(|_| Errno::ENOMEM)?
-        };
+        {
+            let mut t = transport.lock();
+            if use_legacy {
+                t.setup_queue_legacy(&control_queue).map_err(|_| Errno::EIO)?;
+                t.setup_queue_legacy(&cursor_queue).map_err(|_| Errno::EIO)?;
+            } else {
+                t.setup_queue(&mut control_queue).map_err(|_| Errno::EIO)?;
+                t.setup_queue(&mut cursor_queue).map_err(|_| Errno::EIO)?;
+            }
+        }
 
         // Allocate framebuffer memory (BGRA8888 format, 4 bytes per pixel)
         let width = DEFAULT_WIDTH;
@@ -254,8 +300,11 @@ impl VirtioGpu {
             (framebuffer_size + 4095) / 4096
         ).ok_or(Errno::ENOMEM)? as PhysAddr;
 
-        let framebuffer = crate::mm::phys_to_virt(framebuffer_phys) as *mut u32;
-
+        // Use identity-mapped VA for the framebuffer. Our bring-up page tables
+        // currently map RAM with an identity mapping (low VA == PA). Using
+        // phys_to_virt() would add KERNEL_BASE and point at an unmapped VA.
+        let framebuffer = framebuffer_phys as usize as *mut u32;
+        
         // Zero out framebuffer
         unsafe {
             ptr::write_bytes(framebuffer, 0, (width * height) as usize);
@@ -265,11 +314,8 @@ impl VirtioGpu {
         let cursor_queue = Arc::new(Mutex::new(cursor_queue));
 
         // Driver OK
-        {
-            let t = transport.lock();
-            let status = t.read_reg(VirtIOMMIOOffset::Status) | VirtIOStatus::DriverOK as u32;
-            t.write_reg(VirtIOMMIOOffset::Status, status);
-        }
+        { transport.lock().driver_ready(); }
+        crate::info!("virtio-gpu: queues ready, DRIVER_OK set");
 
         let gpu = Self {
             transport,
@@ -289,6 +335,7 @@ impl VirtioGpu {
 
         {
             let mut gpu = gpu_arc.lock();
+            crate::info!("virtio-gpu: creating resource and setting scanout");
             gpu.init_display()?;
         }
 
@@ -299,6 +346,17 @@ impl VirtioGpu {
 
     /// Initialize display by creating resource and setting scanout
     fn init_display(&mut self) -> Result<()> {
+        // Probe display info first to validate control queue
+        if let Ok(di) = self.get_display_info() {
+            let ns = di.pmodes[0];
+            crate::info!(
+                "virtio-gpu: display0 enabled={} rect=({}, {}) {}x{}",
+                ns.enabled, ns.r.x, ns.r.y, ns.r.width, ns.r.height
+            );
+        } else {
+            crate::warn!("virtio-gpu: GET_DISPLAY_INFO failed; continuing");
+        }
+
         // Create 2D resource
         self.create_2d_resource(self.resource_id, self.resolution.0, self.resolution.1)?;
 
@@ -322,11 +380,13 @@ impl VirtioGpu {
                 padding: 0,
             },
             resource_id,
-            format: VIRTIO_GPU_FORMAT_B8G8R8A8_UNORM,  // BGRA8888
+            // XRGB8888 is commonly supported for scanout
+            format: VIRTIO_GPU_FORMAT_X8R8G8B8_UNORM,
             width,
             height,
         };
 
+        crate::debug!("virtio-gpu: RESOURCE_CREATE_2D id={} {}x{}", resource_id, width, height);
         self.submit_command(&cmd)?;
         Ok(())
     }
@@ -351,6 +411,12 @@ impl VirtioGpu {
             padding: 0,
         };
 
+        crate::debug!(
+            "virtio-gpu: ATTACH_BACKING id={} addr=0x{:x} len={}",
+            resource_id,
+            self.framebuffer_phys,
+            self.framebuffer_size
+        );
         self.submit_command_with_data(&cmd, &entry)?;
         Ok(())
     }
@@ -429,33 +495,28 @@ impl VirtioGpu {
 
     /// Submit command without additional data
     fn submit_command<T>(&mut self, cmd: &T) -> Result<()> {
-        let cmd_bytes = unsafe {
-            core::slice::from_raw_parts(
-                cmd as *const T as *const u8,
-                core::mem::size_of::<T>()
-            )
-        };
+        // Allocate DMA-friendly memory for cmd and response
+        let cmd_len = core::mem::size_of::<T>();
+        let resp_len = core::mem::size_of::<VirtioGpuCtrlHdr>();
+        let cmd_pa = crate::mm::alloc_phys_pages((cmd_len + 4095) / 4096).ok_or(Errno::ENOMEM)?;
+        let resp_pa = crate::mm::alloc_phys_pages((resp_len + 4095) / 4096).ok_or(Errno::ENOMEM)?;
+        let cmd_va = cmd_pa as usize as *mut u8;
+        let resp_va = resp_pa as usize as *mut u8;
 
-        // Allocate response buffer
-        let mut response = VirtioGpuCtrlHdr {
-            cmd_type: 0,
-            flags: 0,
-            fence_id: 0,
-            ctx_id: 0,
-            padding: 0,
-        };
+        unsafe {
+            core::ptr::copy_nonoverlapping(cmd as *const T as *const u8, cmd_va, cmd_len);
+            core::ptr::write_bytes(resp_va, 0, resp_len);
+        }
 
-        let response_bytes = unsafe {
-            core::slice::from_raw_parts_mut(
-                &mut response as *mut VirtioGpuCtrlHdr as *mut u8,
-                core::mem::size_of::<VirtioGpuCtrlHdr>()
-            )
-        };
+        let cmd_bytes = unsafe { core::slice::from_raw_parts(cmd_va as *const u8, cmd_len) };
+        let response_bytes = unsafe { core::slice::from_raw_parts_mut(resp_va, resp_len) };
 
         // Submit to control queue
         let mut queue = self.control_queue.lock();
-        queue.add_chain(&[cmd_bytes], &[response_bytes])
-            .map_err(|_| Errno::EIO)?;
+        match queue.add_chain(&[cmd_bytes], &[response_bytes]) {
+            Ok(_) => {}
+            Err(e) => { crate::warn!("virtio-gpu: add_chain failed: {:?}", e); return Err(Errno::EIO); }
+        }
 
         // Notify device
         let transport = self.transport.lock();
@@ -463,52 +524,127 @@ impl VirtioGpu {
         drop(transport);
 
         // Wait for response
-        queue.wait_for_used().map_err(|_| Errno::EIO)?;
+        if let Err(e) = queue.wait_for_used() {
+            crate::warn!("virtio-gpu: wait_for_used timeout: {:?}", e);
+            // Free DMA buffers
+            crate::mm::free_pages(cmd_pa, 0);
+            crate::mm::free_pages(resp_pa, 0);
+            return Err(Errno::EIO);
+        }
 
         // Check response
-        if response.cmd_type != VIRTIO_GPU_RESP_OK_NODATA {
+        let mut hdr = VirtioGpuCtrlHdr { cmd_type: 0, flags: 0, fence_id: 0, ctx_id: 0, padding: 0 };
+        unsafe { core::ptr::copy_nonoverlapping(resp_va as *const u8, &mut hdr as *mut _ as *mut u8, resp_len); }
+        // Free DMA buffers
+        crate::mm::free_pages(cmd_pa, 0);
+        crate::mm::free_pages(resp_pa, 0);
+
+        if hdr.cmd_type != VIRTIO_GPU_RESP_OK_NODATA {
+            crate::warn!("virtio-gpu: unexpected resp=0x{:x}", hdr.cmd_type);
             return Err(Errno::EIO);
         }
 
         Ok(())
     }
 
-    /// Submit command with additional data
-    fn submit_command_with_data<T, D>(&mut self, cmd: &T, data: &D) -> Result<()> {
-        let cmd_bytes = unsafe {
-            core::slice::from_raw_parts(
-                cmd as *const T as *const u8,
-                core::mem::size_of::<T>()
-            )
-        };
+    /// Submit command with typed response buffer
+    fn submit_command_with_resp<T, R>(&mut self, cmd: &T, resp: &mut R) -> Result<()> {
+        // Use DMA-friendly pages for both cmd and response
+        let cmd_len = core::mem::size_of::<T>();
+        let resp_len = core::mem::size_of::<R>();
+        let cmd_pa = crate::mm::alloc_phys_pages((cmd_len + 4095) / 4096).ok_or(Errno::ENOMEM)?;
+        let resp_pa = crate::mm::alloc_phys_pages((resp_len + 4095) / 4096).ok_or(Errno::ENOMEM)?;
+        let cmd_va = cmd_pa as usize as *mut u8;
+        let resp_va = resp_pa as usize as *mut u8;
 
-        let data_bytes = unsafe {
-            core::slice::from_raw_parts(
-                data as *const D as *const u8,
-                core::mem::size_of::<D>()
-            )
-        };
+        unsafe {
+            core::ptr::copy_nonoverlapping(cmd as *const T as *const u8, cmd_va, cmd_len);
+            core::ptr::write_bytes(resp_va, 0, resp_len);
+        }
 
-        // Allocate response buffer
-        let mut response = VirtioGpuCtrlHdr {
-            cmd_type: 0,
+        let cmd_bytes = unsafe { core::slice::from_raw_parts(cmd_va as *const u8, cmd_len) };
+        let resp_bytes = unsafe { core::slice::from_raw_parts_mut(resp_va, resp_len) };
+
+        let mut queue = self.control_queue.lock();
+        match queue.add_chain(&[cmd_bytes], &[resp_bytes]) {
+            Ok(_) => {}
+            Err(e) => { crate::warn!("virtio-gpu: add_chain(resp) failed: {:?}", e); return Err(Errno::EIO); }
+        }
+        let transport = self.transport.lock();
+        transport.write_reg(VirtIOMMIOOffset::QueueNotify, 0);
+        drop(transport);
+        if let Err(e) = queue.wait_for_used() {
+            crate::warn!("virtio-gpu: wait_for_used (resp) timeout: {:?}", e);
+            crate::mm::free_pages(cmd_pa, 0);
+            crate::mm::free_pages(resp_pa, 0);
+            return Err(Errno::EIO);
+        }
+
+        // Copy back response and free
+        unsafe {
+            core::ptr::copy_nonoverlapping(resp_va as *const u8, resp as *mut R as *mut u8, resp_len);
+        }
+        crate::mm::free_pages(cmd_pa, 0);
+        crate::mm::free_pages(resp_pa, 0);
+        Ok(())
+    }
+
+    /// Get display information from the device
+    fn get_display_info(&mut self) -> Result<VirtioGpuRespDisplayInfo> {
+        let cmd = VirtioGpuCtrlHdr {
+            cmd_type: VIRTIO_GPU_CMD_GET_DISPLAY_INFO,
             flags: 0,
             fence_id: 0,
             ctx_id: 0,
             padding: 0,
         };
-
-        let response_bytes = unsafe {
-            core::slice::from_raw_parts_mut(
-                &mut response as *mut VirtioGpuCtrlHdr as *mut u8,
-                core::mem::size_of::<VirtioGpuCtrlHdr>()
-            )
+        let mut resp: VirtioGpuRespDisplayInfo = VirtioGpuRespDisplayInfo {
+            hdr: VirtioGpuCtrlHdr { cmd_type: 0, flags: 0, fence_id: 0, ctx_id: 0, padding: 0 },
+            pmodes: [VirtioGpuDisplayOne { r: VirtioGpuRect { x:0, y:0, width:0, height:0 }, enabled: 0, flags: 0}; VIRTIO_GPU_MAX_SCANOUTS],
         };
+        self.submit_command_with_resp(&cmd, &mut resp)?;
+        if resp.hdr.cmd_type != VIRTIO_GPU_RESP_OK_DISPLAY_INFO {
+            crate::warn!("virtio-gpu: GET_DISPLAY_INFO unexpected resp=0x{:x}", resp.hdr.cmd_type);
+            return Err(Errno::EIO);
+        }
+        Ok(resp)
+    }
+
+    /// Submit command with additional data
+    fn submit_command_with_data<T, D>(&mut self, cmd: &T, data: &D) -> Result<()> {
+        let cmd_len = core::mem::size_of::<T>();
+        let data_len = core::mem::size_of::<D>();
+        let resp_len = core::mem::size_of::<VirtioGpuCtrlHdr>();
+
+        let cmd_pa = crate::mm::alloc_phys_pages((cmd_len + 4095) / 4096).ok_or(Errno::ENOMEM)?;
+        let data_pa = crate::mm::alloc_phys_pages((data_len + 4095) / 4096).ok_or(Errno::ENOMEM)?;
+        let resp_pa = crate::mm::alloc_phys_pages((resp_len + 4095) / 4096).ok_or(Errno::ENOMEM)?;
+
+        let cmd_va = cmd_pa as usize as *mut u8;
+        let data_va = data_pa as usize as *mut u8;
+        let resp_va = resp_pa as usize as *mut u8;
+
+        unsafe {
+            core::ptr::copy_nonoverlapping(cmd as *const T as *const u8, cmd_va, cmd_len);
+            core::ptr::copy_nonoverlapping(data as *const D as *const u8, data_va, data_len);
+            core::ptr::write_bytes(resp_va, 0, resp_len);
+        }
+
+        let cmd_bytes = unsafe { core::slice::from_raw_parts(cmd_va as *const u8, cmd_len) };
+        let data_bytes = unsafe { core::slice::from_raw_parts(data_va as *const u8, data_len) };
+        let response_bytes = unsafe { core::slice::from_raw_parts_mut(resp_va, resp_len) };
 
         // Submit to control queue
         let mut queue = self.control_queue.lock();
-        queue.add_chain(&[cmd_bytes, data_bytes], &[response_bytes])
-            .map_err(|_| Errno::EIO)?;
+        match queue.add_chain(&[cmd_bytes, data_bytes], &[response_bytes]) {
+            Ok(_) => {}
+            Err(e) => {
+                crate::mm::free_pages(cmd_pa, 0);
+                crate::mm::free_pages(data_pa, 0);
+                crate::mm::free_pages(resp_pa, 0);
+                crate::warn!("virtio-gpu: add_chain(data) failed: {:?}", e); return Err(Errno::EIO);
+            }
+        }
 
         // Notify device
         let transport = self.transport.lock();
@@ -516,10 +652,22 @@ impl VirtioGpu {
         drop(transport);
 
         // Wait for response
-        queue.wait_for_used().map_err(|_| Errno::EIO)?;
+        if let Err(e) = queue.wait_for_used() {
+            crate::warn!("virtio-gpu: wait_for_used (data) timeout: {:?}", e);
+            crate::mm::free_pages(cmd_pa, 0);
+            crate::mm::free_pages(data_pa, 0);
+            crate::mm::free_pages(resp_pa, 0);
+            return Err(Errno::EIO);
+        }
 
-        // Check response
-        if response.cmd_type != VIRTIO_GPU_RESP_OK_NODATA {
+        // Check response and free
+        let mut hdr = VirtioGpuCtrlHdr { cmd_type: 0, flags: 0, fence_id: 0, ctx_id: 0, padding: 0 };
+        unsafe { core::ptr::copy_nonoverlapping(resp_va as *const u8, &mut hdr as *mut _ as *mut u8, resp_len); }
+        crate::mm::free_pages(cmd_pa, 0);
+        crate::mm::free_pages(data_pa, 0);
+        crate::mm::free_pages(resp_pa, 0);
+        if hdr.cmd_type != VIRTIO_GPU_RESP_OK_NODATA {
+            crate::warn!("virtio-gpu: unexpected resp(data)=0x{:x}", hdr.cmd_type);
             return Err(Errno::EIO);
         }
 

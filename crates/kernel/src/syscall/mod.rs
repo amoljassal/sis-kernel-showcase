@@ -1596,37 +1596,37 @@ pub fn sys_socket(domain: i32, sock_type: i32, protocol: i32) -> Result<isize> {
 }
 
 /// sys_bind - Bind socket to address (Phase C)
-pub fn sys_bind(sockfd: i32, addr: *const u8, addrlen: u32) -> Result<isize> {
-    if addr.is_null() {
-        return Err(Errno::EFAULT);
+pub fn sys_bind(sockfd: i32, addr: *const u8, _addrlen: u32) -> Result<isize> {
+    if addr.is_null() { return Err(Errno::EFAULT); }
+    #[repr(C)] struct SockAddrIn { sin_family: u16, sin_port: u16, sin_addr: u32, sin_zero: [u8;8] }
+    let sa = unsafe { &*(addr as *const SockAddrIn) };
+    if sa.sin_family != 2 { return Err(Errno::EAFNOSUPPORT); }
+    let port = u16::from_be(sa.sin_port);
+    let ip = u32::from_be(sa.sin_addr).to_be_bytes();
+    let pid = crate::process::current_pid();
+    let table = crate::process::get_process_table();
+    let table = table.as_ref().ok_or(Errno::ESRCH)?;
+    let task = table.get(pid).ok_or(Errno::ESRCH)?;
+    let file = task.files.get(sockfd)?;
+    match &file.socket {
+        Some(crate::vfs::file::SocketEnd::Udp(handle)) => {
+            crate::net::socket::udp_bind(*handle, [ip[0],ip[1],ip[2],ip[3]], port)?;
+            Ok(0)
+        }
+        _ => Err(Errno::ENOTSOCK)
     }
-
-    crate::info!("bind: sockfd={} addrlen={}", sockfd, addrlen);
-
-    // Simplified for Phase C
-    // Real implementation needs:
-    // 1. Get socket from FD
-    // 2. Parse sockaddr structure
-    // 3. Bind to smoltcp socket
-
-    Ok(0)
 }
 
 /// sys_listen - Listen for connections (Phase C)
 pub fn sys_listen(sockfd: i32, backlog: i32) -> Result<isize> {
-    crate::info!("listen: sockfd={} backlog={}", sockfd, backlog);
-
-    // Simplified for Phase C
-    Ok(0)
+    let _ = (sockfd, backlog);
+    Err(Errno::ENOTSUP)
 }
 
 /// sys_accept - Accept connection (Phase C)
 pub fn sys_accept(sockfd: i32, addr: *mut u8, addrlen: *mut u32) -> Result<isize> {
-    crate::info!("accept: sockfd={}", sockfd);
-
-    // Simplified for Phase C
-    // Return new FD for accepted connection
-    Ok(4)
+    let _ = (sockfd, addr, addrlen);
+    Err(Errno::ENOTSUP)
 }
 
 /// sys_connect - Connect to remote address (Phase C)

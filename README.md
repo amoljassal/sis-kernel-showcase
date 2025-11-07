@@ -43,6 +43,8 @@ Press Ctrl+C to stop all services. The script handles graceful shutdown of all c
 - `syscall-verbose`: Gates `[SYSCALL]` logs (now applied to all syscall banners; off by default to keep boot quiet).
 - `dt-override`: Enables optional Device Tree override path and platform banner during bring-up.
 - `graphctl-framed`: Uses framed control for `graphctl add-channel`/`add-operator` (default ON in QEMU runner).
+- `sntp`: Enables a minimal SNTP client to perform a best-effort time sync at boot (UDP/123). Under QEMU user
+  networking, the client queries the host at `10.0.2.2` and logs the UNIX seconds on success. Off by default.
 
 Build-time feature hygiene:
 - `bringup`: Enable AArch64 bring‑up markers and relaxed warning gate (suppressed when `strict` is set).
@@ -207,6 +209,11 @@ Comprehensive memory management subsystem providing physical and virtual memory 
 - Page fault patterns inform memory management agent
 - ASLR provides security for autonomous operations
 - Predictive compaction uses fragmentation metrics
+
+5. **Heap Integration:**
+   - Small/medium allocations are served from a fixed kernel heap for speed
+   - Large allocations (>= 1 MiB) are backed by contiguous buddy pages to reduce fragmentation, especially for
+     graphics/window buffers during bring-up
 
 **Key Fixes:**
 - Added `Default` trait to `AllocStats` structure
@@ -373,7 +380,8 @@ TCP/IP network stack based on smoltcp with DHCP autoconfiguration.
 
 Notes under QEMU:
 - The UEFI runner exposes a `virtio-net-device` (MMIO) by default for AArch64 `virt` machine.
-- DHCP may time out under QEMU user networking; the kernel will fall back to a static IP (10.0.2.15/24, gateway 10.0.2.2).
+- DHCP includes retry/backoff but may still time out under QEMU user networking; the kernel will fall back to a
+  static IP (10.0.2.15/24, gateway 10.0.2.2).
 
 **Performance Metrics:**
 - Network packets processed: 12,000,000+ (1hr benchmark)
@@ -5551,10 +5559,16 @@ BRINGUP=1 ./scripts/uefi_run.sh
 #      - The Ed25519 verifying key can be set at build time via `SIS_ED25519_PUBKEY` (64 hex chars, optional `0x` prefix):
 #          `SIS_ED25519_PUBKEY=0x<64-hex> SIS_FEATURES="llm,crypto-real" BRINGUP=1 ./scripts/uefi_run.sh`
 #      - If not set or invalid, signature verification will fail (reject). No runtime environment is used.
+#  - sntp: Minimal SNTP client for best-effort time sync at boot (queries 10.0.2.2 under QEMU user networking)
 BRINGUP=1 GRAPH=1 PERF=1 ./scripts/uefi_run.sh
 BRINGUP=1 DETERMINISTIC=1 ./scripts/uefi_run.sh
 BRINGUP=1 SIS_FEATURES="graph-demo,perf-verbose,deterministic" ./scripts/uefi_run.sh
 BRINGUP=1 VIRTIO=1 ./scripts/uefi_run.sh
+
+# Enable SNTP time sync (feature-gated)
+BRINGUP=1 SIS_FEATURES="sntp" ./scripts/uefi_run.sh
+# Combine with other features
+BRINGUP=1 SIS_FEATURES="llm,crypto-real,sntp" ./scripts/uefi_run.sh
 
 # Add AI microbenchmarks (NEON-based; still under QEMU emulation)
 BRINGUP=1 AI=1 ./scripts/uefi_run.sh

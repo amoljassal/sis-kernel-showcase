@@ -2,7 +2,7 @@
 ///
 /// Provides BSD sockets API on top of smoltcp
 
-use crate::lib::error::{Result, Errno};
+use crate::lib::error::Result;
 use alloc::vec::Vec;
 use smoltcp::socket::{tcp, udp, icmp};
 use smoltcp::wire::{IpEndpoint, IpAddress};
@@ -83,66 +83,58 @@ pub fn udp_create() -> Result<SocketHandle> {
     );
 
     with_socket_set(|sockets| sockets.add(udp_socket))
-        .map_err(|_| Errno::ENODEV)
 }
 
 /// Bind UDP socket to endpoint
 pub fn udp_bind(handle: SocketHandle, ip: [u8;4], port: u16) -> Result<()> {
-    let res = with_socket_set(|sockets| {
+    // Return true from closure if bind succeeded
+    let ok = with_socket_set(|sockets| {
         let socket = sockets.get_mut::<udp::Socket>(handle);
         let endpoint = IpEndpoint::new(IpAddress::v4(ip[0], ip[1], ip[2], ip[3]), port);
-        socket.bind(endpoint).map_err(|_| ())
-    });
-    match res {
-        Ok(Ok(())) => Ok(()),
-        Ok(Err(_)) | Err(_) => Err(Errno::EINVAL),
-    }
+        socket.bind(endpoint).is_ok()
+    })?;
+    if ok { Ok(()) } else { Err(crate::lib::error::Errno::EINVAL) }
 }
 
 /// Send a UDP packet to endpoint
 pub fn udp_sendto(handle: SocketHandle, buf: &[u8], dst_ip: [u8;4], dst_port: u16) -> Result<usize> {
     // Try to send; if not ready, poll network and retry briefly
     for _ in 0..8 {
-        let res = with_socket_set(|sockets| {
+        let sent: bool = with_socket_set(|sockets| {
             let socket = sockets.get_mut::<udp::Socket>(handle);
             let endpoint = IpEndpoint::new(IpAddress::v4(dst_ip[0], dst_ip[1], dst_ip[2], dst_ip[3]), dst_port);
-            socket.send_slice(buf, endpoint)
-        });
-        match res {
-            Ok(Ok(())) => {
-                let _ = crate::net::network_poll();
-                return Ok(buf.len());
-            }
-            Ok(Err(_)) => { let _ = crate::net::network_poll(); }
-            Err(_) => return Err(Errno::ENODEV),
+            socket.send_slice(buf, endpoint).is_ok()
+        })?;
+        if sent {
+            let _ = crate::net::network_poll();
+            return Ok(buf.len());
         }
+        let _ = crate::net::network_poll();
     }
-    Err(Errno::EAGAIN)
+    Err(crate::lib::error::Errno::EAGAIN)
 }
 
 /// Receive a UDP packet; returns (len, src_ip, src_port)
 pub fn udp_recvfrom(handle: SocketHandle, out: &mut [u8]) -> Result<(usize, [u8;4], u16)> {
     // Try a few times with polling
     for _ in 0..8 {
-        let res = with_socket_set(|sockets| {
+        let got: Option<(usize, smoltcp::socket::udp::UdpMetadata)> = with_socket_set(|sockets| {
             let socket = sockets.get_mut::<udp::Socket>(handle);
             if let Ok((data, endpoint)) = socket.recv() {
                 let n = core::cmp::min(data.len(), out.len());
                 out[..n].copy_from_slice(&data[..n]);
-                return Ok((n, endpoint));
+                return Some((n, endpoint));
             }
-            Err(())
-        });
-        match res {
-            Ok(Ok((n, ep))) => {
-                let ip = match ep.endpoint.addr {
-                    IpAddress::Ipv4(v4) => v4.0,
-                    _ => [0,0,0,0],
-                };
-                return Ok((n, ip, ep.endpoint.port));
-            }
-            Ok(Err(_)) | Err(_) => { let _ = crate::net::network_poll(); }
+            None
+        })?;
+        if let Some((n, ep)) = got {
+            let ip = match ep.endpoint.addr {
+                IpAddress::Ipv4(v4) => v4.0,
+                _ => [0,0,0,0],
+            };
+            return Ok((n, ip, ep.endpoint.port));
         }
+        let _ = crate::net::network_poll();
     }
-    Err(Errno::EAGAIN)
+    Err(crate::lib::error::Errno::EAGAIN)
 }

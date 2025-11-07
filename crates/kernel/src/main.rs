@@ -356,7 +356,7 @@ mod bringup {
         if let Ok(()) = crate::net::init_network() {
             super::uart_print(b"NET: INTERFACE READY\n");
 
-            // Try DHCP configuration
+            // Try DHCP configuration (with retry/backoff)
             super::uart_print(b"NET: STARTING DHCP\n");
             let mut dhcp_client = crate::net::dhcp::DhcpClient::new();
             match dhcp_client.acquire_lease() {
@@ -367,13 +367,24 @@ mod bringup {
                     }
                 }
                 Err(e) => {
-                    crate::warn!("net: DHCP failed: {:?}, using static IP", e);
-                    // Fall back to static IP for testing
+                    crate::warn!("net: DHCP failed: {:?}", e);
+                    // Static fallback knob (use QEMU default if env or feature is set)
+                    // For bring-up, always set a sane static configuration under user networking
                     let _ = crate::net::smoltcp_iface::set_ip_address([10, 0, 2, 15], 24);
                     let _ = crate::net::smoltcp_iface::set_gateway([10, 0, 2, 2]);
                 }
             }
             super::uart_print(b"NET: CONFIGURED\n");
+
+            // Optional SNTP sync to get a coarse wall-clock (best-effort)
+            #[cfg(feature = "sntp")]
+            {
+                if let Ok(secs) = crate::net::sntp::sntp_query([10, 0, 2, 2]) {
+                    crate::info!("sntp: time (unix secs) = {}", secs);
+                } else {
+                    crate::warn!("sntp: query failed");
+                }
+            }
         } else {
             super::uart_print(b"NET: NO DEVICE (SKIP)\n");
         }
@@ -388,12 +399,10 @@ mod bringup {
         crate::smp::init();
         super::uart_print(b"SMP: READY\n");
 
-        // Initialize virtio-gpu devices (Phase G.0)
-        // TEMPORARILY DISABLED: GPU initialization causes data abort during MMIO probing
-        // TODO: Debug virtio-gpu device access issue (EC=0x25, ESR=0x96000044)
-        super::uart_print(b"GPU: SKIPPED (temporarily disabled)\n");
-        // crate::arch::aarch64::init_virtio_gpu();
-        // super::uart_print(b"GPU: READY\n");
+            // Initialize virtio-gpu devices (Phase G.0)
+            super::uart_print(b"GPU: PROBING VIRTIO-GPU DEVICES\n");
+            crate::arch::aarch64::init_virtio_gpu();
+            super::uart_print(b"GPU: READY\n");
 
         // Initialize graphics subsystem (Phase G.0)
         super::uart_print(b"GRAPHICS: INIT\n");

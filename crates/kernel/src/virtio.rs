@@ -178,6 +178,9 @@ impl VirtIOMMIOTransport {
         }
     }
 
+    /// Get MMIO transport version (1 = legacy 0.9, 2 = modern 1.0+)
+    pub fn version(&self) -> u32 { self.version }
+
     /// Get device type
     pub fn device_type(&self) -> VirtIODeviceType {
         self.device_type
@@ -295,8 +298,45 @@ impl VirtIOMMIOTransport {
         self.write_reg(VirtIOMMIOOffset::QueueUsedLow, (used_addr & 0xFFFFFFFF) as u32);
         self.write_reg(VirtIOMMIOOffset::QueueUsedHigh, (used_addr >> 32) as u32);
 
-        // Mark queue as ready
+        // Mark queue as ready (virtio 1.0+)
         self.write_reg(VirtIOMMIOOffset::QueueReady, 1);
+
+        // Ensure ordering of descriptor/ring writes
+        unsafe { core::arch::asm!("dmb ish", options(nostack, preserves_flags)); }
+
+        // Only check/readback on modern MMIO (version >= 2)
+        if self.version >= 2 {
+            let ready = self.read_reg(VirtIOMMIOOffset::QueueReady);
+            if ready != 1 {
+                crate::warn!("virtio: QueueReady readback != 1 (v{})", self.version);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Setup a virtqueue using legacy (0.9) MMIO registers. Requires a contiguous region.
+    pub fn setup_queue_legacy(&mut self, queue: &crate::virtio::virtqueue::VirtQueue) -> DriverResult<()> {
+        // Select the queue
+        self.write_reg(VirtIOMMIOOffset::QueueSel, queue.index as u32);
+
+        // Check if queue is available
+        let max_size = self.read_reg(VirtIOMMIOOffset::QueueNumMax);
+        if max_size == 0 { return Err(DriverError::InvalidQueue); }
+
+        // Set queue size (must be <= max)
+        self.write_reg(VirtIOMMIOOffset::QueueNum, queue.size as u32);
+
+        // Set legacy alignment and page size
+        // GuestPageSize is required by legacy; QueueAlign used to align used ring.
+        self.write_reg(VirtIOMMIOOffset::GuestPageSize, 4096);
+        self.write_reg(VirtIOMMIOOffset::QueueAlign, 4096);
+
+        // Provide PFN (physical page number) of the contiguous ring region
+        let base = queue.region_base();
+        if base == 0 { return Err(DriverError::InitFailed); }
+        let pfn = (base >> 12) as u32;
+        self.write_reg(VirtIOMMIOOffset::QueuePFN, pfn);
 
         Ok(())
     }
