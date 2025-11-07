@@ -226,9 +226,9 @@ pub mod stats {
         }
         let m = mean(values);
         let variance = values.iter()
-            .map(|v| (v - m).powi(2))
+            .map(|v| { let diff = v - m; diff * diff })
             .sum::<f32>() / values.len() as f32;
-        variance.sqrt()
+        libm::sqrtf(variance)
     }
 
     /// Calculate min value

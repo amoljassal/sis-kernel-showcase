@@ -1217,11 +1217,11 @@ pub fn test_ai_traditional_isolation() {
     
     unsafe {
         crate::uart_print(b"[AI ISOLATION] AI task isolated execution: ");
-        print_cycles(ai_actual_cycles);
+        print_u64_simple(ai_actual_cycles as usize);
         crate::uart_print(b" cycles\n");
         
         crate::uart_print(b"[AI ISOLATION] AI task concurrent execution: ");
-        print_cycles(concurrent_ai_cycles);
+        print_u64_simple(concurrent_ai_cycles as usize);
         crate::uart_print(b" cycles\n");
         
         let interference = if concurrent_ai_cycles > ai_actual_cycles {
@@ -1231,7 +1231,7 @@ pub fn test_ai_traditional_isolation() {
         };
         
         crate::uart_print(b"[AI ISOLATION] Interference overhead: ");
-        print_cycles(interference);
+        print_u64_simple(interference as usize);
         crate::uart_print(b" cycles\n");
         
         // Interference should be minimal (<5% of AI task execution time)
@@ -1284,11 +1284,11 @@ pub fn test_priority_ai_scheduling() {
     
     unsafe {
         crate::uart_print(b"[AI PRIORITY] High priority AI task: ");
-        print_cycles(high_latency);
+        print_u64_simple(high_latency as usize);
         crate::uart_print(b" cycles\n");
         
         crate::uart_print(b"[AI PRIORITY] Low priority AI task: ");
-        print_cycles(low_latency);
+        print_u64_simple(low_latency as usize);
         crate::uart_print(b" cycles\n");
         
         // High priority should complete faster and within tighter bounds
@@ -1325,7 +1325,7 @@ pub fn test_ai_budget_compliance() {
             crate::uart_print(b"[AI BUDGET] Execution ");
             print_u64_simple(i + 1);
             crate::uart_print(b": ");
-            print_cycles(execution_cycles);
+            print_u64_simple(execution_cycles as usize);
             crate::uart_print(b" cycles\n");
         }
     }
@@ -1335,7 +1335,7 @@ pub fn test_ai_budget_compliance() {
     
     unsafe {
         crate::uart_print(b"[AI BUDGET] Average execution: ");
-        print_cycles(average_cycles);
+        print_u64_simple(average_cycles as usize);
         crate::uart_print(b" cycles\n");
         
         crate::uart_print(b"[AI BUDGET] Budget utilization: ");

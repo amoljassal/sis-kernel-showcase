@@ -1,0 +1,74 @@
+/// Memory management subsystem
+///
+/// Phase A1 implementation including:
+/// - Buddy page allocator
+/// - Page table management and PTE flags
+/// - Virtual memory areas (VMAs)
+/// - Page fault handling with COW support
+/// - brk/mmap/munmap syscalls
+
+pub mod page;
+pub mod buddy;
+pub mod paging;
+pub mod address_space;
+pub mod fault;
+pub mod page_cache;
+pub mod aslr;  // Phase D: Address Space Layout Randomization
+
+// Re-export commonly used items
+pub use page::{
+    PhysAddr, Pfn, Page, PageFlags,
+    pa_to_pfn, pfn_to_pa,
+    page_align_down, page_align_up,
+};
+
+pub use buddy::{
+    init_buddy, alloc_page, alloc_pages,
+    free_page, free_pages, get_stats,
+    MAX_ORDER, AllocStats,
+};
+
+pub use paging::{
+    PAGE_SIZE, PAGE_SHIFT, KERNEL_BASE,
+    PteFlags, Pte, PageTable,
+    map_page, unmap_page,
+    map_user_page, unmap_user_page, get_pte, get_pte_mut,
+    switch_user_mm, alloc_user_page_table,
+    flush_tlb, flush_tlb_all,
+};
+
+pub use address_space::{
+    USER_STACK_TOP, USER_STACK_SIZE,
+    USER_HEAP_START, USER_MMAP_BASE,
+};
+
+pub use fault::{
+    handle_page_fault, setup_cow_for_fork,
+    FaultType, parse_fault_type, is_write_fault,
+};
+
+pub use page_cache::{
+    init_page_cache, get_buffer, put_buffer,
+    sync_all, sync_device, invalidate_device,
+    cache_stats, BufferHead, CacheKey, CacheStats,
+};
+
+pub use aslr::{
+    randomize_address_space, is_aslr_enabled,
+    AslrConfig,
+};
+
+/// Allocate physically contiguous pages and return physical address
+///
+/// Used by DMA devices that need contiguous physical memory
+pub fn alloc_phys_pages(num_pages: usize) -> Option<PhysAddr> {
+    let page = alloc_pages(num_pages as u8)?;
+    Some(page as u64)
+}
+
+/// Convert physical address to virtual address
+///
+/// Assumes direct mapping: phys_addr + KERNEL_BASE = virt_addr
+pub fn phys_to_virt(phys: PhysAddr) -> usize {
+    (phys as usize).wrapping_add(KERNEL_BASE as usize)
+}
