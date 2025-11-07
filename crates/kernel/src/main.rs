@@ -102,6 +102,8 @@ pub mod metrics_export;
 // Chaos engineering for resilience testing (Phase 3.1 - Production Readiness)
 #[cfg(feature = "chaos")]
 pub mod chaos;
+// Build information for forensics (Phase 5 - Production Readiness)
+pub mod build_info;
 // Test utilities (only compiled for testing)
 #[cfg(test)]
 pub mod test_utils;
@@ -660,6 +662,9 @@ mod bringup {
                 super::uart_print(b"[AUTOCTL] Autonomous mode ENABLED at boot (bringup)\n");
             }
         }
+
+        // 11.5) Print build information (Phase 5 - Production Readiness)
+        crate::build_info::print_build_info();
 
         // 12) Launch interactive shell
         super::uart_print(b"LAUNCHING SHELL\n");

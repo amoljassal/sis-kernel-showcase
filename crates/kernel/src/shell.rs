@@ -182,6 +182,7 @@ impl Shell {
 
             let cmd_is_known = match parts[0] {
                 "help" => { self.cmd_help(); true },
+                "version" => { self.cmd_version(); true },
                 "echo" => { self.cmd_echo(&parts[1..]); true },
                 "info" => { self.cmd_info(); true },
                 "test" => { self.cmd_test(); true },
@@ -304,6 +305,7 @@ impl Shell {
         unsafe {
             crate::uart_print(b"Available commands:\n");
             crate::uart_print(b"  help     - Show this help message\n");
+            crate::uart_print(b"  version  - Show kernel version and build info\n");
             crate::uart_print(b"  echo     - Echo text to output\n");
             crate::uart_print(b"  info     - Show kernel information\n");
             crate::uart_print(b"  test     - Run syscall tests\n");
@@ -391,6 +393,18 @@ impl Shell {
             crate::uart_print(b"  clear    - Clear screen\n");
             crate::uart_print(b"  exit     - Exit shell\n");
         }
+    }
+
+    /// Version command - show build information
+    fn cmd_version(&self) {
+        let version = crate::build_info::get_version_string();
+        unsafe {
+            crate::uart_print(b"\n");
+            crate::uart_print(version.as_bytes());
+            crate::uart_print(b"\n\n");
+            crate::uart_print(b"Full build information:\n");
+        }
+        crate::build_info::print_build_info();
     }
 
     // --- Neural agent commands ---
