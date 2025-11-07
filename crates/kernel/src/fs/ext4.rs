@@ -1384,24 +1384,67 @@ impl Ext4FileSystem {
             if block == 0 { return Err(Errno::ENOENT); }
             return Ok(block);
         }
+        // Indirects
+        let sb = self.superblock.lock();
+        let bsz = sb.block_size() as usize;
+        let per = bsz / core::mem::size_of::<u32>();
+        drop(sb);
+        let mut rel = (lbn as usize) - 12;
+
         // Single indirect (i_block[12])
-        if (lbn as usize) >= 12 {
+        if rel < per {
             let ind_ptr = inode.i_block[12] as u64;
-            if ind_ptr != 0 {
-                let sb = self.superblock.lock();
-                let bsz = sb.block_size() as usize;
-                let ents = bsz / core::mem::size_of::<u32>();
-                drop(sb);
-                let rel = (lbn as usize) - 12;
-                if rel < ents {
-                    let mut buf = vec![0u8; bsz];
-                    self.device.read(ind_ptr, &mut buf)?;
-                    let off = rel * 4;
-                    let blk = u32::from_le_bytes([buf[off], buf[off+1], buf[off+2], buf[off+3]]) as u64;
-                    if blk != 0 { return Ok(blk); }
-                    else { return Err(Errno::ENOENT); }
-                }
-            }
+            if ind_ptr == 0 { return Err(Errno::ENOENT); }
+            let mut buf = vec![0u8; bsz];
+            self.device.read(ind_ptr, &mut buf)?;
+            let off = rel * 4;
+            let blk = u32::from_le_bytes([buf[off], buf[off+1], buf[off+2], buf[off+3]]) as u64;
+            if blk != 0 { return Ok(blk); } else { return Err(Errno::ENOENT); }
+        }
+        rel -= per;
+
+        // Double indirect (i_block[13])
+        let span2 = per * per;
+        if rel < span2 {
+            let dptr = inode.i_block[13] as u64;
+            if dptr == 0 { return Err(Errno::ENOTSUP); }
+            let i0 = rel / per;
+            let i1 = rel % per;
+            let mut b0 = vec![0u8; bsz];
+            self.device.read(dptr, &mut b0)?;
+            let off0 = i0 * 4;
+            let l1 = u32::from_le_bytes([b0[off0], b0[off0+1], b0[off0+2], b0[off0+3]]) as u64;
+            if l1 == 0 { return Err(Errno::ENOENT); }
+            let mut b1 = vec![0u8; bsz];
+            self.device.read(l1, &mut b1)?;
+            let off1 = i1 * 4;
+            let blk = u32::from_le_bytes([b1[off1], b1[off1+1], b1[off1+2], b1[off1+3]]) as u64;
+            if blk != 0 { return Ok(blk); } else { return Err(Errno::ENOENT); }
+        }
+        rel -= span2;
+
+        // Triple indirect (i_block[14])
+        let span3 = per * per * per;
+        if rel < span3 {
+            let tptr = inode.i_block[14] as u64;
+            if tptr == 0 { return Err(Errno::ENOTSUP); }
+            let i0 = rel / span2; let r0 = rel % span2;
+            let i1 = r0 / per; let i2 = r0 % per;
+            let mut b0 = vec![0u8; bsz];
+            self.device.read(tptr, &mut b0)?;
+            let off0 = i0 * 4;
+            let l1 = u32::from_le_bytes([b0[off0], b0[off0+1], b0[off0+2], b0[off0+3]]) as u64;
+            if l1 == 0 { return Err(Errno::ENOENT); }
+            let mut b1 = vec![0u8; bsz];
+            self.device.read(l1, &mut b1)?;
+            let off1 = i1 * 4;
+            let l2 = u32::from_le_bytes([b1[off1], b1[off1+1], b1[off1+2], b1[off1+3]]) as u64;
+            if l2 == 0 { return Err(Errno::ENOENT); }
+            let mut b2 = vec![0u8; bsz];
+            self.device.read(l2, &mut b2)?;
+            let off2 = i2 * 4;
+            let blk = u32::from_le_bytes([b2[off2], b2[off2+1], b2[off2+2], b2[off2+3]]) as u64;
+            if blk != 0 { return Ok(blk); } else { return Err(Errno::ENOENT); }
         }
         Err(Errno::ENOTSUP)
     }
