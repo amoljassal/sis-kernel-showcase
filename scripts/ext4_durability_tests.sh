@@ -46,11 +46,25 @@ kill -TERM "$pid2" || true
 fsck=$(command -v fsck.ext4 || true)
 if [[ -n "$fsck" ]]; then
   echo "[*] Running host fsck.ext4"
-  "$fsck" -f -n "$IMG" || true
+  "$fsck" -f -n "$IMG" > /tmp/sis-ext4-fsck.log 2>&1 || true
 else
   echo "[i] fsck.ext4 not found; skipping host verification"
 fi
 
-echo "[+] Logs:"; echo "  - /tmp/sis-ext4-run1.log"; echo "  - /tmp/sis-ext4-run2.log"
-echo "[+] Done"
+# Summaries
+REPLAY_SUM=$(grep -E "JBD2: Journal replay complete" /tmp/sis-ext4-run2.log | tail -n1 | sed -E 's/.*complete \(([^)]*)\).*/\1/')
+FSCK_SUM="N/A"
+if [[ -f /tmp/sis-ext4-fsck.log ]]; then
+  if grep -q "clean" /tmp/sis-ext4-fsck.log; then
+    FSCK_SUM="clean"
+  elif grep -qiE "error|corrupt|repair" /tmp/sis-ext4-fsck.log; then
+    FSCK_SUM="issues detected"
+  else
+    FSCK_SUM="no summary"
+  fi
+fi
 
+echo "[+] ext4/JBD2 replay: ${REPLAY_SUM:-not found}"
+echo "[+] fsck summary: $FSCK_SUM"
+echo "[+] Logs:"; echo "  - /tmp/sis-ext4-run1.log"; echo "  - /tmp/sis-ext4-run2.log"; [[ -f /tmp/sis-ext4-fsck.log ]] && echo "  - /tmp/sis-ext4-fsck.log"
+echo "[+] Done"

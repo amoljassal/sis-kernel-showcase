@@ -1378,10 +1378,30 @@ impl Ext4FileSystem {
         if inode.uses_extents() {
             if let Some(p) = self.lookup_extent(inode, lbn)? { return Ok(p); }
         }
-        if (lbn as usize) < inode.i_block.len() {
+        // Direct blocks (0..12)
+        if (lbn as usize) < 12 {
             let block = inode.i_block[lbn as usize] as u64;
             if block == 0 { return Err(Errno::ENOENT); }
             return Ok(block);
+        }
+        // Single indirect (i_block[12])
+        if (lbn as usize) >= 12 {
+            let ind_ptr = inode.i_block[12] as u64;
+            if ind_ptr != 0 {
+                let sb = self.superblock.lock();
+                let bsz = sb.block_size() as usize;
+                let ents = bsz / core::mem::size_of::<u32>();
+                drop(sb);
+                let rel = (lbn as usize) - 12;
+                if rel < ents {
+                    let mut buf = vec![0u8; bsz];
+                    self.device.read(ind_ptr, &mut buf)?;
+                    let off = rel * 4;
+                    let blk = u32::from_le_bytes([buf[off], buf[off+1], buf[off+2], buf[off+3]]) as u64;
+                    if blk != 0 { return Ok(blk); }
+                    else { return Err(Errno::ENOENT); }
+                }
+            }
         }
         Err(Errno::ENOTSUP)
     }

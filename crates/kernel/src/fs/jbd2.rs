@@ -10,9 +10,11 @@ use alloc::vec;
 use alloc::vec::Vec;
 use spin::Mutex;
 use core::cmp;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 /// JBD2 magic numbers
 pub const JBD2_MAGIC_NUMBER: u32 = 0xC03B3998;
+pub const JBD2_FEATURE_COMPAT_CHECKSUM: u32 = 0x0001;
 
 /// Journal block types
 #[repr(u32)]
@@ -207,12 +209,21 @@ pub struct Journal {
 
 impl Journal {
     #[inline]
-    fn crc32(data: &[u8]) -> u32 {
+    fn crc32c(data: &[u8]) -> u32 {
+        // CRC32C Castagnoli polynomial 0x1EDC6F41 using a small 256-entry table
+        const T: [u32; 256] = {
+            // Table generated offline; truncated here for brevity is not allowed, include full table
+            // For maintainability, we compute on the fly using bitwise method (slower but acceptable for small buffers)
+            [0; 256]
+        };
+        // Fallback bitwise if table is zero-initialized
         let mut crc: u32 = 0xFFFF_FFFF;
         for &b in data {
-            crc ^= b as u32;
+            let mut byte = b as u32;
+            crc ^= byte;
             for _ in 0..8 {
-                if (crc & 1) != 0 { crc = (crc >> 1) ^ 0xEDB8_8320; } else { crc >>= 1; }
+                let mask = (crc & 1).wrapping_neg();
+                crc = (crc >> 1) ^ (0x82F63B78u32 & mask); // reversed Castagnoli poly
             }
         }
         !crc
@@ -300,6 +311,7 @@ impl Journal {
 
         // Capacity: number of tags per descriptor
         let tags_per_desc = (block_size - 12) / 8;
+        let checksum_enabled = (sb.s_feature_compat & JBD2_FEATURE_COMPAT_CHECKSUM) != 0;
 
         // Chunk blocks into multiple descriptors; interleave descriptor and its data blocks
         let mut idx = 0;
@@ -331,10 +343,12 @@ impl Journal {
             }
 
             // Append CRC to end of descriptor block
-            let used = tag_offset;
-            let crc = Self::crc32(&desc_buf[0..used]);
-            let end = block_size - 4;
-            desc_buf[end..end + 4].copy_from_slice(&crc.to_le_bytes());
+            if checksum_enabled {
+                let used = tag_offset;
+                let crc = Self::crc32c(&desc_buf[0..used]);
+                let end = block_size - 4;
+                desc_buf[end..end + 4].copy_from_slice(&crc.to_le_bytes());
+            }
             self.device.write(self.journal_start + descriptor_block as u64, &desc_buf)?;
 
             // Data blocks for this descriptor
@@ -365,9 +379,11 @@ impl Journal {
         };
         commit_buf[0..20].copy_from_slice(commit_bytes);
         // Commit checksum over header
-        let ccrc = Self::crc32(&commit_buf[0..20]);
-        let end = block_size - 4;
-        commit_buf[end..end + 4].copy_from_slice(&ccrc.to_le_bytes());
+        if checksum_enabled {
+            let ccrc = Self::crc32c(&commit_buf[0..20]);
+            let end = block_size - 4;
+            commit_buf[end..end + 4].copy_from_slice(&ccrc.to_le_bytes());
+        }
         self.device.write(self.journal_start + commit_block as u64, &commit_buf)?;
 
         // 4. Update journal superblock
@@ -414,6 +430,7 @@ impl Journal {
         let mut replayed_txns = 0;
         let mut replayed_blocks = 0;
         let mut current_block = start_block;
+        let checksum_enabled = (sb.s_feature_compat & JBD2_FEATURE_COMPAT_CHECKSUM) != 0;
 
         // Revoke list (blocks that should not be replayed)
         let mut revoked: Vec<u64> = Vec::new();
@@ -451,11 +468,13 @@ impl Journal {
                         used += 8;
                         if (t_flags & JBD2_FLAG_LAST_TAG) != 0 { break; }
                     }
-                    let stored_crc = u32::from_le_bytes([
-                        desc_buf[block_size - 4], desc_buf[block_size - 3], desc_buf[block_size - 2], desc_buf[block_size - 1]
-                    ]);
-                    let calc_crc = Self::crc32(&desc_buf[0..used]);
-                    if calc_crc != stored_crc { crate::warn!("JBD2: descriptor CRC mismatch at {}", current_block); break; }
+                    if checksum_enabled {
+                        let stored_crc = u32::from_le_bytes([
+                            desc_buf[block_size - 4], desc_buf[block_size - 3], desc_buf[block_size - 2], desc_buf[block_size - 1]
+                        ]);
+                        let calc_crc = Self::crc32c(&desc_buf[0..used]);
+                        if calc_crc != stored_crc { crate::warn!("JBD2: descriptor CRC mismatch at {}", current_block); break; }
+                    }
 
                     // Parse tags (starting at offset 12 after header)
                     let mut tag_offset = 12;
@@ -510,13 +529,15 @@ impl Journal {
                 2 => {
                     // Commit block - transaction completed successfully
                     // Verify checksum over commit header
-                    let mut commit_buf = vec![0u8; block_size];
-                    self.device.read(self.journal_start + current_block as u64, &mut commit_buf)?;
-                    let stored = u32::from_le_bytes([
-                        commit_buf[block_size - 4], commit_buf[block_size - 3], commit_buf[block_size - 2], commit_buf[block_size - 1]
-                    ]);
-                    let calc = Self::crc32(&commit_buf[0..20]);
-                    if calc != stored { crate::warn!("JBD2: commit CRC mismatch at {}", current_block); break; }
+                    if checksum_enabled {
+                        let mut commit_buf = vec![0u8; block_size];
+                        self.device.read(self.journal_start + current_block as u64, &mut commit_buf)?;
+                        let stored = u32::from_le_bytes([
+                            commit_buf[block_size - 4], commit_buf[block_size - 3], commit_buf[block_size - 2], commit_buf[block_size - 1]
+                        ]);
+                        let calc = Self::crc32c(&commit_buf[0..20]);
+                        if calc != stored { crate::warn!("JBD2: commit CRC mismatch at {}", current_block); break; }
+                    }
                     crate::debug!("JBD2: Found commit at block {} (seq={})", current_block, sequence);
                     replayed_txns += 1;
                     current_block += 1;
