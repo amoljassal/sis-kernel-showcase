@@ -181,7 +181,11 @@ impl InodeOps for MemInfoFile {
     }
 
     fn read(&self, offset: u64, buf: &mut [u8]) -> Result<usize> {
-        let stats = crate::mm::get_stats();
+        let stats = crate::mm::get_stats().unwrap_or_else(|| crate::mm::buddy::AllocStats {
+            total_pages: 0,
+            free_pages: 0,
+            allocated_pages: 0,
+        });
         let total_kb = (stats.total_pages * 4) as u64; // 4KB pages
         let free_kb = (stats.free_pages * 4) as u64;
         let used_kb = total_kb - free_kb;
@@ -524,8 +528,8 @@ impl InodeOps for ProcPidStatus {
             state,
             self.pid,
             task.ppid,
-            task.cred.uid, task.cred.euid, task.cred.suid, task.cred.fsuid,
-            task.cred.gid, task.cred.egid, task.cred.sgid, task.cred.fsgid,
+            task.cred.uid, task.cred.euid, task.cred.euid, task.cred.euid,
+            task.cred.gid, task.cred.egid, task.cred.egid, task.cred.egid,
         );
 
         let bytes = content.as_bytes();
