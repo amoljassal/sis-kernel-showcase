@@ -70,6 +70,7 @@ graphctl-framed = [] # Use framed control for add-channel/add-operator from shel
 sntp = []            # Minimal SNTP client for best-effort time sync
 ext4-durability-test = [] # Run ext4 durability self-test harness at boot
 chaos = []           # Chaos engineering for failure injection testing (production readiness)
+mock-devices = []    # Mock device drivers for isolated testing (production readiness)
 
 [build-dependencies]
 bootloader = { version = "=0.11.11", default-features = false, features = ["bios"] }

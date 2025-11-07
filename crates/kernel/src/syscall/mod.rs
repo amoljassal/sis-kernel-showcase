@@ -2,6 +2,7 @@
 // Phase A0 - Minimal syscall dispatcher
 
 pub mod uaccess;
+pub mod validation;
 
 use crate::lib::error::{Errno, Result};
 use alloc::format;
