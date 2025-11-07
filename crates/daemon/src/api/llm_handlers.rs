@@ -2,7 +2,7 @@
 //!
 //! Wraps `llmctl` shell commands with REST API.
 
-use super::handlers::{exec_and_parse, ErrorResponse};
+use super::handlers::exec_and_parse;
 use crate::qemu::{QemuSupervisor, ReplayManager};
 use axum::{
     response::{IntoResponse, Response},

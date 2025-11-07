@@ -3,13 +3,12 @@
 use crate::parser::ParsedEvent;
 use crate::qemu::shell::{ShellCommandRequest, ShellCommandResponse};
 use anyhow::{Context, Result};
-use std::sync::Arc;
 use std::time::Instant;
 use tokio::io::AsyncWriteExt;
 use tokio::process::ChildStdin;
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{mpsc, oneshot};
 use tokio::time::{timeout, Duration};
-use tracing::{debug, warn};
+use tracing::debug;
 
 const MAX_RESPONSE_BYTES: usize = 1_048_576; // 1MB cap
 const DEFAULT_TIMEOUT_MS: u64 = 30000;

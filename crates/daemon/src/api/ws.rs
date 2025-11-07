@@ -1,6 +1,6 @@
 //! WebSocket event streaming
 
-use crate::qemu::{QemuEvent, QemuSupervisor};
+use crate::qemu::QemuSupervisor;
 use axum::{
     extract::{ws::WebSocket, State, WebSocketUpgrade},
     response::Response,

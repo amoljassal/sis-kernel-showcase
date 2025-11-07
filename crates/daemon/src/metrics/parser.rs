@@ -3,9 +3,7 @@
 //! Parses lines matching: METRIC name=value
 //! Example: "METRIC nn_infer_us=1234"
 
-use anyhow::Result;
 use regex::Regex;
-use std::sync::OnceLock;
 
 /// Parsed metric data
 #[derive(Debug, Clone, PartialEq)]

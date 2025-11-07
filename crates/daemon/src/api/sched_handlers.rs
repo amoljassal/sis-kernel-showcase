@@ -2,7 +2,7 @@
 //!
 //! Wraps `schedctl` shell commands with REST API.
 
-use super::handlers::{exec_and_parse, ErrorResponse};
+use super::handlers::exec_and_parse;
 use crate::qemu::{QemuEvent, QemuSupervisor, ReplayManager};
 use axum::{
     extract::State,

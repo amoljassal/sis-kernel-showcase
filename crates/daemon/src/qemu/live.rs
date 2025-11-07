@@ -6,7 +6,7 @@
 use super::shell::ShellCommandResponse;
 use super::supervisor::QemuEvent;
 use super::types::QemuConfig;
-use crate::parser::{LineParser, ParsedEvent};
+use crate::parser::LineParser;
 use anyhow::{Context, Result};
 use std::collections::{HashMap, VecDeque};
 use std::process::Stdio;
@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
-use tokio::sync::{broadcast, mpsc, oneshot, Mutex, RwLock};
+use tokio::sync::{broadcast, oneshot, Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -118,7 +118,7 @@ impl CommandTracker {
             // This is a simple heuristic - real implementation should parse kernel output format
             if line.contains("OK") || line.contains("ERROR") || line.starts_with("sis>") {
                 let id = *id;
-                if let Some(mut cmd) = pending.remove(&id) {
+                if let Some(cmd) = pending.remove(&id) {
                     let execution_time = cmd.sent_at.elapsed().as_millis() as u64;
                     let success = !cmd.output_buffer.iter().any(|l| l.contains("ERROR"));
 

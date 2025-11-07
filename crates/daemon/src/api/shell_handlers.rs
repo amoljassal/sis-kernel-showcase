@@ -1,7 +1,7 @@
 //! Shell command API handlers
 
 use crate::qemu::{
-    QemuSupervisor, SelfCheckResponse, ShellCommandRequest, ShellCommandResponse, TestResultEntry,
+    QemuSupervisor, SelfCheckResponse, ShellCommandRequest, TestResultEntry,
 };
 use axum::{
     extract::State,

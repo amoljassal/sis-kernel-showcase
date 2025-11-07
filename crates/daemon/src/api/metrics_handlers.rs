@@ -1,6 +1,5 @@
 //! Metrics API handlers
 
-use crate::metrics::MetricsStore;
 use crate::metrics::store::{QueryResult, SeriesMetadata};
 use crate::qemu::QemuSupervisor;
 use axum::{
