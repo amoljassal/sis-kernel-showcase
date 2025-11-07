@@ -89,11 +89,11 @@ impl VirtioNetDevice {
         // Initialize virtqueues
         // RX queue (index 0)
         let mut rx_queue = VirtQueue::new(0, 256)?;
-        transport_ref.setup_queue(&mut rx_queue)?;
+        transport_ref.setup_queue(&mut rx_queue).map_err(|_| Errno::EIO)?;
 
         // TX queue (index 1)
         let mut tx_queue = VirtQueue::new(1, 256)?;
-        transport_ref.setup_queue(&mut tx_queue)?;
+        transport_ref.setup_queue(&mut tx_queue).map_err(|_| Errno::EIO)?;
 
         // Set device status to DRIVER_OK
         let status = transport_ref.read_reg(VirtIOMMIOOffset::Status);

@@ -122,7 +122,7 @@ impl SettingsApp {
         y += 25;
 
         // Memory info
-        let stats = crate::mm::get_stats();
+        let stats = crate::mm::get_stats().unwrap_or_default();
         let total_mb = (stats.total_pages * 4) / 1024; // 4KB pages to MB
         ctx.draw_text(
             bounds.x,

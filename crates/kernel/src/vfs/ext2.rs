@@ -475,11 +475,11 @@ impl InodeOps for Ext2InodeOps {
         self.fs.read_inode_data(&inode, offset, buf)
     }
 
-    fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize, Errno> {
+    fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
         Err(Errno::EROFS) // Read-only
     }
 
-    fn lookup(&self, name: &str) -> Result<Arc<Inode>, Errno> {
+    fn lookup(&self, name: &str) -> Result<Arc<Inode>> {
         let inode = self.inode_data.lock();
         let child_ino = self.fs.lookup_dir(&inode, name)?;
         drop(inode);
@@ -494,16 +494,16 @@ impl InodeOps for Ext2InodeOps {
         Ok(Arc::new(Inode::new(child_itype, child_inode_data.i_mode as u32, child_ops_static)))
     }
 
-    fn readdir(&self) -> Result<Vec<DirEntry>, Errno> {
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
         let inode = self.inode_data.lock();
         self.fs.readdir(&inode)
     }
 
-    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>, Errno> {
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
         Err(Errno::EROFS) // Read-only
     }
 
-    fn getattr(&self) -> Result<crate::vfs::InodeMeta, Errno> {
+    fn getattr(&self) -> Result<crate::vfs::InodeMeta> {
         let inode = self.inode_data.lock();
         Ok(crate::vfs::InodeMeta {
             ino: self.inode_num as u64,

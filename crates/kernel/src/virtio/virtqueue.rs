@@ -71,18 +71,18 @@ impl VirtQueue {
         // Allocate aligned memory (4096-byte alignment for VirtIO)
         // Descriptor table
         let desc_pages = (desc_size + 4095) / 4096;
-        let desc_phys = mm::alloc_pages(desc_pages.trailing_zeros())
+        let desc_phys = mm::alloc_pages(desc_pages.trailing_zeros().try_into().unwrap())
             .ok_or(Errno::ENOMEM)?;
         let desc_table = desc_phys as *mut VirtqDesc;
 
         // Available ring (must be 2-byte aligned)
         let avail_pages = (avail_size + 4095) / 4096;
-        let avail_phys = mm::alloc_pages(avail_pages.trailing_zeros())
+        let avail_phys = mm::alloc_pages(avail_pages.trailing_zeros().try_into().unwrap())
             .ok_or(Errno::ENOMEM)?;
 
         // Used ring (must be 4-byte aligned)
         let used_pages = (used_size + 4095) / 4096;
-        let used_phys = mm::alloc_pages(used_pages.trailing_zeros())
+        let used_phys = mm::alloc_pages(used_pages.trailing_zeros().try_into().unwrap())
             .ok_or(Errno::ENOMEM)?;
 
         // Zero out all allocated memory

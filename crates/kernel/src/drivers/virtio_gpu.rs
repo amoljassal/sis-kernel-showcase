@@ -236,12 +236,12 @@ impl VirtioGpu {
         // Create virtqueues (control queue 0, cursor queue 1)
         let control_queue = {
             let t = transport.lock();
-            VirtQueue::new(&*t, 0, 64).map_err(|_| Errno::ENOMEM)?
+            VirtQueue::new(0, 64).map_err(|_| Errno::ENOMEM)?
         };
 
         let cursor_queue = {
             let t = transport.lock();
-            VirtQueue::new(&*t, 1, 16).map_err(|_| Errno::ENOMEM)?
+            VirtQueue::new(1, 16).map_err(|_| Errno::ENOMEM)?
         };
 
         // Allocate framebuffer memory (BGRA8888 format, 4 bytes per pixel)

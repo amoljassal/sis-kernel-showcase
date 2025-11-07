@@ -510,6 +510,7 @@ pub fn sys_getdents64(fd: i32, dirp: *mut u8, count: usize) -> Result<isize> {
                 crate::vfs::InodeType::Directory => 4,  // DT_DIR
                 crate::vfs::InodeType::CharDevice => 2, // DT_CHR
                 crate::vfs::InodeType::Symlink => 10,   // DT_LNK
+                crate::vfs::InodeType::BlockDevice => 6, // DT_BLK
             };
             // d_name
             core::ptr::copy_nonoverlapping(name_bytes.as_ptr(), p.add(19), name_bytes.len());
@@ -690,7 +691,7 @@ pub fn sys_execve(
         let dev_root = crate::vfs::get_root().ok_or(Errno::ENOENT)?;
         let console_inode = crate::vfs::path_lookup(&dev_root, "/dev/console")?;
 
-        let console_file = alloc::sync::Arc::new(crate::vfs::File::new(
+        let console_file = alloc::sync::Arc::new(crate::vfs::File::new_with_ops(
             console_inode,
             crate::vfs::OpenFlags::O_RDWR,
             &crate::drivers::char::CONSOLE_OPS,
