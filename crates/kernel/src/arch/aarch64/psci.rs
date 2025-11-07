@@ -70,7 +70,7 @@ unsafe fn psci_call(function: u32, arg0: u64, arg1: u64, arg2: u64) -> i32 {
         "mov x2, {arg1}",
         "mov x3, {arg2}",
         "smc #0",
-        "mov {result}, w0",
+        "sxtw {result}, w0",
         function = in(reg) function as u64,
         arg0 = in(reg) arg0,
         arg1 = in(reg) arg1,
