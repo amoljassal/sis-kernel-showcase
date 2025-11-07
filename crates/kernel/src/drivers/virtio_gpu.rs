@@ -194,7 +194,7 @@ impl VirtioGpu {
 
         // Reset device
         {
-            let _t = transport.lock();
+            let t = transport.lock();
             t.reset_device().map_err(|_| Errno::EIO)?;
 
             // Acknowledge device
@@ -207,7 +207,7 @@ impl VirtioGpu {
 
         // Negotiate features (disable VIRGL 3D, enable EDID)
         {
-            let _t = transport.lock();
+            let t = transport.lock();
 
             // Read device features
             t.write_reg(VirtIOMMIOOffset::DeviceFeaturesSel, 0);
