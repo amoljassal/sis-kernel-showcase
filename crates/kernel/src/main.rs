@@ -159,11 +159,9 @@ pub extern "C" fn _start() -> ! {
 }
 
 #[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
-    unsafe {
-        uart_print(b"PANIC\n");
-    }
-    loop {}
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    // Use enhanced panic handler with diagnostics
+    crate::lib::panic::panic_handler(info)
 }
 
 #[inline(always)]
