@@ -5,11 +5,11 @@
 
 use crate::lib::error::{Result, Errno};
 use crate::virtio::{VirtIOMMIOTransport, VirtIOMMIOOffset};
-use crate::virtio::virtqueue::{VirtQueue, VIRTQ_DESC_F_WRITE};
+use crate::virtio::virtqueue::VirtQueue;
 use crate::block::{BlockDevice, BlockDeviceOps, register_block_device};
 use alloc::sync::Arc;
 use alloc::vec;
-use alloc::vec::Vec;
+// use alloc::vec::Vec; // not needed: we use vec! macro and to_vec()
 use alloc::string::String;
 use spin::Mutex;
 
@@ -122,7 +122,7 @@ impl VirtioBlkDevice {
             size as u16
         };
 
-        let mut queue = VirtQueue::new(0, queue_size)?;
+        let queue = VirtQueue::new(0, queue_size)?;
 
         // Configure queue in device
         {

@@ -5,11 +5,11 @@
 
 use crate::lib::error::{Result, Errno};
 use crate::virtio::{VirtIOMMIOTransport, VirtIOMMIOOffset, VirtIOStatus};
-use crate::virtio::virtqueue::{VirtQueue, VIRTQ_DESC_F_WRITE};
+use crate::virtio::virtqueue::VirtQueue;
 use crate::mm::PhysAddr;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
-use alloc::boxed::Box;
+// use alloc::vec::Vec;
+// use alloc::boxed::Box;
 use spin::Mutex;
 use core::ptr;
 
@@ -194,7 +194,7 @@ impl VirtioGpu {
 
         // Reset device
         {
-            let t = transport.lock();
+            let _t = transport.lock();
             t.reset_device().map_err(|_| Errno::EIO)?;
 
             // Acknowledge device
@@ -207,11 +207,11 @@ impl VirtioGpu {
 
         // Negotiate features (disable VIRGL 3D, enable EDID)
         {
-            let t = transport.lock();
+            let _t = transport.lock();
 
             // Read device features
             t.write_reg(VirtIOMMIOOffset::DeviceFeaturesSel, 0);
-            let mut device_features = t.read_reg(VirtIOMMIOOffset::DeviceFeatures);
+            let device_features = t.read_reg(VirtIOMMIOOffset::DeviceFeatures);
 
             // We want EDID but not VIRGL
             let mut driver_features = 0u32;
@@ -235,7 +235,7 @@ impl VirtioGpu {
 
         // Create virtqueues (control queue 0, cursor queue 1)
         let control_queue = {
-            let t = transport.lock();
+            let _t = transport.lock();
             VirtQueue::new(0, 64).map_err(|_| Errno::ENOMEM)?
         };
 
@@ -271,7 +271,7 @@ impl VirtioGpu {
             t.write_reg(VirtIOMMIOOffset::Status, status);
         }
 
-        let mut gpu = Self {
+        let gpu = Self {
             transport,
             control_queue,
             cursor_queue,

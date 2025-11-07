@@ -187,10 +187,9 @@ pub fn get_ip_address() -> Result<[u8; 4]> {
 
     if let Some(iface) = iface_lock.as_ref() {
         for addr in iface.ip_addrs() {
-            if let IpAddress::Ipv4(ipv4) = addr.address() {
-                let octets = ipv4.as_bytes();
-                return Ok([octets[0], octets[1], octets[2], octets[3]]);
-            }
+            let IpAddress::Ipv4(ipv4) = addr.address() else { continue };
+            let octets = ipv4.as_bytes();
+            return Ok([octets[0], octets[1], octets[2], octets[3]]);
         }
         Err(Errno::EADDRNOTAVAIL)
     } else {

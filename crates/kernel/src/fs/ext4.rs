@@ -196,7 +196,7 @@ impl Ext4FileSystem {
         }
 
         // Sync all buffers
-        crate::mm::sync_all();
+        let _ = crate::mm::sync_all();
 
         *mounted = false;
         crate::info!("ext4: Unmount successful");
@@ -214,7 +214,7 @@ impl Ext4FileSystem {
             journal.commit_transaction(txn)
         } else {
             // No journal, just sync
-            crate::mm::sync_all();
+            let _ = crate::mm::sync_all();
             Ok(())
         }
     }
@@ -293,7 +293,7 @@ impl Ext4FileSystem {
         }
 
         // Sync all buffers
-        crate::mm::sync_all();
+        let _ = crate::mm::sync_all();
 
         crate::info!("ext4: Sync complete");
         Ok(())

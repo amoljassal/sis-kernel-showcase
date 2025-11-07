@@ -23,34 +23,24 @@ pub struct LogEntry {
 }
 
 pub struct LogBuffer {
-    buffer: RingBuffer<LogEntry, 4096>,
-    lock: Mutex<()>,
+    buffer: Mutex<RingBuffer<LogEntry, 4096>>,
 }
 
 impl LogBuffer {
     pub const fn new() -> Self {
         Self {
-            buffer: RingBuffer::new(),
-            lock: Mutex::new(()),
+            buffer: Mutex::new(RingBuffer::new()),
         }
     }
 
     pub fn push(&self, entry: LogEntry) {
-        let _guard = self.lock.lock();
-        // SAFETY: We hold the lock, so we have exclusive access
-        unsafe {
-            let buffer = &mut *((&self.buffer as *const RingBuffer<LogEntry, 4096>) as *mut RingBuffer<LogEntry, 4096>);
-            buffer.push(entry);
-        }
+        let mut buffer = self.buffer.lock();
+        buffer.push(entry);
     }
 
     pub fn drain_all(&self) -> alloc::vec::Vec<LogEntry> {
-        let _guard = self.lock.lock();
-        // SAFETY: We hold the lock, so we have exclusive access
-        unsafe {
-            let buffer = &mut *((&self.buffer as *const RingBuffer<LogEntry, 4096>) as *mut RingBuffer<LogEntry, 4096>);
-            buffer.drain_all()
-        }
+        let mut buffer = self.buffer.lock();
+        buffer.drain_all()
     }
 }
 
