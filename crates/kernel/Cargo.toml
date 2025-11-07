@@ -69,6 +69,7 @@ dt-override = []     # Enable DT override + platform banner in bring-up
 graphctl-framed = [] # Use framed control for add-channel/add-operator from shell
 sntp = []            # Minimal SNTP client for best-effort time sync
 ext4-durability-test = [] # Run ext4 durability self-test harness at boot
+chaos = []           # Chaos engineering for failure injection testing (production readiness)
 
 [build-dependencies]
 bootloader = { version = "=0.11.11", default-features = false, features = ["bios"] }
