@@ -215,6 +215,12 @@ Comprehensive memory management subsystem providing physical and virtual memory 
    - Large allocations (>= 1 MiB) are backed by contiguous buddy pages to reduce fragmentation, especially for
      graphics/window buffers during bring-up
 
+6. **ext4 + JBD2 Durability:**
+   - Real extent tree lookups for logical→physical mapping; fallback to direct pointers with single‑indirect support
+   - JBD2 replay with revoke support and CRC32C (Castagnoli) verification gated by journal feature flags
+   - Commit supports multiple chained descriptor blocks; descriptor/data interleaving and device flush after commit
+   - Optional self‑test at boot (feature `ext4-durability-test`) paired with a host harness script
+
 **Key Fixes:**
 - Added `Default` trait to `AllocStats` structure
 - Updated all `stats.unwrap_or_default()` call sites (3 locations: main.rs, settings.rs, ai_insights.rs)
@@ -5560,6 +5566,7 @@ BRINGUP=1 ./scripts/uefi_run.sh
 #          `SIS_ED25519_PUBKEY=0x<64-hex> SIS_FEATURES="llm,crypto-real" BRINGUP=1 ./scripts/uefi_run.sh`
 #      - If not set or invalid, signature verification will fail (reject). No runtime environment is used.
 #  - sntp: Minimal SNTP client for best-effort time sync at boot (queries 10.0.2.2 under QEMU user networking)
+#  - ext4-durability-test: In-kernel ext4/JBD2 durability self-test (attach an image via EXT4_IMG)
 BRINGUP=1 GRAPH=1 PERF=1 ./scripts/uefi_run.sh
 BRINGUP=1 DETERMINISTIC=1 ./scripts/uefi_run.sh
 BRINGUP=1 SIS_FEATURES="graph-demo,perf-verbose,deterministic" ./scripts/uefi_run.sh
@@ -5569,6 +5576,11 @@ BRINGUP=1 VIRTIO=1 ./scripts/uefi_run.sh
 BRINGUP=1 SIS_FEATURES="sntp" ./scripts/uefi_run.sh
 # Combine with other features
 BRINGUP=1 SIS_FEATURES="llm,crypto-real,sntp" ./scripts/uefi_run.sh
+
+# ext4/JBD2 Durability Test (optional)
+./scripts/ext4_durability_tests.sh /tmp/ext4-test.img
+# Or manual: attach an image and run the in‑kernel test once
+EXT4_IMG=/tmp/ext4-test.img VIRTBLK=mmio BRINGUP=1 SIS_FEATURES="ext4-durability-test" ./scripts/uefi_run.sh
 
 # Add AI microbenchmarks (NEON-based; still under QEMU emulation)
 BRINGUP=1 AI=1 ./scripts/uefi_run.sh
