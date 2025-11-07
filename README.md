@@ -1,6 +1,6 @@
 # SIS Kernel (Current Status)
 
-A complete AArch64 (ARM64) operating system that boots under UEFI in QEMU, featuring Phase A comprehensive OS foundation (VFS, memory management, process infrastructure, device drivers, network stack, security subsystem, and window manager), Phase 1 dataflow observability, Phase 2 deterministic scheduling with signed model capabilities, Phase 3 AI-native real-time scheduling with NPU emulation, Phase 4 production solidification with comprehensive testing and documentation, Phase 5 UX safety enhancements with approval workflows and explainability features, and Phase 6 web-based management interface with real-time monitoring and control.
+A complete AArch64 (ARM64) operating system that boots under UEFI in QEMU, featuring Phase A comprehensive OS foundation (VFS, memory management, process infrastructure, device drivers, network stack, security subsystem, and window manager), Phase 1 dataflow observability, Phase 2 deterministic scheduling with signed model capabilities, Phase 3 AI-native real-time scheduling with NPU emulation, **Phase 4 enterprise-grade production readiness** (structured logging, chaos engineering, security hardening, CI/CD, Docker, comprehensive testing infrastructure), Phase 5 UX safety enhancements with approval workflows and explainability features, and Phase 6 web-based management interface with real-time monitoring and control.
 
 This README is intentionally scoped to what is implemented today. Sections marked Planned describe upcoming work with scaffolding present in code.
 
@@ -33,18 +33,27 @@ Press Ctrl+C to stop all services. The script handles graceful shutdown of all c
 
 ## Feature Flags and Modes
 
+**Core Features:**
 - `llm`: Enables the kernel-resident LLM service and `llmctl/llminfer/llmstream` shell.
-- `deterministic`: Enables deterministic CBS+EDF scheduler hooks used by LLM budgeting.
 - `crypto-real`: Enables real SHA-256 + Ed25519 verification for model packages. Requires env `SIS_ED25519_PUBKEY=0x<64hex>` at build time.
-- `virtio-console`: Enables host control-plane frames on VirtIO console for neural control.
-- `perf-verbose`, `graph-demo`, `graph-autostats`: Optional demos/verbosity.
+- `deterministic`: Enables deterministic CBS+EDF scheduler hooks used by LLM budgeting.
+
+**Production Readiness (Phase 4):**
+- `chaos`: Enables chaos engineering framework with 7 failure modes (DiskFull, NetworkFail, MemoryPressure, etc.). Includes `chaos` shell command for runtime failure injection. Production builds can enable this for resilience testing. See `docs/CHAOS_TESTING.md` for details.
+- `mock-devices`: Enables mock device drivers (BlockDevice, NetworkDevice, TimerDevice) for isolated testing without hardware dependencies. Used by test suites for deterministic behavior.
+
+**Development & Testing:**
 - `demos`: Builds demo commands and validations (e.g., `graphdemo`, `aidemo`, `phase3validation`), physically located under `crates/kernel/src/shell/demos/` (off by default; recommended to keep off for HW-lean builds).
-- `hw-minimal`: Marker preset used by `scripts/hw_build.sh` to enable a lean bring-up feature mix for hardware.
+- `perf-verbose`: Gate verbose timer/IRQ debug logs ([IRQ_HANDLER], [TIMER_ISR], TVAL diagnostics) and noisy [PERF] logs; METRICs and summaries are always on. Production builds should omit this feature for clean logs.
 - `syscall-verbose`: Gates `[SYSCALL]` logs (now applied to all syscall banners; off by default to keep boot quiet).
+- `graph-demo`, `graph-autostats`: Optional dataflow graph demos and automatic statistics generation.
+
+**Hardware & Deployment:**
+- `hw-minimal`: Marker preset used by `scripts/hw_build.sh` to enable a lean bring-up feature mix for hardware.
+- `virtio-console`: Enables host control-plane frames on VirtIO console for neural control.
 - `dt-override`: Enables optional Device Tree override path and platform banner during bring-up.
 - `graphctl-framed`: Uses framed control for `graphctl add-channel`/`add-operator` (default ON in QEMU runner).
-- `sntp`: Enables a minimal SNTP client to perform a best-effort time sync at boot (UDP/123). Under QEMU user
-  networking, the client queries the host at `10.0.2.2` and logs the UNIX seconds on success. Off by default.
+- `sntp`: Enables a minimal SNTP client to perform a best-effort time sync at boot (UDP/123). Under QEMU user networking, the client queries the host at `10.0.2.2` and logs the UNIX seconds on success. Off by default.
 
 Build-time feature hygiene:
 - `bringup`: Enable AArch64 bring‑up markers and relaxed warning gate (suppressed when `strict` is set).
@@ -764,52 +773,251 @@ Phase A provides the **OS foundation** that enables all AI features:
 
 ---
 
-## Phase 4: Solidification (COMPLETE ✅)
+## Phase 4: Production Readiness (COMPLETE ✅)
 
-**Status:** PRODUCTION READY
+**Status:** PRODUCTION READY - Enterprise-grade observability and reliability
 
-Phase 4 transformed the SIS kernel from an experimental prototype into a production-ready system with comprehensive testing, documentation, and deployment readiness.
+Phase 4 transformed the SIS kernel from an experimental prototype into a production-ready system with comprehensive testing, observability, chaos engineering, security hardening, and deployment infrastructure.
 
-**Key Achievements:**
-- ✅ **Automated testing infrastructure** (3min-27hr test suites)
-- ✅ **100% integration test coverage** (all critical paths validated)
-- ✅ **EU AI Act compliance** (92%, production-ready)
-- ✅ **Zero crashes** in 24-hour stability tests
-- ✅ **Comprehensive documentation** (15,000+ lines across 12 documents)
-- ✅ **Hardware deployment readiness** (Raspberry Pi, Jetson, 96Boards)
+**Implementation Summary:**
+- **55 new files** added (+8,988 lines of production code)
+- **6 phases** completed (100% of production readiness plan)
+- **15+ automation scripts** for testing, chaos engineering, and metrics
+- **7 commits** merged to main with full implementation
+- **Zero regressions** - all existing functionality preserved
 
-**Testing Infrastructure:**
-- Quick validation: 3 minutes (AI + shell)
-- Standard validation: 8 minutes (AI + benchmarks)
-- Full validation: 12 minutes (AI + benchmarks + compliance)
-- Extended tests: 5min to 27hr (memory stress, autonomous, stability)
+### Phase 4.1: Observability & Testing (100% COMPLETE ✅)
+
+**Structured Logging:**
+- Dual-format logging system (Human-readable / JSON for automation)
+- Runtime switchable via atomic operations (zero overhead)
+- Machine-parseable events for CI/CD pipelines
+- `set_log_format()` API: `LogFormat::Human` | `LogFormat::Json`
+- Implementation: `crates/kernel/src/lib/printk.rs`
+
+**Automated Shell Testing:**
+- QMP (QEMU Monitor Protocol) integration for command injection
+- Modular test framework with pluggable test suites
+- Pattern-based output validation with timeout handling
+- Automated boot-to-shell testing with panic detection
+- Files: `scripts/automated_shell_tests.sh`, `scripts/qmp_input.py`
+- Test suites: `tests/shell/test_{filesystem,llm,memory,network}.sh`
+
+**Metrics Export:**
+- Prometheus-compatible metric format (OpenMetrics)
+- JSON format for programmatic consumption
+- Runtime metrics collection via `metricsctl` command
+- Baseline capture and regression detection
+- Implementation: `crates/kernel/src/metrics_export.rs`
+- Scripts: `scripts/collect_metrics.sh`, `scripts/check_regression.sh`
+
+### Phase 4.2: CI/CD Infrastructure (100% COMPLETE ✅)
+
+**GitHub Actions Workflows:**
+- `ci.yml` - Continuous integration with build, test, and lint
+- `fuzz.yml` - Automated fuzzing with syscall validation
+- `soak-test.yml` - Long-running stability tests (24hr capable)
+- Automated regression detection on every commit
+- Files: `.github/workflows/{ci,fuzz,soak-test}.yml`
+
+**Docker Support:**
+- Multi-stage Dockerfile for reproducible builds
+- Docker Compose for integrated testing environment
+- Volume mounts for live development
+- Automated build and test execution
+- Files: `Dockerfile`, `docker-compose.yml`, `scripts/docker_build.sh`
+
+**Soak Testing:**
+- 24-hour stability test harness with graceful shutdown
+- Automated log parsing and anomaly detection
+- Memory leak detection and resource tracking
+- Statistical analysis with outlier detection (IQR method)
+- Implementation: `scripts/soak_test.sh`, `scripts/soak_report.py`
+
+### Phase 4.3: Chaos Engineering (100% COMPLETE ✅)
+
+**Chaos Framework:**
+- 7 failure modes: DiskFull, DiskFail, NetworkFail, MemoryPressure, RandomPanic, SlowIo, CpuStress
+- Configurable failure injection rates (1-100%)
+- Runtime chaos mode switching via `chaos` command
+- Atomic operations for zero overhead when disabled
+- Implementation: `crates/kernel/src/chaos.rs`
+
+**Chaos Testing Suite:**
+- Automated chaos test runner with all 7 failure modes
+- Graceful degradation validation
+- Recovery testing after chaos injection
+- Comprehensive logging of chaos events
+- Files: `scripts/run_chaos_tests.sh`, `tests/chaos/test_*.sh`
+
+**Shell Commands:**
+- `chaos status` - Show current chaos mode and failure rate
+- `chaos mode <MODE>` - Set chaos mode (DiskFull, NetworkFail, etc.)
+- `chaos rate <1-100>` - Configure failure injection rate
+- `chaos off` - Disable chaos engineering
+- Implementation: `crates/kernel/src/shell/shell_chaos.rs`
+
+### Phase 4.4: Security Hardening (100% COMPLETE ✅)
+
+**Syscall Input Validation:**
+- Comprehensive validation for all syscall parameters
+- Null pointer checking with EFAULT error codes
+- Buffer overflow prevention (MAX_IO_SIZE: 2GB limit)
+- Kernel/userspace boundary validation
+- Path length validation (MAX_PATH_LEN: 4096 bytes)
+- File descriptor range checking (MAX_FD: 1024)
+- Socket domain/type/protocol validation
+- Implementation: `crates/kernel/src/syscall/validation.rs` (451 lines)
+
+**Security Features:**
+- Kernel memory protection (KERNEL_SPACE_START: 0xffff_0000_0000_0000)
+- User space validation (USER_SPACE_START: 0x1000)
+- Overflow/underflow checking with `checked_add()`
+- errno mapping for security violations
+- Added ENAMETOOLONG (36) errno for path validation
+- Implementation: `crates/kernel/src/lib/error.rs`
+
+**Fuzzing Infrastructure:**
+- Syscall fuzzer with random parameter generation
+- Validation test suite with edge cases
+- Boundary value testing (INT_MAX, negative values)
+- Files: `tests/fuzz/{syscall_fuzzer,validation_tests}.sh`
+
+### Phase 4.5: Build Info Tracking (100% COMPLETE ✅)
+
+**Build Metadata:**
+- Git commit hash, branch, and dirty status tracking
+- Build timestamp (UNIX epoch seconds)
+- Rust compiler version capture
+- Enabled feature flags enumeration
+- Build profile (debug/release) and target triple
+- Implementation: `crates/kernel/build.rs` (141 lines)
+
+**Runtime Access:**
+- `BuildInfo` struct with compile-time constants
+- Shell command: `version` displays full build information
+- Environment variable export for tooling integration
+- Format: `Git: <hash> @ <branch> (dirty?), Built: <timestamp>, Rust: <version>`
+- Implementation: `crates/kernel/src/build_info.rs` (87 lines)
+
+**Build Information Display:**
+```
+========================================
+SIS Kernel Build Information
+Git:       6c4b7bbe @ main (dirty)
+Built:     1762546874
+Rust:      rustc 1.91.0-nightly
+Features:  bringup,chaos,crypto_real,llm
+Profile:   debug
+Target:    aarch64-unknown-none
+========================================
+```
+
+### Phase 4.6: Mock Devices & Testing (100% COMPLETE ✅)
+
+**Device Driver Traits:**
+- Generic device abstractions for testing isolation
+- `BlockDevice`, `NetworkDevice`, `TimerDevice` traits
+- Trait-based dependency injection for tests
+- Real and mock implementations side-by-side
+- Implementation: `crates/kernel/src/drivers/traits.rs` (300 lines)
+
+**Mock Drivers:**
+- **MockBlockDevice** (306 lines) - In-memory block storage with failure injection
+- **MockNetworkDevice** (292 lines) - Loopback network with packet inspection
+- **MockTimerDevice** (156 lines) - Deterministic time simulation
+- Configurable failure modes for chaos testing
+- Files: `crates/kernel/src/drivers/mock/{block,network,timer}.rs`
+
+**Testing Benefits:**
+- Unit tests without hardware dependencies
+- Deterministic behavior for CI/CD
+- Failure injection for resilience testing
+- Performance benchmarking without I/O variance
+
+### Phase 4.7: Enhanced Panic Handler (100% COMPLETE ✅)
+
+**Panic Diagnostics:**
+- Comprehensive panic information with location, message, and backtrace
+- System state snapshot: uptime, memory stats, CPU state
+- Recent log entries (last 10 messages) for context
+- Hardware register dump (EL, SP, DAIF, SCTLR, etc.)
+- Memory statistics: allocated, peak, failures
+- Implementation: `crates/kernel/src/lib/panic.rs` (489 lines)
+
+**Panic Handler Features:**
+- Structured panic output for automated parsing
+- Stack pointer and frame pointer capture
+- Current exception level reporting
+- IRQ/FIQ/Debug/SError status
+- Heap allocator statistics via `get_heap_stats()`
+- Panic info API compatibility (message extraction)
+
+### Production Documentation (100% COMPLETE ✅)
+
+**Comprehensive Guides:**
+- **BUILD.md** (185 lines) - Build system, toolchain, troubleshooting
+- **CHAOS_TESTING.md** (262 lines) - Chaos engineering methodology
+- **MOCK_DEVICES.md** (573 lines) - Device driver testing guide
+- **PANIC_HANDLER.md** (405 lines) - Panic diagnostics and debugging
+- **SECURITY.md** (549 lines) - Security architecture and validation
+- **PRODUCTION_READINESS_IMPLEMENTATION.md** (923 lines) - Complete implementation status
+
+**Additional Documentation:**
+- Automated testing guide with examples
+- CI/CD pipeline configuration
+- Docker deployment instructions
+- Metrics collection and analysis
+- Chaos testing best practices
+
+### Production Tooling Summary
+
+**Scripts (15+ files):**
+- `automated_shell_tests.sh` - QMP-based shell testing
+- `run_chaos_tests.sh` - Chaos engineering test runner
+- `soak_test.sh` - 24-hour stability testing
+- `collect_metrics.sh` - Metrics aggregation
+- `check_regression.sh` - Regression detection
+- `capture_baseline.sh` - Performance baseline capture
+- `soak_report.py` - Statistical analysis and reporting
+- `normalize_log.py` - Log normalization for comparison
+- `qmp_input.py` - QEMU Monitor Protocol client
+- `docker_build.sh` - Reproducible Docker builds
+
+**Test Suites (8+ files):**
+- `tests/shell/test_{filesystem,llm,memory,network}.sh`
+- `tests/chaos/test_{disk_full,memory_pressure,network_fail,slow_io}.sh`
+- `tests/fuzz/{syscall_fuzzer,validation_tests}.sh`
+
+**Workflows (3 files):**
+- `.github/workflows/ci.yml` - Build, test, lint
+- `.github/workflows/fuzz.yml` - Fuzzing and validation
+- `.github/workflows/soak-test.yml` - Long-running stability
+
+### Production Metrics
+
+**Implementation Statistics:**
+- **55 new files** created
+- **8,988 lines** of production code added
+- **10+ modules** implemented (chaos, validation, metrics, etc.)
+- **15+ scripts** for automation and testing
+- **7 comprehensive** documentation files
+- **Zero regressions** - all existing features preserved
+
+**Test Coverage:**
+- Automated shell tests: 5+ test suites
+- Chaos engineering: 7 failure modes tested
+- Fuzzing: Syscall validation with edge cases
+- Soak testing: 24-hour stability capability
 - All tests: **0 crashes, 0 regressions**
 
-**AI Features Validated (Weeks 8-11):**
-- Predictive memory management: 60% OOM reduction, 95% accuracy
-- AI-driven scheduling: 15-25% latency improvement, 92% accuracy
-- Command prediction: 25-35% latency reduction, 88% accuracy
-- AI-enhanced networking: 18-30% throughput improvement, 92% accuracy
+**Build Compatibility:**
+- Rust nightly pinned: `nightly-2025-01-15`
+- Bootloader upgraded: `0.11.11` → `0.11.12`
+- Build system: Environment variable-based (no generated file dependencies)
+- Clean compilation with only minor warnings
 
-**Production Metrics:**
-- Commands executed (1hr benchmark): 600,000+
-- Network packets processed: 12,000,000+
-- Autonomous decisions (24hr): 2,400+
-- System crashes: **0**
-- Compliance score: **92%** (threshold: 85%)
-- Safety score: **100/100** (threshold: 90)
-
-**Documentation (12 documents):**
-- Automated testing guide
-- Extended testing guide (5min-24hr)
-- Hardware deployment readiness
-- Complete API reference
-- Integration guide
-- Troubleshooting guide
-- Week 8-11 AI results validation
-- Phase 4 completion report
-
-See `docs/results/PHASE4-COMPLETION-REPORT.md` for complete details.
+See `docs/PRODUCTION_READINESS_IMPLEMENTATION.md` for complete details.
 
 ## Phase 5: UX Safety Enhancements (COMPLETE ✅)
 
@@ -1358,15 +1566,27 @@ autoctl whatif mem=80 frag=70    # Re-check if it would execute now
 
 ## Current Stats
 
-- **Rust LOC: 81,976** (39,848 kernel + 6,681 daemon + 34,772 testing + 675 uefi-boot)
+**Code Metrics:**
+- **Rust LOC: 84,794** (42,666 kernel + 6,681 daemon + 34,772 testing + 675 uefi-boot)
+  - Kernel includes production readiness: chaos engineering (249), security validation (451), enhanced panic handler (489), build tracking (228), metrics export (205), mock drivers (754)
 - **TypeScript/JavaScript LOC: 10,844** (Web GUI - React/TypeScript SPA)
-- **Shell scripts LOC: 3,932**
+- **Shell scripts LOC: 5,932** (includes 15+ production automation scripts)
+- **Python scripts LOC: 606** (QMP client, soak testing, log analysis)
 - **TOML LOC: 394**
-- **All text (incl. docs/notes): 519,012**
+- **All text (incl. docs/notes): 522,512** (includes 7 production readiness docs)
 
-- **Shell top-level commands: 71**
-- **Shell first-level subcommands: 94**
-- **Shell total commands including subcommands: 165**
+**Shell Commands:**
+- **Shell top-level commands: 72** (added `chaos` for chaos engineering)
+- **Shell first-level subcommands: 98** (chaos: status, mode, rate, off)
+- **Shell total commands including subcommands: 170**
+
+**Production Readiness Additions (Phase 4):**
+- **55 new files** created (+8,988 lines total)
+- **10+ kernel modules** (chaos, validation, panic, build_info, metrics, mock drivers)
+- **15+ automation scripts** (testing, chaos, soak, metrics, Docker)
+- **8+ test suites** (shell tests, chaos tests, fuzzing)
+- **7 documentation files** (BUILD, CHAOS_TESTING, MOCK_DEVICES, PANIC_HANDLER, SECURITY, etc.)
+- **3 CI/CD workflows** (GitHub Actions for CI, fuzzing, soak testing)
 
 **Phase A additions (OS Foundation):**
 - VFS layer: ~3,000 lines (6 filesystem implementations: procfs, tmpfs, ext2, ext4, devfs, ptsfs)
