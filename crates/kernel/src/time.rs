@@ -48,3 +48,8 @@ pub fn get_time_since_boot_us() -> u64 {
 pub fn get_time_since_boot_ms() -> u64 {
     get_time_since_boot_us() / 1000
 }
+
+/// Get uptime in milliseconds (alias for get_time_since_boot_ms)
+pub fn get_uptime_ms() -> u64 {
+    get_time_since_boot_ms()
+}

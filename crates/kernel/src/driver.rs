@@ -27,6 +27,8 @@ pub enum DriverError {
     NotSupported,
     /// Driver registry is full
     RegistryFull,
+    /// Invalid or unavailable virtqueue
+    InvalidQueue,
 }
 
 impl fmt::Display for DriverError {
@@ -38,6 +40,7 @@ impl fmt::Display for DriverError {
             DriverError::ResourceError => write!(f, "Resource allocation failed"),
             DriverError::NotSupported => write!(f, "Operation not supported"),
             DriverError::RegistryFull => write!(f, "Driver registry is full"),
+            DriverError::InvalidQueue => write!(f, "Invalid or unavailable virtqueue"),
         }
     }
 }

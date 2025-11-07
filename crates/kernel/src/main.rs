@@ -4,6 +4,8 @@
 // CI lint gate: when built with `--features strict`, fail on any warning
 #![cfg_attr(feature = "strict", deny(warnings))]
 #![cfg_attr(feature = "strict", deny(unsafe_op_in_unsafe_fn))]
+// During early bringup, suppress warnings to keep logs clean
+#![cfg_attr(feature = "bringup", allow(warnings))]
 
 // Required for heap allocation
 extern crate alloc;
@@ -12,8 +14,49 @@ extern crate alloc;
 #[no_mangle]
 pub static mut DTB_PTR: *const u8 = core::ptr::null();
 
+// Core library (error handling, logging, etc.)
+#[allow(special_module_name)]
+pub mod lib;
 // System call interface module
 pub mod syscall;
+// Process management
+pub mod process;
+// Memory management
+pub mod mm;
+// Virtual File System
+pub mod vfs;
+// Block layer (Phase B)
+pub mod block;
+// Network layer (Phase C)
+pub mod net;
+// Security subsystem (Phase D)
+pub mod security;
+// SMP subsystem (Phase E)
+pub mod smp;
+// Filesystem layer with journaling (Phase F)
+pub mod fs;
+// Graphics layer (Phase G.0)
+pub mod graphics;
+// Window manager (Phase G.1)
+pub mod window_manager;
+// UI Toolkit (Phase G.2)
+pub mod ui;
+// Desktop Applications (Phase G.3)
+pub mod applications;
+// AI Integration UI (Phase G.4)
+pub mod ai_ui;
+// Audio Infrastructure (Phase G.5)
+pub mod audio;
+// Voice UI (Phase G.5)
+pub mod voice;
+// Camera Infrastructure (Phase G.5)
+pub mod camera;
+// Animation System (Phase G.6)
+pub mod animation;
+// Device drivers (Phase A1)
+pub mod drivers;
+// Initial RAM filesystem
+pub mod initramfs;
 // Userspace test module
 pub mod userspace_test;
 // Interactive shell module
@@ -74,7 +117,8 @@ pub mod llm;
 // Architecture-specific modules
 #[cfg(target_arch = "aarch64")]
 pub mod arch {
-    // ARM64 implementation would go here
+    pub mod aarch64;
+    pub use aarch64::*;
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -176,9 +220,13 @@ mod bringup {
             else { super::uart_print(b"PLATFORM: qemu_virt\n"); }
         }
 
-        // 2) Install exception vectors
-        install_vectors();
+        // 2) Install exception vectors (Phase A0)
+        crate::arch::trap::init_exception_vectors();
         super::uart_print(b"VECTORS OK\n");
+
+        // 2.5) Initialize Phase A0 timer (optional, can be enabled in A1)
+        // crate::arch::timer::init_timer(1000);  // 1000ms interval
+        // Note: GIC timer init happens later in boot sequence
 
         // 3) Enable MMU (EL1 only). If not EL1, skip with message.
         let current_el: u64;
@@ -236,6 +284,204 @@ mod bringup {
                 super::uart_print(b"HEAP: TESTS PASSED\n");
             }
         }
+
+        // Phase A1: Initialize MM, VFS, and boot userspace
+        super::uart_print(b"PHASE A1: BOOT WIRING\n");
+
+        // Initialize buddy allocator with available RAM
+        // For QEMU virt, assume 128MB RAM starting at 0x40000000
+        super::uart_print(b"MM: BUDDY ALLOCATOR\n");
+        let ram_start = 0x4100_0000u64; // Start after kernel (16MB offset)
+        let ram_size = 112 * 1024 * 1024u64; // 112MB available
+        let ranges: &[(u64, usize)] = &[(ram_start, ram_size as usize)];
+        crate::mm::init_buddy(ranges)
+            .expect("Failed to initialize buddy allocator");
+        let stats = crate::mm::get_stats().unwrap_or_default();
+        super::uart_print(b"MM: BUDDY READY (");
+        print_number(stats.total_pages);
+        super::uart_print(b" pages)\n");
+
+        // Initialize process table before VFS (needed for syscalls)
+        super::uart_print(b"PROCESS: INIT TABLE\n");
+        crate::process::init_process_table();
+        super::uart_print(b"PROCESS: TABLE READY\n");
+
+        // Initialize scheduler
+        super::uart_print(b"SCHEDULER: INIT\n");
+        crate::process::scheduler::init();
+        crate::process::scheduler_smp::init();
+        super::uart_print(b"SCHEDULER: READY\n");
+
+        // Initialize VFS
+        super::uart_print(b"VFS: INIT\n");
+        crate::vfs::init().expect("Failed to initialize VFS");
+
+        // Mount tmpfs at /
+        super::uart_print(b"VFS: MOUNT TMPFS AT /\n");
+        let root = crate::vfs::tmpfs::mount_tmpfs().expect("Failed to mount tmpfs");
+        crate::vfs::set_root(root.clone());
+
+        // Mount devfs at /dev
+        super::uart_print(b"VFS: MOUNT DEVFS AT /dev\n");
+        let dev_inode = crate::vfs::devfs::mount_devfs().expect("Failed to mount devfs");
+        root.create("dev", crate::vfs::S_IFDIR | 0o755).expect("Failed to create /dev");
+        // Note: Actual mount point linking deferred to when mount syscall is available
+        crate::vfs::set_root(root.clone()); // Re-set root to ensure consistency
+
+        // Mount procfs at /proc
+        super::uart_print(b"VFS: MOUNT PROCFS AT /proc\n");
+        let proc_inode = crate::vfs::mount_procfs().expect("Failed to mount procfs");
+        root.create("proc", crate::vfs::S_IFDIR | 0o555).expect("Failed to create /proc");
+        crate::vfs::set_root(root.clone()); // Re-set root to ensure consistency
+
+        super::uart_print(b"VFS: READY\n");
+
+        // Initialize page cache (Phase B)
+        super::uart_print(b"PAGE CACHE: INIT\n");
+        crate::mm::init_page_cache(1024); // Cache up to 1024 blocks (512KB)
+        super::uart_print(b"PAGE CACHE: READY\n");
+
+        // Initialize virtio-blk devices (Phase B)
+        super::uart_print(b"BLOCK: PROBING VIRTIO-BLK DEVICES\n");
+        crate::arch::aarch64::init_virtio_blk();
+        super::uart_print(b"BLOCK: READY\n");
+
+        // Initialize virtio-net devices (Phase C)
+        super::uart_print(b"NET: PROBING VIRTIO-NET DEVICES\n");
+        crate::arch::aarch64::init_virtio_net();
+        super::uart_print(b"NET: DRIVER READY\n");
+
+        // Initialize network interface (smoltcp)
+        super::uart_print(b"NET: INIT INTERFACE\n");
+        if let Ok(()) = crate::net::init_network() {
+            super::uart_print(b"NET: INTERFACE READY\n");
+
+            // Try DHCP configuration
+            super::uart_print(b"NET: STARTING DHCP\n");
+            let mut dhcp_client = crate::net::dhcp::DhcpClient::new();
+            match dhcp_client.acquire_lease() {
+                Ok(config) => {
+                    super::uart_print(b"NET: DHCP LEASE ACQUIRED\n");
+                    if let Err(e) = dhcp_client.apply_config(&config) {
+                        crate::warn!("net: Failed to apply DHCP config: {:?}", e);
+                    }
+                }
+                Err(e) => {
+                    crate::warn!("net: DHCP failed: {:?}, using static IP", e);
+                    // Fall back to static IP for testing
+                    let _ = crate::net::smoltcp_iface::set_ip_address([10, 0, 2, 15], 24);
+                    let _ = crate::net::smoltcp_iface::set_gateway([10, 0, 2, 2]);
+                }
+            }
+            super::uart_print(b"NET: CONFIGURED\n");
+        } else {
+            super::uart_print(b"NET: NO DEVICE (SKIP)\n");
+        }
+
+        // Initialize entropy source (Phase D)
+        super::uart_print(b"RANDOM: INIT PRNG\n");
+        crate::security::init_random();
+        super::uart_print(b"RANDOM: READY\n");
+
+        // Initialize SMP (Phase E)
+        super::uart_print(b"SMP: INIT MULTI-CORE\n");
+        crate::smp::init();
+        super::uart_print(b"SMP: READY\n");
+
+        // Initialize virtio-gpu devices (Phase G.0)
+        super::uart_print(b"GPU: PROBING VIRTIO-GPU DEVICES\n");
+        crate::arch::aarch64::init_virtio_gpu();
+        super::uart_print(b"GPU: READY\n");
+
+        // Initialize graphics subsystem (Phase G.0)
+        super::uart_print(b"GRAPHICS: INIT\n");
+        if let Ok(()) = crate::graphics::init() {
+            super::uart_print(b"GRAPHICS: READY\n");
+
+            // Run graphics test
+            super::uart_print(b"GRAPHICS: RUNNING TEST\n");
+            if let Ok(()) = crate::graphics::test_graphics() {
+                super::uart_print(b"GRAPHICS: TEST PASSED\n");
+            } else {
+                super::uart_print(b"GRAPHICS: TEST FAILED\n");
+            }
+
+            // Initialize window manager (Phase G.1)
+            super::uart_print(b"WM: INIT WINDOW MANAGER\n");
+            if let Ok(()) = crate::window_manager::init() {
+                super::uart_print(b"WM: READY\n");
+
+                // Run window manager test
+                super::uart_print(b"WM: RUNNING TEST\n");
+                if let Ok(()) = crate::window_manager::test_window_manager() {
+                    super::uart_print(b"WM: TEST PASSED\n");
+                } else {
+                    super::uart_print(b"WM: TEST FAILED\n");
+                }
+
+                // Initialize UI toolkit (Phase G.2)
+                super::uart_print(b"UI: INIT TOOLKIT\n");
+                if let Ok(()) = crate::ui::init() {
+                    super::uart_print(b"UI: READY\n");
+
+                    // Run UI toolkit test
+                    super::uart_print(b"UI: RUNNING TEST\n");
+                    if let Ok(()) = crate::ui::test_ui_toolkit() {
+                        super::uart_print(b"UI: TEST PASSED\n");
+                    } else {
+                        super::uart_print(b"UI: TEST FAILED\n");
+                    }
+
+                    // Test desktop applications (Phase G.3)
+                    super::uart_print(b"APPS: TESTING APPLICATIONS\n");
+                    if let Ok(()) = crate::applications::test_applications() {
+                        super::uart_print(b"APPS: TESTS PASSED\n");
+                    } else {
+                        super::uart_print(b"APPS: TESTS FAILED\n");
+                    }
+
+                    // Launch all applications in windows
+                    super::uart_print(b"APPS: LAUNCHING ALL APPS\n");
+                    if let Ok(()) = crate::applications::launch_all_apps() {
+                        super::uart_print(b"APPS: ALL APPS RUNNING\n");
+                    } else {
+                        super::uart_print(b"APPS: LAUNCH FAILED\n");
+                    }
+                } else {
+                    super::uart_print(b"UI: INIT FAILED\n");
+                }
+            } else {
+                super::uart_print(b"WM: INIT FAILED\n");
+            }
+        } else {
+            super::uart_print(b"GRAPHICS: NO GPU (SKIP)\n");
+        }
+
+        // TODO: Unpack initramfs (when INITRAMFS_DATA is available)
+        // super::uart_print(b"INITRAMFS: UNPACKING\n");
+        // let initramfs_data = &INITRAMFS_DATA;
+        // crate::initramfs::unpack_initramfs(initramfs_data).expect("Failed to unpack initramfs");
+        // super::uart_print(b"INITRAMFS: READY\n");
+
+        // Create PID 1 (init process)
+        super::uart_print(b"INIT: CREATING PID 1\n");
+        let init_task = crate::process::Task::new_init();
+        crate::process::insert_task(init_task).expect("Failed to insert init task");
+        super::uart_print(b"INIT: PID 1 CREATED\n");
+
+        // Enqueue PID 1 to scheduler
+        super::uart_print(b"SCHEDULER: ENQUEUE PID 1\n");
+        crate::process::scheduler::enqueue(1);
+        crate::process::scheduler::set_current(1);
+        super::uart_print(b"SCHEDULER: PID 1 RUNNING\n");
+
+        // TODO: Execute /sbin/init when initramfs is available
+        // super::uart_print(b"INIT: EXEC /sbin/init\n");
+        // let argv = vec![b"/sbin/init\0".as_ref()];
+        // let envp = vec![];
+        // crate::syscall::sys_execve(b"/sbin/init\0", &argv, &envp).expect("Failed to exec init");
+
+        super::uart_print(b"PHASE A1: BOOT WIRING COMPLETE\n");
 
         // Graph demo is available as a shell command `graphdemo` (feature: graph-demo).
         // Avoid running it during bring-up to keep boot deterministic.
@@ -517,7 +763,9 @@ mod bringup {
         r#"
         .balign 2048
         .global VECTORS
+        .global exception_vector_table
     VECTORS:
+    exception_vector_table = VECTORS
         // Each entry MUST be 0x80 (128) bytes apart!
 
         // Current EL with SP0 (EL1t) - We don't use these
@@ -667,8 +915,8 @@ mod bringup {
         
         // Call system call handler
         mov x0, sp
-        bl syscall_handler
-        
+        bl handle_sync_exception
+
         // Restore all registers
         ldp x0, x1, [sp, #(32 * 8)]
         msr elr_el1, x0
@@ -734,8 +982,8 @@ mod bringup {
         
         // Call system call handler
         mov x0, sp
-        bl syscall_handler
-        
+        bl handle_sync_exception
+
         // Restore all registers
         ldp x0, x1, [sp, #(32 * 8)]
         msr elr_el1, x0

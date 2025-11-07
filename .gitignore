@@ -31,6 +31,8 @@ qemu-serial.log
 
 # Build artifacts
 bootimage-*.bin
+build/
+crates/kernel/initramfs_data.rs
 # Conversation logs and unrelated projects
 docs/chatgpt-*.md
 Projects/
