@@ -62,7 +62,14 @@ pub use aslr::{
 ///
 /// Used by DMA devices that need contiguous physical memory
 pub fn alloc_phys_pages(num_pages: usize) -> Option<PhysAddr> {
-    let page = alloc_pages(num_pages as u8)?;
+    if num_pages == 0 { return None; }
+    // Find smallest order such that (1 << order) >= num_pages
+    let mut order: u8 = 0;
+    while (1usize << order) < num_pages {
+        order = order.saturating_add(1);
+        if order > MAX_ORDER { return None; }
+    }
+    let page = alloc_pages(order)?;
     Some(page as u64)
 }
 

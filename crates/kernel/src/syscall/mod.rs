@@ -1630,80 +1630,65 @@ pub fn sys_accept(sockfd: i32, addr: *mut u8, addrlen: *mut u32) -> Result<isize
 }
 
 /// sys_connect - Connect to remote address (Phase C)
-pub fn sys_connect(sockfd: i32, addr: *const u8, addrlen: u32) -> Result<isize> {
-    if addr.is_null() {
-        return Err(Errno::EFAULT);
-    }
-
-    crate::info!("connect: sockfd={} addrlen={}", sockfd, addrlen);
-
-    // Simplified for Phase C
-    // Real implementation needs:
-    // 1. Parse sockaddr
-    // 2. Initiate TCP connection via smoltcp
-    // 3. Wait for connection establishment
-
-    Ok(0)
+pub fn sys_connect(_sockfd: i32, _addr: *const u8, _addrlen: u32) -> Result<isize> {
+    // Not supported for UDP
+    Err(Errno::ENOTSUP)
 }
 
 /// sys_sendto - Send data on socket (Phase C)
-pub fn sys_sendto(
-    sockfd: i32,
-    buf: *const u8,
-    len: usize,
-    flags: i32,
-    dest_addr: *const u8,
-    addrlen: u32,
-) -> Result<isize> {
-    if buf.is_null() {
-        return Err(Errno::EFAULT);
+pub fn sys_sendto(sockfd: i32, buf: *const u8, len: usize, _flags: i32, dest_addr: *const u8, _addrlen: u32) -> Result<isize> {
+    if buf.is_null() { return Err(Errno::EFAULT); }
+    let data = unsafe { core::slice::from_raw_parts(buf, len) };
+    #[repr(C)] struct SockAddrIn { sin_family: u16, sin_port: u16, sin_addr: u32, sin_zero: [u8;8] }
+    let sa = unsafe { &*(dest_addr as *const SockAddrIn) };
+    if sa.sin_family != 2 { return Err(Errno::EAFNOSUPPORT); }
+    let port = u16::from_be(sa.sin_port);
+    let ip = u32::from_be(sa.sin_addr).to_be_bytes();
+    let pid = crate::process::current_pid();
+    let table = crate::process::get_process_table();
+    let table = table.as_ref().ok_or(Errno::ESRCH)?;
+    let task = table.get(pid).ok_or(Errno::ESRCH)?;
+    let file = task.files.get(sockfd)?;
+    match &file.socket {
+        Some(crate::vfs::file::SocketEnd::Udp(handle)) => {
+            let n = crate::net::socket::udp_sendto(*handle, data, [ip[0],ip[1],ip[2],ip[3]], port)?;
+            Ok(n as isize)
+        }
+        _ => Err(Errno::ENOTSOCK)
     }
-
-    crate::info!("sendto: sockfd={} len={} flags={}", sockfd, len, flags);
-
-    // Simplified for Phase C
-    // Real implementation needs:
-    // 1. Get socket from FD
-    // 2. Copy data from userspace
-    // 3. Send via smoltcp TCP/UDP socket
-
-    Ok(len as isize)
 }
 
 /// sys_recvfrom - Receive data from socket (Phase C)
-pub fn sys_recvfrom(
-    sockfd: i32,
-    buf: *mut u8,
-    len: usize,
-    flags: i32,
-    src_addr: *mut u8,
-    addrlen: *mut u32,
-) -> Result<isize> {
-    if buf.is_null() {
-        return Err(Errno::EFAULT);
+pub fn sys_recvfrom(sockfd: i32, buf: *mut u8, len: usize, _flags: i32, src_addr: *mut u8, addrlen: *mut u32) -> Result<isize> {
+    if buf.is_null() { return Err(Errno::EFAULT); }
+    let out = unsafe { core::slice::from_raw_parts_mut(buf, len) };
+    let pid = crate::process::current_pid();
+    let table = crate::process::get_process_table();
+    let table = table.as_ref().ok_or(Errno::ESRCH)?;
+    let task = table.get(pid).ok_or(Errno::ESRCH)?;
+    let file = task.files.get(sockfd)?;
+    match &file.socket {
+        Some(crate::vfs::file::SocketEnd::Udp(handle)) => {
+            let (n, ip, port) = crate::net::socket::udp_recvfrom(*handle, out)?;
+            if !src_addr.is_null() && !addrlen.is_null() {
+                #[repr(C)] struct SockAddrIn { sin_family: u16, sin_port: u16, sin_addr: u32, sin_zero: [u8;8] }
+                let sa = src_addr as *mut SockAddrIn;
+                unsafe {
+                    (*sa).sin_family = 2;
+                    (*sa).sin_port = u16::to_be(port);
+                    (*sa).sin_addr = u32::to_be(u32::from_be_bytes(ip));
+                    (*sa).sin_zero = [0;8];
+                    *addrlen = core::mem::size_of::<SockAddrIn>() as u32;
+                }
+            }
+            Ok(n as isize)
+        }
+        _ => Err(Errno::ENOTSOCK)
     }
-
-    crate::info!("recvfrom: sockfd={} len={} flags={}", sockfd, len, flags);
-
-    // Simplified for Phase C
-    // Real implementation needs:
-    // 1. Get socket from FD
-    // 2. Receive from smoltcp socket
-    // 3. Copy to userspace buffer
-    // 4. Fill in source address if provided
-
-    Ok(0) // Return 0 bytes read for now
 }
 
 /// sys_shutdown - Shutdown socket (Phase C)
-pub fn sys_shutdown(sockfd: i32, how: i32) -> Result<isize> {
-    crate::info!("shutdown: sockfd={} how={}", sockfd, how);
-
-    // Simplified for Phase C
-    // Real implementation: close TX/RX/both sides of socket
-
-    Ok(0)
-}
+pub fn sys_shutdown(_sockfd: i32, _how: i32) -> Result<isize> { Ok(0) }
 
 // Syscall numbers for reference (ARM64 calling convention)
 #[allow(dead_code)]
