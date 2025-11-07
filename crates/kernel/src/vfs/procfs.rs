@@ -33,32 +33,32 @@ impl InodeOps for ProcfsRoot {
     fn lookup(&self, name: &str) -> Result<Arc<Inode>> {
         match name {
             "cpuinfo" => Ok(Arc::new(Inode::new(
-                alloc_ino(),
                 InodeType::Regular,
-                Box::new(CpuInfoFile),
+                0o444,
+                Box::leak(Box::new(CpuInfoFile)) as &'static dyn InodeOps,
             ))),
             "meminfo" => Ok(Arc::new(Inode::new(
-                alloc_ino(),
                 InodeType::Regular,
-                Box::new(MemInfoFile),
+                0o444,
+                Box::leak(Box::new(MemInfoFile)) as &'static dyn InodeOps,
             ))),
             "uptime" => Ok(Arc::new(Inode::new(
-                alloc_ino(),
                 InodeType::Regular,
-                Box::new(UptimeFile),
+                0o444,
+                Box::leak(Box::new(UptimeFile)) as &'static dyn InodeOps,
             ))),
             "mounts" => Ok(Arc::new(Inode::new(
-                alloc_ino(),
                 InodeType::Regular,
-                Box::new(MountsFile),
+                0o444,
+                Box::leak(Box::new(MountsFile)) as &'static dyn InodeOps,
             ))),
             "self" => {
                 // /proc/self symlink to current process (Phase A2)
                 let pid = crate::process::current_pid();
                 Ok(Arc::new(Inode::new(
-                    alloc_ino(),
                     InodeType::Directory,
-                    Box::new(ProcPidDir { pid }),
+                    0o555,
+                    Box::leak(Box::new(ProcPidDir { pid })) as &'static dyn InodeOps,
                 )))
             }
             _ => {
@@ -69,9 +69,9 @@ impl InodeOps for ProcfsRoot {
                     if let Some(ref table) = *table {
                         if table.get(pid).is_some() {
                             return Ok(Arc::new(Inode::new(
-                                alloc_ino(),
                                 InodeType::Directory,
-                                Box::new(ProcPidDir { pid }),
+                                0o555,
+                                Box::leak(Box::new(ProcPidDir { pid })) as &'static dyn InodeOps,
                             )));
                         }
                     }
@@ -392,24 +392,24 @@ impl InodeOps for ProcPidDir {
     fn lookup(&self, name: &str) -> Result<Arc<Inode>> {
         match name {
             "cmdline" => Ok(Arc::new(Inode::new(
-                alloc_ino(),
                 InodeType::Regular,
-                Box::new(ProcPidCmdline { pid: self.pid }),
+                0o444,
+                Box::leak(Box::new(ProcPidCmdline { pid: self.pid })) as &'static dyn InodeOps,
             ))),
             "stat" => Ok(Arc::new(Inode::new(
-                alloc_ino(),
                 InodeType::Regular,
-                Box::new(ProcPidStat { pid: self.pid }),
+                0o444,
+                Box::leak(Box::new(ProcPidStat { pid: self.pid })) as &'static dyn InodeOps,
             ))),
             "status" => Ok(Arc::new(Inode::new(
-                alloc_ino(),
                 InodeType::Regular,
-                Box::new(ProcPidStatus { pid: self.pid }),
+                0o444,
+                Box::leak(Box::new(ProcPidStatus { pid: self.pid })) as &'static dyn InodeOps,
             ))),
             "maps" => Ok(Arc::new(Inode::new(
-                alloc_ino(),
                 InodeType::Regular,
-                Box::new(ProcPidMaps { pid: self.pid }),
+                0o444,
+                Box::leak(Box::new(ProcPidMaps { pid: self.pid })) as &'static dyn InodeOps,
             ))),
             _ => Err(Errno::ENOENT),
         }
@@ -763,8 +763,8 @@ impl InodeOps for ProcPidMaps {
 /// Mount procfs at /proc
 pub fn mount_procfs() -> Result<Arc<Inode>> {
     Ok(Arc::new(Inode::new(
-        alloc_ino(),
         InodeType::Directory,
-        Box::new(ProcfsRoot),
+        0o555,
+        Box::leak(Box::new(ProcfsRoot)) as &'static dyn InodeOps,
     )))
 }

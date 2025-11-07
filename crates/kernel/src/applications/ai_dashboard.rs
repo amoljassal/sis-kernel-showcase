@@ -9,6 +9,7 @@ use crate::ui::widget::Padding;
 use crate::graphics::{DrawContext, Rect, Font, Color};
 use crate::ai_ui::{DecisionViewer, MemoryPredictorViewer, SchedulingViewer, AIControls};
 use alloc::boxed::Box;
+use alloc::string::String;
 
 /// AI Dashboard application
 pub struct AIDashboardApp {
@@ -162,10 +163,16 @@ impl Widget for AIDashboardApp {
 
 /// Initialize the AI dashboard demo
 pub fn demo_ai_dashboard() {
-    use crate::window_manager::{get_window_manager, WindowSpec, WindowDecoration};
+    use crate::window_manager::{get_manager, WindowSpec, WindowDecoration};
     use crate::graphics::Rect;
 
-    let mut wm = get_window_manager();
+    let wm = match get_manager() {
+        Some(wm) => wm,
+        None => {
+            crate::warn!("AI Dashboard: window manager not initialized");
+            return;
+        }
+    };
 
     // Create AI dashboard window
     let dashboard_spec = WindowSpec {
@@ -177,11 +184,8 @@ pub fn demo_ai_dashboard() {
         decoration: WindowDecoration::default(),
     };
 
-    let window_id = wm.create_window(dashboard_spec);
+    let window_id = wm.lock().create_window(dashboard_spec);
 
-    // TODO: Attach AIDashboardApp as window content
-    // For now, we just create the window
-    // Full integration will happen when we add content rendering to window manager
-
-    log!("AI Dashboard created in window {}", window_id);
+    // TODO: Attach AIDashboardApp as window content later
+    crate::info!("AI Dashboard created in window {}", window_id);
 }

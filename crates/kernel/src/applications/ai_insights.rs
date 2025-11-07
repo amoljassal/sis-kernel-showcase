@@ -28,7 +28,7 @@ impl AIInsightsApp {
 
     /// Get memory statistics
     fn get_memory_stats(&self) -> (usize, usize) {
-        let stats = crate::mm::get_stats();
+        let stats = crate::mm::get_stats().unwrap_or_default();
         (stats.total_pages, stats.free_pages)
     }
 

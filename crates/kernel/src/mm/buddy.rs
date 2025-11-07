@@ -25,7 +25,7 @@ pub struct BuddyAllocator {
     stats: AllocStats,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct AllocStats {
     pub total_pages: usize,
     pub free_pages: usize,

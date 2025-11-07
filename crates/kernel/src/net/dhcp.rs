@@ -67,7 +67,8 @@ impl DhcpClient {
                             crate::info!("dhcp: DNS servers: {:?}", config.dns_servers);
                         }
 
-                        let ip_octets = config.address.address().as_bytes();
+                        let addr = config.address.address();
+                        let ip_octets = addr.as_bytes();
                         let ip_addr = [ip_octets[0], ip_octets[1], ip_octets[2], ip_octets[3]];
                         let subnet_mask = config.address.prefix_len();
 

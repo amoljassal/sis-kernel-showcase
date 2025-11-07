@@ -290,9 +290,10 @@ mod bringup {
         super::uart_print(b"MM: BUDDY ALLOCATOR\n");
         let ram_start = 0x4100_0000u64; // Start after kernel (16MB offset)
         let ram_size = 112 * 1024 * 1024u64; // 112MB available
-        crate::mm::init_buddy(ram_start, ram_size)
+        let ranges: &[(u64, usize)] = &[(ram_start, ram_size as usize)];
+        crate::mm::init_buddy(ranges)
             .expect("Failed to initialize buddy allocator");
-        let stats = crate::mm::get_stats();
+        let stats = crate::mm::get_stats().unwrap_or_default();
         super::uart_print(b"MM: BUDDY READY (");
         print_number(stats.total_pages);
         super::uart_print(b" pages)\n");

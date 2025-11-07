@@ -162,26 +162,26 @@ impl VirtioBlkDevice {
 
     /// Read device configuration
     fn read_config(transport: &VirtIOMMIOTransport) -> VirtioBlkConfig {
-        unsafe {
-            let config_base = transport.read_reg(VirtIOMMIOOffset::Config as u32) as u64;
+        // Read capacity as two u32 values from config space (offsets 0 and 4)
+        let cap_lo = transport.read_config_u32(0) as u64;
+        let cap_hi = transport.read_config_u32(4) as u64;
+        let capacity = (cap_hi << 32) | cap_lo;
 
-            // Read capacity (at offset 0)
-            let capacity = core::ptr::read_volatile(config_base as *const u64);
+        // Block size (common offset for virtio-blk)
+        let blk_size = transport.read_config_u32(20);
 
-            // Read other fields (use defaults if not available)
-            VirtioBlkConfig {
-                capacity,
-                size_max: 0,
-                seg_max: 0,
-                geometry: VirtioBlkGeometry { cylinders: 0, heads: 0, sectors: 0 },
-                blk_size: 512, // Default to 512 bytes
-                topology: VirtioBlkTopology {
-                    physical_block_exp: 0,
-                    alignment_offset: 0,
-                    min_io_size: 0,
-                    opt_io_size: 0,
-                },
-            }
+        VirtioBlkConfig {
+            capacity,
+            size_max: 0,
+            seg_max: 0,
+            geometry: VirtioBlkGeometry { cylinders: 0, heads: 0, sectors: 0 },
+            blk_size: if blk_size == 0 { 512 } else { blk_size },
+            topology: VirtioBlkTopology {
+                physical_block_exp: 0,
+                alignment_offset: 0,
+                min_io_size: 0,
+                opt_io_size: 0,
+            },
         }
     }
 

@@ -27,6 +27,8 @@ pub enum DriverError {
     NotSupported,
     /// Driver registry is full
     RegistryFull,
+    /// Invalid or unavailable virtqueue
+    InvalidQueue,
 }
 
 impl fmt::Display for DriverError {

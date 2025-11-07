@@ -15,7 +15,7 @@ pub struct RingBuffer<T: Copy + Default, const N: usize> {
 
 impl<T: Copy + Default, const N: usize> RingBuffer<T, N> {
     /// Create a new ring buffer
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             buffer: [T::default(); N],
             read_pos: 0,

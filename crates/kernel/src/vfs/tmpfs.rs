@@ -63,11 +63,13 @@ impl InodeOps for TmpfsDir {
         let inode = if (mode & S_IFDIR) != 0 {
             // Create directory
             let dir = TmpfsDir::new(mode);
-            Arc::new(Inode::new(InodeType::Directory, mode, &dir as &'static dyn InodeOps))
+            let ops: &'static TmpfsDir = Box::leak(Box::new(dir));
+            Arc::new(Inode::new(InodeType::Directory, mode, ops as &'static dyn InodeOps))
         } else {
             // Create regular file
             let file = TmpfsFile::new(mode);
-            Arc::new(Inode::new(InodeType::Regular, mode, &file as &'static dyn InodeOps))
+            let ops: &'static TmpfsFile = Box::leak(Box::new(file));
+            Arc::new(Inode::new(InodeType::Regular, mode, ops as &'static dyn InodeOps))
         };
 
         meta.children.insert(name.into(), inode.clone());

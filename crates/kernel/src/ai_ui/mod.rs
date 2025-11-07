@@ -10,7 +10,7 @@ pub mod ai_controls;
 
 pub use decision_log::{
     DecisionEntry, DecisionType, DecisionLog, AIStats,
-    log_ai_decision, get_recent_decisions, get_ai_stats, update_decision_outcome
+    log_ai_decision, get_recent_decisions, get_ai_stats, update_ai_outcome
 };
 pub use decision_viewer::DecisionViewer;
 pub use memory_predictor_viewer::MemoryPredictorViewer;

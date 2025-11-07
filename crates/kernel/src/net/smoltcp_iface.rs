@@ -131,17 +131,13 @@ pub fn network_poll() -> Result<usize> {
 
     match (iface_lock.as_mut(), socket_lock.as_mut()) {
         (Some(iface), Some(sockets)) => {
-            // Get current time in milliseconds (stub for now, should use real timer)
-            let timestamp = Instant::from_millis(crate::timer::get_ticks() / 1000);
+            // Current time in milliseconds (use uptime)
+            let ts_ms = crate::time::get_uptime_ms() as i64;
+            let timestamp = Instant::from_millis(ts_ms);
             let mut device = VirtioNetPhy;
 
-            match iface.poll(timestamp, &mut device, sockets) {
-                Ok(processed) => Ok(if processed { 1 } else { 0 }),
-                Err(e) => {
-                    crate::warn!("net: poll error: {:?}", e);
-                    Err(Errno::EIO)
-                }
-            }
+            let processed = iface.poll(timestamp, &mut device, sockets);
+            Ok(if processed { 1 } else { 0 })
         }
         _ => Err(Errno::ENODEV),
     }
