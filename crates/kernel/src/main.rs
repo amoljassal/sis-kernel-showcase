@@ -389,9 +389,11 @@ mod bringup {
         super::uart_print(b"SMP: READY\n");
 
         // Initialize virtio-gpu devices (Phase G.0)
-        super::uart_print(b"GPU: PROBING VIRTIO-GPU DEVICES\n");
-        crate::arch::aarch64::init_virtio_gpu();
-        super::uart_print(b"GPU: READY\n");
+        // TEMPORARILY DISABLED: GPU initialization causes data abort during MMIO probing
+        // TODO: Debug virtio-gpu device access issue (EC=0x25, ESR=0x96000044)
+        super::uart_print(b"GPU: SKIPPED (temporarily disabled)\n");
+        // crate::arch::aarch64::init_virtio_gpu();
+        // super::uart_print(b"GPU: READY\n");
 
         // Initialize graphics subsystem (Phase G.0)
         super::uart_print(b"GRAPHICS: INIT\n");
