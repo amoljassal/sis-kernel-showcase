@@ -80,6 +80,20 @@ impl BlockDevice {
     pub fn capacity_bytes(&self) -> u64 {
         self.capacity_sectors * self.sector_size as u64
     }
+
+    /// Read a block (1024 bytes) from the device
+    /// block_num: block number (0-indexed, 1024-byte blocks)
+    pub fn read(&self, block_num: u64, buf: &mut [u8]) -> Result<()> {
+        // Convert block number to sector number (1 block = 2 sectors for 512-byte sectors)
+        let sector = block_num * 2;
+        self.read_sectors(sector, buf)
+    }
+
+    /// Write a block (1024 bytes) to the device
+    pub fn write(&self, block_num: u64, buf: &[u8]) -> Result<()> {
+        let sector = block_num * 2;
+        self.write_sectors(sector, buf)
+    }
 }
 
 /// Block device operations trait

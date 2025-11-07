@@ -277,10 +277,10 @@ impl Icon {
         // Draw gear teeth (8 lines radiating out)
         for i in 0..8 {
             let angle = (i as f32 / 8.0) * 2.0 * core::f32::consts::PI;
-            let x1 = center_x as i32 + (radius as f32 * angle.cos()) as i32;
-            let y1 = center_y as i32 + (radius as f32 * angle.sin()) as i32;
-            let x2 = center_x as i32 + ((radius + 6) as f32 * angle.cos()) as i32;
-            let y2 = center_y as i32 + ((radius + 6) as f32 * angle.sin()) as i32;
+            let x1 = center_x as i32 + (radius as f32 * libm::cosf(angle)) as i32;
+            let y1 = center_y as i32 + (radius as f32 * libm::sinf(angle)) as i32;
+            let x2 = center_x as i32 + ((radius + 6) as f32 * libm::cosf(angle)) as i32;
+            let y2 = center_y as i32 + ((radius + 6) as f32 * libm::sinf(angle)) as i32;
             ctx.draw_line(x1, y1, x2, y2, self.color);
         }
     }
@@ -539,10 +539,10 @@ impl Icon {
             let angle1 = (i as f32 / 5.0) * 2.0 * core::f32::consts::PI - core::f32::consts::PI / 2.0;
             let angle2 = ((i + 2) as f32 / 5.0) * 2.0 * core::f32::consts::PI - core::f32::consts::PI / 2.0;
 
-            let x1 = center_x as i32 + (radius as f32 * angle1.cos()) as i32;
-            let y1 = center_y as i32 + (radius as f32 * angle1.sin()) as i32;
-            let x2 = center_x as i32 + (radius as f32 * angle2.cos()) as i32;
-            let y2 = center_y as i32 + (radius as f32 * angle2.sin()) as i32;
+            let x1 = center_x as i32 + (radius as f32 * libm::cosf(angle1)) as i32;
+            let y1 = center_y as i32 + (radius as f32 * libm::sinf(angle1)) as i32;
+            let x2 = center_x as i32 + (radius as f32 * libm::cosf(angle2)) as i32;
+            let y2 = center_y as i32 + (radius as f32 * libm::sinf(angle2)) as i32;
 
             ctx.draw_line(x1, y1, x2, y2, self.color);
         }

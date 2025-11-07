@@ -210,7 +210,7 @@ impl AdaptiveVAD {
             100.0
         };
 
-        let snr_db = 10.0 * snr_linear.log10();
+        let snr_db = 10.0 * libm::log10f(snr_linear);
 
         // Adjust energy threshold based on SNR
         if snr_db > self.snr_threshold {
@@ -254,7 +254,7 @@ mod tests {
         // Generate a simple sine wave (voice-like signal)
         let mut signal = vec![0i16; 480];
         for (i, sample) in signal.iter_mut().enumerate() {
-            *sample = (10000.0 * (2.0 * core::f32::consts::PI * 200.0 * i as f32 / 16000.0).sin())
+            *sample = (10000.0 * libm::sinf(2.0 * core::f32::consts::PI * 200.0 * i as f32 / 16000.0))
                 as i16;
         }
 
@@ -269,7 +269,7 @@ mod tests {
         // Voice signal
         let mut voice = vec![0i16; 480];
         for (i, sample) in voice.iter_mut().enumerate() {
-            *sample = (10000.0 * (2.0 * core::f32::consts::PI * 200.0 * i as f32 / 16000.0).sin())
+            *sample = (10000.0 * libm::sinf(2.0 * core::f32::consts::PI * 200.0 * i as f32 / 16000.0))
                 as i16;
         }
 

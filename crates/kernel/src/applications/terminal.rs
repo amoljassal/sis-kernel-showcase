@@ -102,7 +102,7 @@ impl TerminalApp {
     /// Handle key press (check for Enter to execute command)
     fn handle_key(&mut self, event: &InputEvent) -> EventResponse {
         if let InputEvent::KeyPress { key: crate::ui::KeyCode::Enter, .. } = event {
-            let command = self.input_box.text().to_string();
+            let command = String::from(self.input_box.text());
             if !command.is_empty() {
                 self.execute_command(&command);
                 self.input_box.clear();

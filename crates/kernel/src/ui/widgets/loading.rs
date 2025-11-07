@@ -92,10 +92,10 @@ impl Widget for Spinner {
             let rad1 = angle1 * core::f32::consts::PI / 180.0;
             let rad2 = angle2 * core::f32::consts::PI / 180.0;
 
-            let x1 = center_x as i32 + (self.radius as f32 * rad1.cos()) as i32;
-            let y1 = center_y as i32 + (self.radius as f32 * rad1.sin()) as i32;
-            let x2 = center_x as i32 + (self.radius as f32 * rad2.cos()) as i32;
-            let y2 = center_y as i32 + (self.radius as f32 * rad2.sin()) as i32;
+            let x1 = center_x as i32 + (self.radius as f32 * libm::cosf(rad1)) as i32;
+            let y1 = center_y as i32 + (self.radius as f32 * libm::sinf(rad1)) as i32;
+            let x2 = center_x as i32 + (self.radius as f32 * libm::cosf(rad2)) as i32;
+            let y2 = center_y as i32 + (self.radius as f32 * libm::sinf(rad2)) as i32;
 
             // Draw line with gradient effect (fade towards end)
             let alpha = (255.0 * (1.0 - t * 0.5)) as u8;
@@ -272,7 +272,7 @@ impl Widget for DotsIndicator {
             // Calculate scale based on animation
             let phase = (self.frame as f32 / self.animation_speed as f32) * 2.0 * core::f32::consts::PI;
             let offset = (i as f32 / self.dot_count as f32) * 2.0 * core::f32::consts::PI;
-            let scale = 0.5 + 0.5 * (phase + offset).sin();
+            let scale = 0.5 + 0.5 * libm::sinf(phase + offset);
 
             let radius = (self.dot_radius as f32 * scale) as i32;
 
@@ -344,11 +344,11 @@ impl Widget for PulseIndicator {
         let center_y = bounds.y + bounds.height / 2;
 
         // Calculate pulsing scale
-        let scale = 0.6 + 0.4 * self.phase.sin();
+        let scale = 0.6 + 0.4 * libm::sinf(self.phase);
         let current_radius = (self.radius as f32 * scale) as i32;
 
         // Calculate pulsing opacity
-        let alpha = (128.0 + 127.0 * self.phase.cos()) as u8;
+        let alpha = (128.0 + 127.0 * libm::cosf(self.phase)) as u8;
         let color = Color::from_rgba(self.color.r, self.color.g, self.color.b, alpha);
 
         // Draw pulsing circle

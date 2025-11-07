@@ -234,7 +234,7 @@ impl Widget for VoiceUIWidget {
 
             for word in words {
                 let test_line = if line.is_empty() {
-                    word.to_string()
+                    String::from(word)
                 } else {
                     alloc::format!("{} {}", line, word)
                 };
@@ -245,7 +245,7 @@ impl Widget for VoiceUIWidget {
                     // Draw current line and start new one
                     ctx.draw_text(x + 10, y, &line, font, Color::from_rgb(200, 255, 200));
                     y += 20;
-                    line = word.to_string();
+                    line = String::from(word);
                 } else {
                     line = test_line;
                 }

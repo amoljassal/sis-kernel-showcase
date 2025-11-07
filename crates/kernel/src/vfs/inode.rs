@@ -50,6 +50,7 @@ pub struct InodeMeta {
     pub mode: u32,      // Permission bits
     pub uid: u32,
     pub gid: u32,
+    pub nlink: u32,     // Number of hard links
     pub size: u64,
     pub atime: u64,     // Access time
     pub mtime: u64,     // Modification time
@@ -64,6 +65,7 @@ impl InodeMeta {
             mode: itype.to_mode_bits() | (mode & 0o777),
             uid: 0,
             gid: 0,
+            nlink: if matches!(itype, InodeType::Directory) { 2 } else { 1 },
             size: 0,
             atime: 0,
             mtime: 0,
