@@ -97,6 +97,8 @@ pub mod command_predictor;
 pub mod network_predictor;
 pub mod benchmark;
 pub mod compliance;
+// Metrics export for observability (Phase 1.3 - Production Readiness)
+pub mod metrics_export;
 // Test utilities (only compiled for testing)
 #[cfg(test)]
 pub mod test_utils;
