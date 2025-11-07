@@ -82,9 +82,11 @@ pub fn apply_easing(t: f32, easing: &EasingFunction) -> f32 {
 
         EasingFunction::Bounce => {
             if t < 0.5 {
-                8.0 * (1.0 - 2.0 * t).powi(2) * (1.0 - t.abs())
+                let v = 1.0 - 2.0 * t;
+                8.0 * v * v * (1.0 - libm::fabsf(t))
             } else {
-                1.0 - 8.0 * (1.0 - t).powi(2) * (1.0 - (1.0 - t).abs())
+                let v = 1.0 - t;
+                1.0 - 8.0 * v * v * (1.0 - libm::fabsf(1.0 - t))
             }
         }
 
@@ -95,7 +97,7 @@ pub fn apply_easing(t: f32, easing: &EasingFunction) -> f32 {
                 let p = 0.3;
                 let s = p / 4.0;
                 let t = t - 1.0;
-                -(2.0_f32.powf(10.0 * t) * ((t - s) * (2.0 * core::f32::consts::PI / p)).sin())
+                -(libm::powf(2.0, 10.0 * t) * libm::sinf((t - s) * (2.0 * core::f32::consts::PI / p)))
             }
         }
 

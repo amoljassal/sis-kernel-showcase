@@ -120,6 +120,7 @@ impl InodeOps for TmpfsDir {
             mode: meta.mode,
             uid: 0,
             gid: 0,
+            nlink: 2,
             size: (num_children * 64) as u64, // Fake size
             atime: 0,
             mtime: 0,
@@ -202,6 +203,7 @@ impl InodeOps for TmpfsFile {
             mode: meta.mode,
             uid: 0,
             gid: 0,
+            nlink: 1,
             size: meta.content.len() as u64,
             atime: 0,
             mtime: 0,

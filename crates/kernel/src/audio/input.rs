@@ -187,6 +187,6 @@ pub fn generate_mock_audio(output: &mut [i16], frequency: f32, sample_rate: u32)
 
     for (i, sample) in output.iter_mut().enumerate() {
         let t = i as f32;
-        *sample = (amplitude * (angular_freq * t).sin()) as i16;
+        *sample = (amplitude * libm::sinf(angular_freq * t)) as i16;
     }
 }

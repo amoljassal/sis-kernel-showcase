@@ -94,7 +94,7 @@ impl InodeOps for ProcfsRoot {
         Ok(Some(DirEntry {
             ino,
             name: name.to_string(),
-            typ: if offset < 2 { InodeType::Directory } else { InodeType::Regular },
+            itype: if offset < 2 { InodeType::Directory } else { InodeType::Regular },
         }))
     }
 
@@ -322,7 +322,7 @@ impl InodeOps for ProcPidDir {
         Ok(Some(DirEntry {
             ino,
             name: name.to_string(),
-            typ: if offset < 2 { InodeType::Directory } else { InodeType::Regular },
+            itype: if offset < 2 { InodeType::Directory } else { InodeType::Regular },
         }))
     }
 
