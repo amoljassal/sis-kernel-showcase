@@ -73,3 +73,4 @@ ext4-durability-test = [] # Run ext4 durability self-test harness at boot
 [build-dependencies]
 bootloader = { version = "=0.11.11", default-features = false, features = ["bios"] }
 bootloader_api = { version = "=0.11.11" }
+chrono = "0.4"
