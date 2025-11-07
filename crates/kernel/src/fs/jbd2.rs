@@ -210,21 +210,26 @@ pub struct Journal {
 impl Journal {
     #[inline]
     fn crc32c(data: &[u8]) -> u32 {
-        // CRC32C Castagnoli polynomial 0x1EDC6F41 using a small 256-entry table
-        const T: [u32; 256] = {
-            // Table generated offline; truncated here for brevity is not allowed, include full table
-            // For maintainability, we compute on the fly using bitwise method (slower but acceptable for small buffers)
-            [0; 256]
-        };
-        // Fallback bitwise if table is zero-initialized
+        // Build (once) and use 256-entry lookup table for reversed poly 0x82F63B78
+        static INIT: AtomicBool = AtomicBool::new(false);
+        static mut T: [u32; 256] = [0; 256];
+        if !INIT.load(Ordering::Relaxed) {
+            // SAFETY: Best-effort one-time init; benign if run twice
+            for i in 0..256u32 {
+                let mut crc = i;
+                for _ in 0..8 {
+                    if (crc & 1) != 0 { crc = (crc >> 1) ^ 0x82F63B78; } else { crc >>= 1; }
+                }
+                unsafe { T[i as usize] = crc; }
+            }
+            INIT.store(true, Ordering::Relaxed);
+        }
         let mut crc: u32 = 0xFFFF_FFFF;
         for &b in data {
-            let mut byte = b as u32;
-            crc ^= byte;
-            for _ in 0..8 {
-                let mask = (crc & 1).wrapping_neg();
-                crc = (crc >> 1) ^ (0x82F63B78u32 & mask); // reversed Castagnoli poly
-            }
+            let idx = ((crc ^ (b as u32)) & 0xFF) as usize;
+            // SAFETY: T initialized above
+            let tbl = unsafe { T[idx] };
+            crc = tbl ^ (crc >> 8);
         }
         !crc
     }

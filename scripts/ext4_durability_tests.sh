@@ -28,20 +28,59 @@ export EXT4_IMG="$IMG"
 export VIRTBLK=mmio
 export BRINGUP=1
 export SIS_FEATURES="ext4-durability-test"
+export QMP=1
+export QMP_SOCK="/tmp/sis-ext4-qmp.sock"
 
 echo "[*] Booting kernel for phase 1 (will simulate power cut)"
+rm -f "$QMP_SOCK"
 "$SCRIPT_DIR/uefi_run.sh" >/tmp/sis-ext4-run1.log 2>&1 &
 pid=$!
-sleep 5
-echo "[*] Simulating power cut (killing QEMU pid=$pid)"
-kill -TERM "$pid" || true
+
+# Wait for the self-test marker then issue QMP quit
+echo "[*] Waiting for in-kernel self-test marker..."
+for _ in $(seq 1 100); do
+  if grep -q "\[EXT4TEST\] Operations done" /tmp/sis-ext4-run1.log; then
+    break
+  fi
+  sleep 0.2
+done
+
+echo "[*] Simulating power cut via QMP"
+python3 - "$QMP_SOCK" <<'PY'
+import os, sys, socket, json, time
+path = sys.argv[1]
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.connect(path)
+_ = s.recv(4096)  # greeting
+s.sendall(b'{"execute": "qmp_capabilities"}\n')
+time.sleep(0.1)
+s.sendall(b'{"execute": "quit"}\n')
+s.close()
+PY
+
 sleep 1
 
 echo "[*] Booting kernel for phase 2 (journal replay)"
+rm -f "$QMP_SOCK"
 "$SCRIPT_DIR/uefi_run.sh" >/tmp/sis-ext4-run2.log 2>&1 &
 pid2=$!
-sleep 5
-kill -TERM "$pid2" || true
+for _ in $(seq 1 100); do
+  if grep -q "JBD2: Journal replay complete" /tmp/sis-ext4-run2.log; then
+    break
+  fi
+  sleep 0.2
+done
+python3 - "$QMP_SOCK" <<'PY'
+import os, sys, socket, json, time
+path = sys.argv[1]
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.connect(path)
+_ = s.recv(4096)
+s.sendall(b'{"execute": "qmp_capabilities"}\n')
+time.sleep(0.1)
+s.sendall(b'{"execute": "quit"}\n')
+s.close()
+PY
 
 fsck=$(command -v fsck.ext4 || true)
 if [[ -n "$fsck" ]]; then
