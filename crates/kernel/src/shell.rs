@@ -59,6 +59,8 @@ pub struct Shell {
 }
 
 mod shell_metricsctl;
+#[cfg(feature = "chaos")]
+mod shell_chaos;
 mod autoctl_helpers;
 mod memctl_helpers;
 mod schedctl_helpers;
@@ -232,6 +234,8 @@ impl Shell {
                 "nnact" => { self.cmd_nn_act(&parts[1..]); true },
                 "metricsctl" => { self.cmd_metricsctl(&parts[1..]); true },
                 "metrics" => { self.cmd_metrics(&parts[1..]); true },
+                #[cfg(feature = "chaos")]
+                "chaos" => { self.cmd_chaos(&parts[1..]); true },
                 "stresstest" => { self.stresstest_cmd(&parts[1..]); true },
                 "benchmark" => { self.cmd_benchmark(&parts[1..]); true },
                 "fullautodemo" => { self.cmd_fullautodemo(&parts[1..]); true },

@@ -99,6 +99,9 @@ pub mod benchmark;
 pub mod compliance;
 // Metrics export for observability (Phase 1.3 - Production Readiness)
 pub mod metrics_export;
+// Chaos engineering for resilience testing (Phase 3.1 - Production Readiness)
+#[cfg(feature = "chaos")]
+pub mod chaos;
 // Test utilities (only compiled for testing)
 #[cfg(test)]
 pub mod test_utils;
