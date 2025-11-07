@@ -346,6 +346,13 @@ mod bringup {
         crate::arch::aarch64::init_virtio_blk();
         super::uart_print(b"BLOCK: READY\n");
 
+        // Optional ext4 durability self-test
+        #[cfg(feature = "ext4-durability-test")]
+        {
+            super::uart_print(b"FS: EXT4 DURABILITY TEST\n");
+            crate::fs::ext4::durability_selftest();
+        }
+
         // Initialize virtio-net devices (Phase C)
         super::uart_print(b"NET: PROBING VIRTIO-NET DEVICES\n");
         crate::arch::aarch64::init_virtio_net();

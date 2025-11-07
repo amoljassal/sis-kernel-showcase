@@ -158,6 +158,16 @@ if [[ "${QEMU_GPU:-1}" != "0" ]]; then
   QEMU_DEVICES+=( -device virtio-gpu-device )
 fi
 
+# Optional: attach an extra ext4 test image as MMIO virtio-blk if EXT4_IMG is set
+if [[ -n "${EXT4_IMG:-}" ]]; then
+  if [[ ! -f "$EXT4_IMG" ]]; then
+    echo "[!] EXT4_IMG not found: $EXT4_IMG" >&2
+    exit 1
+  fi
+  QEMU_DEVICES+=( -drive if=none,id=ext4img,format=raw,file="${EXT4_IMG}" )
+  QEMU_DEVICES+=( -device virtio-blk-device,drive=ext4img )
+fi
+
 # Add virtio-serial only if VIRTIO=1
 if [[ "${VIRTIO:-}" != "" ]]; then
   QEMU_DEVICES+=( -device virtio-serial-device )

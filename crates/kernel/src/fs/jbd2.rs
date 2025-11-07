@@ -9,6 +9,7 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use spin::Mutex;
+use core::cmp;
 
 /// JBD2 magic numbers
 pub const JBD2_MAGIC_NUMBER: u32 = 0xC03B3998;
@@ -205,6 +206,17 @@ pub struct Journal {
 }
 
 impl Journal {
+    #[inline]
+    fn crc32(data: &[u8]) -> u32 {
+        let mut crc: u32 = 0xFFFF_FFFF;
+        for &b in data {
+            crc ^= b as u32;
+            for _ in 0..8 {
+                if (crc & 1) != 0 { crc = (crc >> 1) ^ 0xEDB8_8320; } else { crc >>= 1; }
+            }
+        }
+        !crc
+    }
     /// Load journal from device
     pub fn load(device: Arc<BlockDevice>, journal_block: u64) -> Result<Arc<Self>> {
         // Read journal superblock (first block of journal)
@@ -286,58 +298,55 @@ impl Journal {
             journal_block = sb.s_first; // Wrap around
         }
 
-        // 1. Write descriptor block
-        let descriptor_block = journal_block;
-        journal_block += 1;
+        // Capacity: number of tags per descriptor
+        let tags_per_desc = (block_size - 12) / 8;
 
-        let mut desc_buf = vec![0u8; block_size];
-        let desc = JournalDescriptor {
-            h_magic: JBD2_MAGIC_NUMBER,
-            h_blocktype: JournalBlockType::Descriptor as u32,
-            h_sequence: txn.tid,
-        };
-
-        // Write descriptor header
-        let desc_bytes = unsafe {
-            core::slice::from_raw_parts(&desc as *const JournalDescriptor as *const u8, 12)
-        };
-        desc_buf[0..12].copy_from_slice(desc_bytes);
-
-        // Write block tags after descriptor header
-        let mut tag_offset = 12;
-        for (i, &block_num) in blocks.iter().enumerate() {
-            if tag_offset + 8 > block_size {
-                break; // No more space for tags (simplified - should chain descriptors)
-            }
-
-            let is_last = i == blocks.len() - 1;
-            let tag = JournalBlockTag {
-                t_blocknr: block_num as u32,
-                t_flags: if is_last { JBD2_FLAG_LAST_TAG } else { 0 },
-            };
-
-            let tag_bytes = unsafe {
-                core::slice::from_raw_parts(&tag as *const JournalBlockTag as *const u8, 8)
-            };
-            desc_buf[tag_offset..tag_offset + 8].copy_from_slice(tag_bytes);
-            tag_offset += 8;
-        }
-
-        self.device.write(self.journal_start + descriptor_block as u64, &desc_buf)?;
-
-        // 2. Write data blocks to journal
-        for &block_num in blocks.iter() {
-            if journal_block >= sb.s_maxlen {
-                journal_block = sb.s_first; // Wrap around
-            }
-
-            // Read metadata block from filesystem
-            let mut block_data = vec![0u8; block_size];
-            self.device.read(block_num, &mut block_data)?;
-
-            // Write to journal
-            self.device.write(self.journal_start + journal_block as u64, &block_data)?;
+        // Chunk blocks into multiple descriptors; interleave descriptor and its data blocks
+        let mut idx = 0;
+        while idx < blocks.len() {
+            if journal_block >= sb.s_maxlen { journal_block = sb.s_first; }
+            let descriptor_block = journal_block;
             journal_block += 1;
+
+            let mut desc_buf = vec![0u8; block_size];
+            let desc = JournalDescriptor {
+                h_magic: JBD2_MAGIC_NUMBER,
+                h_blocktype: JournalBlockType::Descriptor as u32,
+                h_sequence: txn.tid,
+            };
+
+            // Write descriptor header
+            let desc_bytes = unsafe { core::slice::from_raw_parts(&desc as *const JournalDescriptor as *const u8, 12) };
+            desc_buf[0..12].copy_from_slice(desc_bytes);
+
+            // Tags for this chunk
+            let end = core::cmp::min(idx + tags_per_desc, blocks.len());
+            let mut tag_offset = 12;
+            for i in idx..end {
+                let is_last = i + 1 == end;
+                let tag = JournalBlockTag { t_blocknr: blocks[i] as u32, t_flags: if is_last { JBD2_FLAG_LAST_TAG } else { 0 } };
+                let tag_bytes = unsafe { core::slice::from_raw_parts(&tag as *const JournalBlockTag as *const u8, 8) };
+                desc_buf[tag_offset..tag_offset + 8].copy_from_slice(tag_bytes);
+                tag_offset += 8;
+            }
+
+            // Append CRC to end of descriptor block
+            let used = tag_offset;
+            let crc = Self::crc32(&desc_buf[0..used]);
+            let end = block_size - 4;
+            desc_buf[end..end + 4].copy_from_slice(&crc.to_le_bytes());
+            self.device.write(self.journal_start + descriptor_block as u64, &desc_buf)?;
+
+            // Data blocks for this descriptor
+            for i in idx..end {
+                if journal_block >= sb.s_maxlen { journal_block = sb.s_first; }
+                let mut block_data = vec![0u8; block_size];
+                self.device.read(blocks[i], &mut block_data)?;
+                self.device.write(self.journal_start + journal_block as u64, &block_data)?;
+                journal_block += 1;
+            }
+
+            idx = end;
         }
 
         // 3. Write commit block
@@ -355,7 +364,10 @@ impl Journal {
             core::slice::from_raw_parts(&commit as *const JournalCommit as *const u8, 20)
         };
         commit_buf[0..20].copy_from_slice(commit_bytes);
-
+        // Commit checksum over header
+        let ccrc = Self::crc32(&commit_buf[0..20]);
+        let end = block_size - 4;
+        commit_buf[end..end + 4].copy_from_slice(&ccrc.to_le_bytes());
         self.device.write(self.journal_start + commit_block as u64, &commit_buf)?;
 
         // 4. Update journal superblock
@@ -369,6 +381,8 @@ impl Journal {
         sb_write_buf[0..sb_buf.len()].copy_from_slice(sb_buf);
         self.device.write(self.journal_start, &sb_write_buf)?;
 
+        // Ensure journal writes are persisted
+        let _ = self.device.flush();
         drop(sb);
         drop(blocks);
 
@@ -377,7 +391,7 @@ impl Journal {
         // Clear current transaction
         *self.current_transaction.lock() = None;
 
-        crate::debug!("JBD2: Transaction {} committed (desc={}, commit={})", txn.tid, descriptor_block, commit_block);
+        crate::debug!("JBD2: Transaction {} committed (commit={})", txn.tid, commit_block);
         Ok(())
     }
 
@@ -425,6 +439,23 @@ impl Journal {
                     // Read full descriptor block
                     let mut desc_buf = vec![0u8; block_size];
                     self.device.read(self.journal_start + current_block as u64, &mut desc_buf)?;
+
+                    // Verify checksum (trailing 4 bytes)
+                    // First, find used tag length by scanning until LAST_TAG
+                    let mut used = 12;
+                    loop {
+                        if used + 8 > block_size { break; }
+                        let t_flags = u32::from_le_bytes([
+                            desc_buf[used + 4], desc_buf[used + 5], desc_buf[used + 6], desc_buf[used + 7]
+                        ]);
+                        used += 8;
+                        if (t_flags & JBD2_FLAG_LAST_TAG) != 0 { break; }
+                    }
+                    let stored_crc = u32::from_le_bytes([
+                        desc_buf[block_size - 4], desc_buf[block_size - 3], desc_buf[block_size - 2], desc_buf[block_size - 1]
+                    ]);
+                    let calc_crc = Self::crc32(&desc_buf[0..used]);
+                    if calc_crc != stored_crc { crate::warn!("JBD2: descriptor CRC mismatch at {}", current_block); break; }
 
                     // Parse tags (starting at offset 12 after header)
                     let mut tag_offset = 12;
@@ -478,6 +509,14 @@ impl Journal {
                 }
                 2 => {
                     // Commit block - transaction completed successfully
+                    // Verify checksum over commit header
+                    let mut commit_buf = vec![0u8; block_size];
+                    self.device.read(self.journal_start + current_block as u64, &mut commit_buf)?;
+                    let stored = u32::from_le_bytes([
+                        commit_buf[block_size - 4], commit_buf[block_size - 3], commit_buf[block_size - 2], commit_buf[block_size - 1]
+                    ]);
+                    let calc = Self::crc32(&commit_buf[0..20]);
+                    if calc != stored { crate::warn!("JBD2: commit CRC mismatch at {}", current_block); break; }
                     crate::debug!("JBD2: Found commit at block {} (seq={})", current_block, sequence);
                     replayed_txns += 1;
                     current_block += 1;
