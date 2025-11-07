@@ -68,6 +68,7 @@ syscall-verbose = [] # Verbose syscall tracing
 dt-override = []     # Enable DT override + platform banner in bring-up
 graphctl-framed = [] # Use framed control for add-channel/add-operator from shell
 sntp = []            # Minimal SNTP client for best-effort time sync
+ext4-durability-test = [] # Run ext4 durability self-test harness at boot
 
 [build-dependencies]
 bootloader = { version = "=0.11.11", default-features = false, features = ["bios"] }

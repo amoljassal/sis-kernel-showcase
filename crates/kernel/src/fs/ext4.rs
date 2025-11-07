@@ -393,33 +393,6 @@ impl Ext4FileSystem {
         crate::info!("ext4: Valid filesystem (blocks={}, inodes={}, block_size={})",
                      sb.s_blocks_count, sb.s_inodes_count, sb.block_size());
 
-        // Load journal if enabled
-        let journal = if sb.has_journal() {
-            crate::info!("ext4: Journal enabled (inode={})", sb.journal_inum());
-
-            // For MVP, assume journal is at fixed location
-            // In full implementation, would read journal inode to get blocks
-            let journal_block = 1024; // Placeholder
-
-            match Journal::load(device.clone(), journal_block) {
-                Ok(j) => {
-                    // Replay journal for crash recovery
-                    if let Err(e) = j.replay() {
-                        crate::error!("ext4: Journal replay failed: {:?}", e);
-                        return Err(e);
-                    }
-                    Some(j)
-                }
-                Err(e) => {
-                    crate::warn!("ext4: Failed to load journal: {:?}", e);
-                    None
-                }
-            }
-        } else {
-            crate::info!("ext4: Journal not enabled");
-            None
-        };
-
         // Load block group descriptors
         let bg_count = sb.block_groups_count();
         let mut block_groups = Vec::with_capacity(bg_count as usize);
@@ -448,14 +421,50 @@ impl Ext4FileSystem {
 
         crate::info!("ext4: Loaded {} block group descriptors", bg_count);
 
-        let fs = Arc::new(Self {
-            device,
+        // Build filesystem object (journal attached below)
+        let mut fs_tmp = Self {
+            device: device.clone(),
             superblock: Mutex::new(sb),
             block_groups: Mutex::new(block_groups),
-            journal,
-            is_mounted: Mutex::new(true),
-        });
+            journal: None,
+            is_mounted: Mutex::new(false),
+        };
 
+        // Attach journal if enabled and locatable via journal inode
+        {
+            let sbl = fs_tmp.superblock.lock();
+            if sbl.has_journal() {
+                crate::info!("ext4: Journal enabled (inode={})", sbl.journal_inum());
+                let jstart = if sbl.journal_inum() != 0 {
+                    if let Ok(jinode) = fs_tmp.read_inode(sbl.journal_inum()) {
+                        fs_tmp.get_inode_block(&jinode, 0).ok()
+                    } else { None }
+                } else { None };
+                drop(sbl);
+                let journal_block = jstart.unwrap_or(1024);
+                match Journal::load(device.clone(), journal_block) {
+                    Ok(j) => {
+                        if let Err(e) = j.replay() {
+                            crate::error!("ext4: Journal replay failed: {:?}", e);
+                            return Err(e);
+                        }
+                        fs_tmp.journal = Some(j);
+                    }
+                    Err(e) => {
+                        crate::warn!("ext4: Failed to load journal: {:?}", e);
+                        fs_tmp.journal = None;
+                    }
+                }
+            } else {
+                crate::info!("ext4: Journal not enabled");
+            }
+        }
+
+        let fs = Arc::new(fs_tmp);
+        {
+            let mut mounted = fs.is_mounted.lock();
+            *mounted = true;
+        }
         crate::info!("ext4: Mount successful");
         Ok(fs)
     }
@@ -1363,19 +1372,80 @@ impl Ext4FileSystem {
     }
 
     /// Helper: Get physical block number for inode's logical block
-    ///
-    /// Simplified version - assumes direct blocks only (no extents yet)
+    /// Supports extents and falls back to direct blocks.
     fn get_inode_block(&self, inode: &Ext4Inode, logical_block: u64) -> Result<u64> {
-        if logical_block < 12 {
-            // Direct blocks
-            let block = inode.i_block[logical_block as usize] as u64;
-            if block == 0 {
-                return Err(Errno::EINVAL);
+        let lbn = logical_block as u32;
+        if inode.uses_extents() {
+            if let Some(p) = self.lookup_extent(inode, lbn)? { return Ok(p); }
+        }
+        if (lbn as usize) < inode.i_block.len() {
+            let block = inode.i_block[lbn as usize] as u64;
+            if block == 0 { return Err(Errno::ENOENT); }
+            return Ok(block);
+        }
+        Err(Errno::ENOTSUP)
+    }
+
+    /// Look up extent mapping for a logical block; returns physical block or None
+    fn lookup_extent(&self, inode: &Ext4Inode, lbn: u32) -> Result<Option<u64>> {
+        unsafe {
+            let base = inode.i_block.as_ptr() as *const u8;
+            let hdr: Ext4ExtentHeader = core::ptr::read(base as *const Ext4ExtentHeader);
+            if hdr.eh_magic != 0xF30A { return Ok(None); }
+
+            // Helper to scan a leaf extent array at given pointer
+            unsafe fn scan_leaf(ptr: *const u8, entries: u16, lbn: u32) -> Option<u64> {
+                let mut p = ptr;
+                for _ in 0..entries {
+                    let ext: Ext4Extent = core::ptr::read(p as *const Ext4Extent);
+                    let first = ext.ee_block;
+                    let len = ext.ee_len as u32;
+                    if lbn >= first && lbn < first + len {
+                        return Some(ext.start().saturating_add((lbn - first) as u64));
+                    }
+                    p = p.add(core::mem::size_of::<Ext4Extent>());
+                }
+                None
             }
-            Ok(block)
-        } else {
-            // TODO: Handle indirect blocks / extent tree
-            Err(Errno::ENOSYS)
+
+            if hdr.eh_depth == 0 {
+                let leaf_ptr = base.add(core::mem::size_of::<Ext4ExtentHeader>());
+                return Ok(scan_leaf(leaf_ptr, hdr.eh_entries, lbn));
+            }
+
+            // Walk down internal nodes
+            let mut header = hdr;
+            let mut idx_ptr = base.add(core::mem::size_of::<Ext4ExtentHeader>());
+            loop {
+                // Choose last index with ei_block <= lbn
+                let mut chosen: Option<Ext4ExtentIdx> = None;
+                let mut p = idx_ptr;
+                for _ in 0..header.eh_entries {
+                    let ix: Ext4ExtentIdx = core::ptr::read(p as *const Ext4ExtentIdx);
+                    if ix.ei_block <= lbn { chosen = Some(ix); } else { break; }
+                    p = p.add(core::mem::size_of::<Ext4ExtentIdx>());
+                }
+                let ix = match chosen { Some(ix) => ix, None => return Ok(None) };
+
+                let next_block = ix.leaf();
+                // Read next level block
+                let sb = self.superblock.lock();
+                let bsz = sb.block_size() as usize;
+                drop(sb);
+                let mut buf = vec![0u8; bsz];
+                self.device.read(next_block, &mut buf)?;
+
+                let bh: Ext4ExtentHeader = core::ptr::read(buf.as_ptr() as *const Ext4ExtentHeader);
+                if bh.eh_magic != 0xF30A { return Ok(None); }
+                if bh.eh_depth == 0 {
+                    let leaf = unsafe { buf.as_ptr().add(core::mem::size_of::<Ext4ExtentHeader>()) };
+                    return Ok(scan_leaf(leaf, bh.eh_entries, lbn));
+                } else {
+                    header = bh;
+                    idx_ptr = unsafe { buf.as_ptr().add(core::mem::size_of::<Ext4ExtentHeader>()) };
+                    continue;
+                }
+            }
         }
     }
 
@@ -1406,6 +1476,36 @@ impl Ext4FileSystem {
 
         self.device.write(block, &buf)?;
         Ok(())
+    }
+}
+
+#[cfg(feature = "ext4-durability-test")]
+pub fn durability_selftest() {
+    use crate::block;
+    unsafe { crate::uart_print(b"[EXT4TEST] Starting ext4 durability self-test...\n"); }
+    let devs = block::list_block_devices();
+    if devs.len() < 2 {
+        crate::warn!("ext4test: Need a second block device for testing");
+        return;
+    }
+    // Use the second device for test
+    let dev = devs[1].clone();
+    crate::info!("ext4test: Using device {} ({} MB)", dev.name, dev.capacity_bytes()/1024/1024);
+    match Ext4FileSystem::mount(dev.clone()) {
+        Ok(fs) => {
+            // Create and delete a file to exercise journaling
+            let root_ino = 2u32;
+            let _ = fs.create_file(root_ino, "alpha", 0x8000 | 0o644);
+            let _ = fs.create_file(root_ino, "beta", 0x8000 | 0o644);
+            let _ = fs.delete_file(root_ino, "alpha");
+            let _ = fs.sync();
+            unsafe { crate::uart_print(b"[EXT4TEST] Operations done; simulate power cut now\n"); }
+            // Spin so an external script can kill QEMU to simulate power loss
+            for _ in 0..5_000_000 { core::hint::spin_loop(); }
+        }
+        Err(e) => {
+            crate::warn!("ext4test: Mount failed: {:?}", e);
+        }
     }
 }
 
