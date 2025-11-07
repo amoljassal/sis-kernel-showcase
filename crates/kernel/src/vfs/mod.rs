@@ -61,6 +61,7 @@ pub const S_IFMT: u32 = 0o170000;   // File type mask
 pub const S_IFREG: u32 = 0o100000;  // Regular file
 pub const S_IFDIR: u32 = 0o040000;  // Directory
 pub const S_IFCHR: u32 = 0o020000;  // Character device
+pub const S_IFBLK: u32 = 0o060000;  // Block device
 pub const S_IRUSR: u32 = 0o000400;  // Owner read
 pub const S_IWUSR: u32 = 0o000200;  // Owner write
 pub const S_IXUSR: u32 = 0o000100;  // Owner execute

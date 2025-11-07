@@ -28,22 +28,22 @@ impl InodeOps for ProcfsRoot {
         match name {
             "cpuinfo" => Ok(Arc::new(Inode::new(
                 alloc_ino(),
-                InodeType::File,
+                InodeType::Regular,
                 Box::new(CpuInfoFile),
             ))),
             "meminfo" => Ok(Arc::new(Inode::new(
                 alloc_ino(),
-                InodeType::File,
+                InodeType::Regular,
                 Box::new(MemInfoFile),
             ))),
             "uptime" => Ok(Arc::new(Inode::new(
                 alloc_ino(),
-                InodeType::File,
+                InodeType::Regular,
                 Box::new(UptimeFile),
             ))),
             "mounts" => Ok(Arc::new(Inode::new(
                 alloc_ino(),
-                InodeType::File,
+                InodeType::Regular,
                 Box::new(MountsFile),
             ))),
             "self" => {
@@ -94,7 +94,7 @@ impl InodeOps for ProcfsRoot {
         Ok(Some(DirEntry {
             ino,
             name: name.to_string(),
-            typ: if offset < 2 { InodeType::Directory } else { InodeType::File },
+            typ: if offset < 2 { InodeType::Directory } else { InodeType::Regular },
         }))
     }
 
@@ -282,22 +282,22 @@ impl InodeOps for ProcPidDir {
         match name {
             "cmdline" => Ok(Arc::new(Inode::new(
                 alloc_ino(),
-                InodeType::File,
+                InodeType::Regular,
                 Box::new(ProcPidCmdline { pid: self.pid }),
             ))),
             "stat" => Ok(Arc::new(Inode::new(
                 alloc_ino(),
-                InodeType::File,
+                InodeType::Regular,
                 Box::new(ProcPidStat { pid: self.pid }),
             ))),
             "status" => Ok(Arc::new(Inode::new(
                 alloc_ino(),
-                InodeType::File,
+                InodeType::Regular,
                 Box::new(ProcPidStatus { pid: self.pid }),
             ))),
             "maps" => Ok(Arc::new(Inode::new(
                 alloc_ino(),
-                InodeType::File,
+                InodeType::Regular,
                 Box::new(ProcPidMaps { pid: self.pid }),
             ))),
             _ => Err(Errno::ENOENT),
@@ -322,7 +322,7 @@ impl InodeOps for ProcPidDir {
         Ok(Some(DirEntry {
             ino,
             name: name.to_string(),
-            typ: if offset < 2 { InodeType::Directory } else { InodeType::File },
+            typ: if offset < 2 { InodeType::Directory } else { InodeType::Regular },
         }))
     }
 

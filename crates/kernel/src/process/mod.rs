@@ -35,5 +35,5 @@ pub fn set_current_pid(pid: Pid) {
 
 pub fn count_processes() -> usize {
     let table = get_process_table();
-    table.lock().len()
+    table.as_ref().map(|t| t.len()).unwrap_or(0)
 }

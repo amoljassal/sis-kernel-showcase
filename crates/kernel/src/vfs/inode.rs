@@ -26,6 +26,7 @@ pub enum InodeType {
     Regular,
     Directory,
     CharDevice,
+    BlockDevice,
     Symlink,
 }
 
@@ -36,6 +37,7 @@ impl InodeType {
             InodeType::Regular => crate::vfs::S_IFREG,
             InodeType::Directory => crate::vfs::S_IFDIR,
             InodeType::CharDevice => crate::vfs::S_IFCHR,
+            InodeType::BlockDevice => crate::vfs::S_IFBLK,
             InodeType::Symlink => 0o120000,
         }
     }
@@ -101,6 +103,11 @@ pub trait InodeOps: Send + Sync {
     /// Truncate to size
     fn truncate(&self, size: u64) -> Result<(), Errno> {
         let _ = size;
+        Err(Errno::ENOSYS)
+    }
+    /// Unlink (remove) a child entry (for directories)
+    fn unlink(&self, name: &str) -> Result<(), Errno> {
+        let _ = name;
         Err(Errno::ENOSYS)
     }
 }
@@ -173,6 +180,11 @@ impl Inode {
     /// Is directory?
     pub fn is_dir(&self) -> bool {
         self.itype() == InodeType::Directory
+    }
+
+    /// Unlink a child (for directories)
+    pub fn unlink(&self, name: &str) -> Result<(), Errno> {
+        self.ops.unlink(name)
     }
 }
 

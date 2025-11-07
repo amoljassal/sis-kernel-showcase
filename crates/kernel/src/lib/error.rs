@@ -16,6 +16,7 @@ pub enum KernelError {
     BadFileDescriptor,
     BadAddress,
     SecurityViolation,  // Phase D: W^X and security policy violations
+    NotInitialized,     // Component not initialized
 }
 
 #[repr(i32)]
@@ -71,6 +72,7 @@ impl From<KernelError> for Errno {
             KernelError::BadFileDescriptor => Errno::EBADF,
             KernelError::BadAddress => Errno::EFAULT,
             KernelError::SecurityViolation => Errno::EACCES,
+            KernelError::NotInitialized => Errno::EINVAL,
         }
     }
 }

@@ -130,7 +130,7 @@ pub fn path_lookup(root: &Arc<Inode>, path: &str) -> Result<Arc<Inode>, Errno> {
     // Walk each path component
     for component in components {
         // Ensure current is a directory
-        let meta = current.metadata()?;
+        let meta = current.getattr()?;
         if meta.inode_type != InodeType::Directory {
             return Err(Errno::ENOTDIR);
         }

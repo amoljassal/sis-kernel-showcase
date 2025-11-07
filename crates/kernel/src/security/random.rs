@@ -3,7 +3,7 @@
 /// Provides a simple PRNG seeded from timer jitter and system counters.
 /// For MVP, uses a basic LCG (Linear Congruential Generator) with periodic reseeding.
 
-use crate::sync::Mutex;
+use spin::Mutex;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 /// Simple PRNG state using LCG algorithm
