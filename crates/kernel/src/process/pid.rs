@@ -131,6 +131,11 @@ impl PidTable {
     pub fn count(&self) -> usize {
         self.entries.iter().filter(|e| matches!(e, PidEntry::Used(_))).count()
     }
+
+    /// Get number of active processes (alias for count)
+    pub fn len(&self) -> usize {
+        self.count()
+    }
 }
 
 /// Global process table (protected by mutex)

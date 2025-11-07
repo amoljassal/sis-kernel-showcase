@@ -97,7 +97,7 @@ pub fn init_network() -> Result<()> {
     let config = Config::new(hw_addr);
 
     // Create interface
-    let mut iface = Interface::new(config, &mut VirtioNetPhy, Instant::now());
+    let mut iface = Interface::new(config, &mut VirtioNetPhy, Instant::from_millis(0));
 
     // Start with no IP address (will be configured by DHCP)
     iface.update_ip_addrs(|addrs| {
@@ -131,7 +131,8 @@ pub fn network_poll() -> Result<usize> {
 
     match (iface_lock.as_mut(), socket_lock.as_mut()) {
         (Some(iface), Some(sockets)) => {
-            let timestamp = Instant::now();
+            // Get current time in milliseconds (stub for now, should use real timer)
+            let timestamp = Instant::from_millis(crate::timer::get_ticks() / 1000);
             let mut device = VirtioNetPhy;
 
             match iface.poll(timestamp, &mut device, sockets) {

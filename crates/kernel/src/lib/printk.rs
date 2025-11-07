@@ -130,6 +130,22 @@ macro_rules! debug {
     };
 }
 
+#[macro_export]
+macro_rules! trace {
+    ($($arg:tt)*) => {
+        // Trace is same as debug for now
+        $crate::printk!($crate::lib::printk::LogLevel::Debug, $($arg)*)
+    };
+}
+
+#[macro_export]
+macro_rules! log {
+    ($level:expr, $($arg:tt)*) => {
+        // Allow log! macro with explicit level
+        $crate::printk!($level, $($arg)*)
+    };
+}
+
 // Syscall to read dmesg
 pub fn sys_dmesg(buf: *mut u8, count: usize) -> Result<isize, crate::lib::error::Errno> {
     use crate::lib::error::Errno;

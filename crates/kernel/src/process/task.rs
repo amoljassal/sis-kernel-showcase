@@ -15,8 +15,10 @@ pub type Pid = u32;
 /// Process states
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcessState {
-    /// Process is runnable (ready or running)
+    /// Process is currently executing on CPU
     Running,
+    /// Process is ready to run (in runqueue)
+    Ready,
     /// Process is waiting (interruptible)
     Sleeping,
     /// Process has exited but not yet reaped

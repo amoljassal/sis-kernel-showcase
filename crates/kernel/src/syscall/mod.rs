@@ -1275,7 +1275,7 @@ pub fn sys_chdir(pathname: *const u8) -> Result<isize> {
             return Err(Errno::ENOTDIR);
         }
 
-        path.to_string()
+        String::from(path)
     } else {
         // Relative path - resolve against current CWD
         let mut new_path = task.cwd.clone();
@@ -1325,7 +1325,7 @@ fn normalize_path(path: &str) -> String {
 
     // Build normalized path
     if components.is_empty() {
-        "/".to_string()
+        String::from("/")
     } else {
         format!("/{}", components.join("/"))
     }
@@ -1379,7 +1379,7 @@ pub fn sys_ppoll(fds: *mut u8, nfds: usize, timeout: *const u8, sigmask: *const 
                 continue;
             }
 
-            if task.files.get(fd).is_none() {
+            if task.files.get(fd).is_err() {
                 // Invalid FD
                 *revents_ptr = 0x0020; // POLLNVAL
                 ready_count += 1;
