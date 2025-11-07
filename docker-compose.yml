@@ -1,0 +1,81 @@
+# SIS Kernel Docker Compose Configuration
+# Phase 2.2 - Production Readiness Plan
+
+version: '3.8'
+
+services:
+  # Main build and test service
+  sis-kernel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        RUST_NIGHTLY_DATE: "2025-09-08"
+    image: sis-kernel:latest
+    container_name: sis-kernel-build
+    volumes:
+      # Mount test results
+      - ./tests:/workspace/sis-kernel/tests
+      - ./results:/workspace/sis-kernel/results
+      # Cache cargo registry for faster builds
+      - cargo-registry:/home/builder/.cargo/registry
+      - cargo-git:/home/builder/.cargo/git
+    environment:
+      - BRINGUP=1
+      - SIS_FEATURES=llm,crypto-real
+      - LOG_FORMAT=human
+    command: bash -c "cargo +nightly build -p sis_kernel -Z build-std=core,alloc --target aarch64-unknown-none --features llm,crypto-real && ./scripts/uefi_run.sh"
+    stdin_open: true
+    tty: true
+
+  # Test runner service
+  sis-kernel-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sis-kernel:latest
+    container_name: sis-kernel-test
+    volumes:
+      - ./tests:/workspace/sis-kernel/tests
+      - ./results:/workspace/sis-kernel/results
+      - cargo-registry:/home/builder/.cargo/registry
+      - cargo-git:/home/builder/.cargo/git
+    environment:
+      - BRINGUP=1
+      - SIS_FEATURES=llm,crypto-real
+      - LOG_FORMAT=json
+      - TIMEOUT=60
+    command: bash ./scripts/capture_baseline.sh
+    profiles:
+      - test
+
+  # CI simulation service
+  sis-kernel-ci:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sis-kernel:latest
+    container_name: sis-kernel-ci
+    volumes:
+      - ./tests:/workspace/sis-kernel/tests
+      - ./results:/workspace/sis-kernel/results
+      - cargo-registry:/home/builder/.cargo/registry
+      - cargo-git:/home/builder/.cargo/git
+    environment:
+      - BRINGUP=1
+      - SIS_FEATURES=llm,crypto-real
+    command: bash -c "
+      echo '[*] Running CI pipeline...' &&
+      cargo +nightly build -p sis_kernel -Z build-std=core,alloc --target aarch64-unknown-none --features llm,crypto-real &&
+      echo '[*] Build successful' &&
+      ./scripts/capture_baseline.sh &&
+      echo '[*] Baseline captured' &&
+      ./scripts/check_regression.sh &&
+      echo '[*] CI pipeline complete'
+      "
+    profiles:
+      - ci
+
+volumes:
+  cargo-registry:
+  cargo-git:
