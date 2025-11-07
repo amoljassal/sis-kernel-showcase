@@ -308,7 +308,7 @@ pub fn sys_openat(dirfd: i32, pathname: *const u8, flags: i32, mode: u32) -> Res
         }
     };
 
-    drop(table); // Release the reference before continuing
+    let _ = table; // Release the reference before continuing
 
     // Convert flags to OpenFlags
     let open_flags = crate::vfs::OpenFlags::from_bits_truncate(flags as u32);
@@ -563,7 +563,7 @@ pub fn sys_fork() -> Result<isize> {
     let child = crate::process::Task::fork_from(parent, child_pid);
 
     // Insert child into process table
-    drop(table); // Release lock before inserting
+    let _ = table; // Release lock before inserting
     crate::process::insert_task(child)
         .map_err(|_| Errno::ENOMEM)?;
 

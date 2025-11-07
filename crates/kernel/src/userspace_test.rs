@@ -266,7 +266,7 @@ pub fn measure_syscall_overhead() {
 
     unsafe {
         crate::uart_print(b"[PERF] Cycle counter baseline overhead: ");
-        unsafe { print_number(baseline_overhead as usize); }
+        print_number(baseline_overhead as usize);
         crate::uart_print(b" cycles\n");
 
         crate::uart_print(b"[PERF] Measuring minimal syscall path (getpid)\n");
@@ -292,14 +292,14 @@ pub fn measure_syscall_overhead() {
     unsafe {
         crate::uart_print(b"[PERF] Pure syscall overhead analysis:\n");
         crate::uart_print(b"[PERF] - Baseline measurement: ");
-        unsafe { print_number(baseline_overhead as usize); }
+        print_number(baseline_overhead as usize);
         crate::uart_print(b" cycles\n");
         crate::uart_print(b"[PERF] - Syscall path: ");
-        unsafe { print_number(avg as usize); }
+        print_number(avg as usize);
         crate::uart_print(b" cycles\n");
         crate::uart_print(b"[PERF] - Net syscall overhead: ");
         let net = avg.saturating_sub(baseline_overhead);
-        unsafe { print_number(net as usize); }
+        print_number(net as usize);
         crate::uart_print(b" cycles\n\n");
     }
 }

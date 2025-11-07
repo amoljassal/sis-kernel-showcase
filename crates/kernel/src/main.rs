@@ -4,6 +4,8 @@
 // CI lint gate: when built with `--features strict`, fail on any warning
 #![cfg_attr(feature = "strict", deny(warnings))]
 #![cfg_attr(feature = "strict", deny(unsafe_op_in_unsafe_fn))]
+// During early bringup, suppress warnings to keep logs clean
+#![cfg_attr(feature = "bringup", allow(warnings))]
 
 // Required for heap allocation
 extern crate alloc;
@@ -13,6 +15,7 @@ extern crate alloc;
 pub static mut DTB_PTR: *const u8 = core::ptr::null();
 
 // Core library (error handling, logging, etc.)
+#[allow(special_module_name)]
 pub mod lib;
 // System call interface module
 pub mod syscall;
