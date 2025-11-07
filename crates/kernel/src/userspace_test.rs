@@ -266,26 +266,40 @@ pub fn measure_syscall_overhead() {
 
     unsafe {
         crate::uart_print(b"[PERF] Cycle counter baseline overhead: ");
-        crate::syscall::print_cycles(baseline_overhead);
+        unsafe { print_number(baseline_overhead as usize); }
         crate::uart_print(b" cycles\n");
 
         crate::uart_print(b"[PERF] Measuring minimal syscall path (getpid)\n");
     }
 
     // Single call measurement for minimal overhead analysis
-    let (_min, _max, avg) =
-        crate::syscall::run_syscall_microbenchmark(crate::syscall::SyscallNumber::GetPid, 1);
+    // Run one minimal syscall and measure its cost directly
+    let start2 = crate::syscall::read_cycle_counter();
+    {
+        // Prepare frame for getpid
+        let mut frame = crate::syscall::SyscallFrame {
+            gpr: [0; 31],
+            sp_el0: 0,
+            elr_el1: 0,
+            spsr_el1: 0,
+        };
+        frame.gpr[8] = crate::syscall::SyscallNumber::GetPid as u64;
+        let _ = crate::syscall::handle_syscall(&mut frame);
+    }
+    let end2 = crate::syscall::read_cycle_counter();
+    let avg = end2.wrapping_sub(start2);
 
     unsafe {
         crate::uart_print(b"[PERF] Pure syscall overhead analysis:\n");
         crate::uart_print(b"[PERF] - Baseline measurement: ");
-        crate::syscall::print_cycles(baseline_overhead);
+        unsafe { print_number(baseline_overhead as usize); }
         crate::uart_print(b" cycles\n");
         crate::uart_print(b"[PERF] - Syscall path: ");
-        crate::syscall::print_cycles(avg);
+        unsafe { print_number(avg as usize); }
         crate::uart_print(b" cycles\n");
         crate::uart_print(b"[PERF] - Net syscall overhead: ");
-        crate::syscall::print_cycles(avg.saturating_sub(baseline_overhead));
+        let net = avg.saturating_sub(baseline_overhead);
+        unsafe { print_number(net as usize); }
         crate::uart_print(b" cycles\n\n");
     }
 }

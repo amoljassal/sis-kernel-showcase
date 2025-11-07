@@ -260,25 +260,34 @@ impl WindowManager {
 
     /// Handle mouse drag
     pub fn handle_drag(&mut self, x: u32, y: u32) {
-        if let Some(drag) = &self.drag_state {
-            let dx = x.saturating_sub(drag.start_x);
-            let dy = y.saturating_sub(drag.start_y);
+        // Copy drag state fields to avoid immutable borrow during mutation
+        if let Some((win_id, start_x, start_y, win_start_x, win_start_y)) = self
+            .drag_state
+            .as_ref()
+            .map(|d| (d.window_id, d.start_x, d.start_y, d.window_start_x, d.window_start_y))
+        {
+            let dx = x.saturating_sub(start_x);
+            let dy = y.saturating_sub(start_y);
 
-            if let Some(window) = self.get_window_mut(drag.window_id) {
-                let new_x = drag.window_start_x.saturating_add(dx);
-                let new_y = drag.window_start_y.saturating_add(dy);
+            if let Some(window) = self.get_window_mut(win_id) {
+                let new_x = win_start_x.saturating_add(dx);
+                let new_y = win_start_y.saturating_add(dy);
                 window.move_to(new_x, new_y);
             }
         }
 
-        if let Some(resize) = &self.resize_state {
-            let dx = x as i32 - resize.start_x as i32;
-            let dy = y as i32 - resize.start_y as i32;
+        if let Some((win_id, edge, start_x, start_y, start_bounds)) = self
+            .resize_state
+            .as_ref()
+            .map(|r| (r.window_id, r.edge, r.start_x, r.start_y, r.start_bounds))
+        {
+            let dx = x as i32 - start_x as i32;
+            let dy = y as i32 - start_y as i32;
 
-            if let Some(window) = self.get_window_mut(resize.window_id) {
-                let mut new_bounds = resize.start_bounds;
+            if let Some(window) = self.get_window_mut(win_id) {
+                let mut new_bounds = start_bounds;
 
-                match resize.edge {
+                match edge {
                     ResizeEdge::Right => {
                         new_bounds.width = (new_bounds.width as i32 + dx).max(100) as u32;
                     }

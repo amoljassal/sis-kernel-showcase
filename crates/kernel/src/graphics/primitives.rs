@@ -68,12 +68,18 @@ impl DrawContext {
             return;
         }
 
-        let gpu = self.gpu.lock();
-        let fb = gpu.get_framebuffer();
-        let offset = (y * self.width + x) as usize;
+        let mut wrote = false;
+        {
+            let gpu = self.gpu.lock();
+            let fb = gpu.get_framebuffer();
+            let offset = (y * self.width + x) as usize;
 
-        if offset < fb.len() {
-            fb[offset] = color.to_argb();
+            if offset < fb.len() {
+                fb[offset] = color.to_argb();
+                wrote = true;
+            }
+        }
+        if wrote {
             self.mark_dirty(x, y, 1, 1);
         }
     }
@@ -81,17 +87,19 @@ impl DrawContext {
     /// Fill a rectangle with solid color
     pub fn fill_rect(&mut self, rect: Rect, color: Color) {
         let argb = color.to_argb();
-        let gpu = self.gpu.lock();
-        let fb = gpu.get_framebuffer();
+        {
+            let gpu = self.gpu.lock();
+            let fb = gpu.get_framebuffer();
 
-        let x_end = (rect.x + rect.width).min(self.width);
-        let y_end = (rect.y + rect.height).min(self.height);
+            let x_end = (rect.x + rect.width).min(self.width);
+            let y_end = (rect.y + rect.height).min(self.height);
 
-        for y in rect.y..y_end {
-            for x in rect.x..x_end {
-                let offset = (y * self.width + x) as usize;
-                if offset < fb.len() {
-                    fb[offset] = argb;
+            for y in rect.y..y_end {
+                for x in rect.x..x_end {
+                    let offset = (y * self.width + x) as usize;
+                    if offset < fb.len() {
+                        fb[offset] = argb;
+                    }
                 }
             }
         }
@@ -252,25 +260,27 @@ impl DrawContext {
 
     /// Draw a single glyph
     fn draw_glyph(&mut self, x: u32, y: u32, glyph: &super::font::Glyph, color: Color) {
-        let gpu = self.gpu.lock();
-        let fb = gpu.get_framebuffer();
+        {
+            let gpu = self.gpu.lock();
+            let fb = gpu.get_framebuffer();
 
-        for gy in 0..glyph.height {
-            for gx in 0..glyph.width {
-                let px = x + gx + glyph.bearing_x as u32;
-                let py = y + gy + glyph.bearing_y as u32;
+            for gy in 0..glyph.height {
+                for gx in 0..glyph.width {
+                    let px = x + gx + glyph.bearing_x as u32;
+                    let py = y + gy + glyph.bearing_y as u32;
 
-                if px < self.width && py < self.height {
-                    let bitmap_idx = (gy * glyph.width + gx) as usize;
-                    if bitmap_idx < glyph.bitmap.len() {
-                        let alpha = glyph.bitmap[bitmap_idx];
-                        if alpha > 0 {
-                            // Alpha blending
-                            let offset = (py * self.width + px) as usize;
-                            if offset < fb.len() {
-                                let bg = Color::from_argb(fb[offset]);
-                                let blended = Self::blend_alpha(bg, color, alpha);
-                                fb[offset] = blended.to_argb();
+                    if px < self.width && py < self.height {
+                        let bitmap_idx = (gy * glyph.width + gx) as usize;
+                        if bitmap_idx < glyph.bitmap.len() {
+                            let alpha = glyph.bitmap[bitmap_idx];
+                            if alpha > 0 {
+                                // Alpha blending
+                                let offset = (py * self.width + px) as usize;
+                                if offset < fb.len() {
+                                    let bg = Color::from_argb(fb[offset]);
+                                    let blended = Self::blend_alpha(bg, color, alpha);
+                                    fb[offset] = blended.to_argb();
+                                }
                             }
                         }
                     }

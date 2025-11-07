@@ -141,8 +141,10 @@ fn try_parse_gpt(device: &Arc<BlockDevice>, mbr_sector: &[u8]) -> Result<Vec<Par
         core::ptr::read_unaligned(gpt_header_sector.as_ptr() as *const GptHeader)
     };
 
+    let num_entries = header.num_partition_entries;
+    let entries_lba = header.partition_entries_lba;
     crate::info!("GPT: found {} partition entries at LBA {}",
-                 header.num_partition_entries, header.partition_entries_lba);
+                 num_entries, entries_lba);
 
     let mut partitions = Vec::new();
 
@@ -216,9 +218,11 @@ fn parse_mbr(device: &Arc<BlockDevice>, sector: &[u8]) -> Result<Vec<Partition>>
         let partition_num = (i + 1) as u32;
         let name = alloc::format!("{}{}", device.name, partition_num);
 
+        let start = entry.first_lba;
+        let count = entry.sector_count;
+        let ptype = entry.partition_type;
         crate::info!("MBR: partition {} type=0x{:02x} start={} count={}",
-                     partition_num, entry.partition_type,
-                     entry.first_lba, entry.sector_count);
+                     partition_num, ptype, start, count);
 
         partitions.push(Partition {
             name,

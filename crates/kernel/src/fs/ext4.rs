@@ -189,10 +189,9 @@ impl Ext4FileSystem {
 
         // Commit any pending transactions
         if let Some(ref journal) = self.journal {
-            let current = journal.current_transaction.lock();
-            if let Some(ref txn) = *current {
-                drop(current);
-                journal.commit_transaction(txn.clone())?;
+            let txn_opt = { journal.current_transaction.lock().as_ref().cloned() };
+            if let Some(txn) = txn_opt {
+                journal.commit_transaction(txn)?;
             }
         }
 
@@ -287,10 +286,9 @@ impl Ext4FileSystem {
 
         // Commit current transaction if any
         if let Some(ref journal) = self.journal {
-            let current = journal.current_transaction.lock();
-            if let Some(ref txn) = *current {
-                drop(current);
-                journal.commit_transaction(txn.clone())?;
+            let txn_opt = { journal.current_transaction.lock().as_ref().cloned() };
+            if let Some(txn) = txn_opt {
+                journal.commit_transaction(txn)?;
             }
         }
 
