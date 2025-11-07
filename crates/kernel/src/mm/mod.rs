@@ -62,7 +62,7 @@ pub use aslr::{
 ///
 /// Used by DMA devices that need contiguous physical memory
 pub fn alloc_phys_pages(num_pages: usize) -> Option<PhysAddr> {
-    let page = alloc_pages(num_pages)?;
+    let page = alloc_pages(num_pages as u8)?;
     Some(page as u64)
 }
 
@@ -70,5 +70,5 @@ pub fn alloc_phys_pages(num_pages: usize) -> Option<PhysAddr> {
 ///
 /// Assumes direct mapping: phys_addr + KERNEL_BASE = virt_addr
 pub fn phys_to_virt(phys: PhysAddr) -> usize {
-    (phys as usize).wrapping_add(KERNEL_BASE)
+    (phys as usize).wrapping_add(KERNEL_BASE as usize)
 }

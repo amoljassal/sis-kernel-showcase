@@ -795,7 +795,7 @@ pub fn sys_mprotect(addr: *mut u8, len: usize, prot: i32) -> Result<isize> {
     let pid = crate::process::current_pid();
     let table = crate::process::get_process_table();
     let table = table.as_ref().ok_or(Errno::ESRCH)?;
-    let task = table.get(&pid).ok_or(Errno::ESRCH)?;
+    let task = table.get(pid).ok_or(Errno::ESRCH)?;
 
     // Get page table root
     let ttbr0 = task.mm.page_table;
@@ -817,7 +817,7 @@ pub fn sys_getppid() -> Result<isize> {
     let pid = crate::process::current_pid();
     let table = crate::process::get_process_table();
     let table = table.as_ref().ok_or(Errno::ESRCH)?;
-    let task = table.get(&pid).ok_or(Errno::ESRCH)?;
+    let task = table.get(pid).ok_or(Errno::ESRCH)?;
     Ok(task.ppid as isize)
 }
 
@@ -1336,7 +1336,7 @@ pub fn sys_ioctl(fd: i32, cmd: u64, arg: u64) -> Result<isize> {
     let pid = crate::process::current_pid();
     let table = crate::process::get_process_table();
     let table = table.as_ref().ok_or(Errno::ESRCH)?;
-    let task = table.get(&pid).ok_or(Errno::ESRCH)?;
+    let task = table.get(pid).ok_or(Errno::ESRCH)?;
 
     // Get file
     let file = task.files.get(fd)?;
@@ -1361,7 +1361,7 @@ pub fn sys_ppoll(fds: *mut u8, nfds: usize, timeout: *const u8, sigmask: *const 
     let pid = crate::process::current_pid();
     let table = crate::process::get_process_table();
     let table = table.as_ref().ok_or(Errno::ESRCH)?;
-    let task = table.get(&pid).ok_or(Errno::ESRCH)?;
+    let task = table.get(pid).ok_or(Errno::ESRCH)?;
 
     // pollfd structure: fd (4 bytes), events (2 bytes), revents (2 bytes) = 8 bytes
     let mut ready_count = 0;

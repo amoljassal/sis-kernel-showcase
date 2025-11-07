@@ -24,13 +24,13 @@ impl AIDashboardApp {
         layout = layout.with_spacing(10).with_padding(Padding::all(10));
 
         // Add title
-        let title = Label::new("AI Kernel Intelligence Dashboard")
+        let title = Label::new(String::from("AI Kernel Intelligence Dashboard"))
             .with_alignment(TextAlignment::Center)
             .with_color(Color::from_rgb(100, 200, 255));
         layout.add_child(Box::new(title));
 
         // Add subtitle
-        let subtitle = Label::new("Real-time AI decision monitoring and control")
+        let subtitle = Label::new(String::from("Real-time AI decision monitoring and control"))
             .with_alignment(TextAlignment::Center)
             .with_color(Color::from_rgb(150, 150, 150));
         layout.add_child(Box::new(subtitle));

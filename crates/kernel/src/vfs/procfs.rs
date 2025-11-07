@@ -67,7 +67,7 @@ impl InodeOps for ProcfsRoot {
                     // Verify PID exists
                     let table = crate::process::get_process_table();
                     if let Some(ref table) = *table {
-                        if table.get(&pid).is_some() {
+                        if table.get(pid).is_some() {
                             return Ok(Arc::new(Inode::new(
                                 alloc_ino(),
                                 InodeType::Directory,
@@ -493,7 +493,7 @@ impl InodeOps for ProcPidCmdline {
         // Get process name
         let table = crate::process::get_process_table();
         let table = table.as_ref().ok_or(Errno::ESRCH)?;
-        let task = table.get(&self.pid).ok_or(Errno::ESRCH)?;
+        let task = table.get(self.pid).ok_or(Errno::ESRCH)?;
 
         // Format: command\0
         let mut content = task.name.clone();
@@ -552,7 +552,7 @@ impl InodeOps for ProcPidStat {
         // Get process info
         let table = crate::process::get_process_table();
         let table = table.as_ref().ok_or(Errno::ESRCH)?;
-        let task = table.get(&self.pid).ok_or(Errno::ESRCH)?;
+        let task = table.get(self.pid).ok_or(Errno::ESRCH)?;
 
         // Format stat file (simplified for Phase A1)
         let state = match task.state {
@@ -624,7 +624,7 @@ impl InodeOps for ProcPidStatus {
         // Get process info
         let table = crate::process::get_process_table();
         let table = table.as_ref().ok_or(Errno::ESRCH)?;
-        let task = table.get(&self.pid).ok_or(Errno::ESRCH)?;
+        let task = table.get(self.pid).ok_or(Errno::ESRCH)?;
 
         let state = match task.state {
             crate::process::ProcessState::Running => "running",
@@ -702,7 +702,7 @@ impl InodeOps for ProcPidMaps {
         // Get process VMAs
         let table = crate::process::get_process_table();
         let table = table.as_ref().ok_or(Errno::ESRCH)?;
-        let task = table.get(&self.pid).ok_or(Errno::ESRCH)?;
+        let task = table.get(self.pid).ok_or(Errno::ESRCH)?;
 
         // Format maps (Phase A2: simplified, no actual VMA iteration yet)
         // Format: address perms offset dev:inode pathname
