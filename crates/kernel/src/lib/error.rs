@@ -50,6 +50,7 @@ pub enum Errno {
     EPIPE = 32,     // Broken pipe
     ERANGE = 34,    // Math result not representable
     ENOSYS = 38,    // Function not implemented
+    ENAMETOOLONG = 36, // File name too long
     EMSGSIZE = 90,  // Message too long
     ENOTSUP = 95,   // Operation not supported
     EAFNOSUPPORT = 97, // Address family not supported
@@ -114,6 +115,7 @@ impl Errno {
             30 => Errno::EROFS,
             32 => Errno::EPIPE,
             34 => Errno::ERANGE,
+            36 => Errno::ENAMETOOLONG,
             38 => Errno::ENOSYS,
             90 => Errno::EMSGSIZE,
             95 => Errno::ENOTSUP,

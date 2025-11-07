@@ -101,6 +101,7 @@ impl super::Shell {
                 _ => {}
             }
         }
+        let mut buf = [0usize; 8];
         let n1 = crate::trace::metrics_snapshot_ctx_switch(&mut buf);
         unsafe { crate::uart_print(b"[METRICS] ctx_switch_ns:"); }
         for i in 0..n1 { unsafe { crate::uart_print(b" "); } self.print_number_simple(buf[i] as u64); }
@@ -115,4 +116,3 @@ impl super::Shell {
         unsafe { crate::uart_print(b"\n"); }
     }
 }
-

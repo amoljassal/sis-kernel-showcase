@@ -8,7 +8,7 @@ name = "sis_kernel"
 path = "src/main.rs"
 
 [dependencies]
-bootloader_api = { version = "=0.11.11", default-features = false }
+bootloader_api = { version = "0.11.12", default-features = false }
 linked_list_allocator = { version = "0.10.5", default-features = false, features = ["use_spin"] }
 spin = { version = "0.9.8", default-features = false, features = ["spin_mutex", "once", "rwlock"] }
 lazy_static = { version = "1.4.0", default-features = false, features = ["spin_no_std"] }
@@ -73,6 +73,6 @@ chaos = []           # Chaos engineering for failure injection testing (producti
 mock-devices = []    # Mock device drivers for isolated testing (production readiness)
 
 [build-dependencies]
-bootloader = { version = "=0.11.11", default-features = false, features = ["bios"] }
-bootloader_api = { version = "=0.11.11" }
+bootloader = { version = "0.11.12", default-features = false, features = ["bios"] }
+bootloader_api = { version = "0.11.12" }
 chrono = "0.4"
