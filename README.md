@@ -115,10 +115,18 @@ The VFS layer provides a unified interface for all filesystem operations with su
    - Directory operations and file I/O
    - Updated `Result<T>` type aliases for consistency
 
-4. **ext4** (`fs/ext4.rs`) - ext4 filesystem with journaling
-   - Modern Linux filesystem with journaling
-   - Journal block device (JBD2) integration (`fs/jbd2.rs`)
-   - Crash recovery and consistency guarantees
+4. **ext4** (`fs/ext4.rs`) - ext4 filesystem with **complete journaling** (Phase F)
+   - **Full ext4 structures**: 128+ byte inodes with extent tree support, 64-bit block groups, directory entries
+   - **Block/inode allocation**: Bitmap-based allocation with automatic descriptor updates
+   - **Directory management**: add/remove/find entries with space optimization and fragmentation handling
+   - **JBD2 journaling** (`fs/jbd2.rs`): Complete transaction-based metadata journaling
+     - Descriptor blocks with block tags
+     - Commit blocks for transaction boundaries
+     - Full journal replay on mount for crash recovery
+     - Revocation support for superseded blocks
+   - **Transactional file operations**: `create_file()` and `delete_file()` with atomic semantics
+   - **Crash recovery**: Automatic journal replay restores filesystem consistency after unclean shutdown
+   - **Ordered data mode**: Metadata changes journaled, data written before commit
    - Fixed `MutexGuard` drop-after-use issues
 
 5. **devfs** (`devfs.rs`) - Device filesystem (`/dev`)

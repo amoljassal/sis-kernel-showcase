@@ -270,21 +270,114 @@ impl Journal {
 
         crate::info!("JBD2: Committing transaction {} ({} blocks)", txn.tid, num_blocks);
 
-        // For MVP: Just ensure data is flushed to disk
-        // In full implementation, would write to journal first, then checkpoint
+        if num_blocks == 0 {
+            // Empty transaction, just mark as committed
+            txn.set_state(TransactionState::Committed);
+            *self.current_transaction.lock() = None;
+            return Ok(());
+        }
 
-        // TODO: Write descriptor blocks
-        // TODO: Write data blocks to journal
-        // TODO: Write commit block
-        // TODO: Wait for I/O completion
-        // TODO: Checkpoint (write to final locations)
+        let mut sb = self.superblock.lock();
+        let block_size = sb.s_blocksize as usize;
+
+        // Find next free journal block
+        let mut journal_block = sb.s_start;
+        if journal_block >= sb.s_maxlen {
+            journal_block = sb.s_first; // Wrap around
+        }
+
+        // 1. Write descriptor block
+        let descriptor_block = journal_block;
+        journal_block += 1;
+
+        let mut desc_buf = vec![0u8; block_size];
+        let desc = JournalDescriptor {
+            h_magic: JBD2_MAGIC_NUMBER,
+            h_blocktype: JournalBlockType::Descriptor as u32,
+            h_sequence: txn.tid,
+        };
+
+        // Write descriptor header
+        let desc_bytes = unsafe {
+            core::slice::from_raw_parts(&desc as *const JournalDescriptor as *const u8, 12)
+        };
+        desc_buf[0..12].copy_from_slice(desc_bytes);
+
+        // Write block tags after descriptor header
+        let mut tag_offset = 12;
+        for (i, &block_num) in blocks.iter().enumerate() {
+            if tag_offset + 8 > block_size {
+                break; // No more space for tags (simplified - should chain descriptors)
+            }
+
+            let is_last = i == blocks.len() - 1;
+            let tag = JournalBlockTag {
+                t_blocknr: block_num as u32,
+                t_flags: if is_last { JBD2_FLAG_LAST_TAG } else { 0 },
+            };
+
+            let tag_bytes = unsafe {
+                core::slice::from_raw_parts(&tag as *const JournalBlockTag as *const u8, 8)
+            };
+            desc_buf[tag_offset..tag_offset + 8].copy_from_slice(tag_bytes);
+            tag_offset += 8;
+        }
+
+        self.device.write(self.journal_start + descriptor_block as u64, &desc_buf)?;
+
+        // 2. Write data blocks to journal
+        for &block_num in blocks.iter() {
+            if journal_block >= sb.s_maxlen {
+                journal_block = sb.s_first; // Wrap around
+            }
+
+            // Read metadata block from filesystem
+            let mut block_data = vec![0u8; block_size];
+            self.device.read(block_num, &mut block_data)?;
+
+            // Write to journal
+            self.device.write(self.journal_start + journal_block as u64, &block_data)?;
+            journal_block += 1;
+        }
+
+        // 3. Write commit block
+        let commit_block = journal_block;
+        let mut commit_buf = vec![0u8; block_size];
+        let commit = JournalCommit {
+            h_magic: JBD2_MAGIC_NUMBER,
+            h_blocktype: JournalBlockType::Commit as u32,
+            h_sequence: txn.tid,
+            h_commit_sec: 0,   // Would use real timestamp
+            h_commit_nsec: 0,
+        };
+
+        let commit_bytes = unsafe {
+            core::slice::from_raw_parts(&commit as *const JournalCommit as *const u8, 20)
+        };
+        commit_buf[0..20].copy_from_slice(commit_bytes);
+
+        self.device.write(self.journal_start + commit_block as u64, &commit_buf)?;
+
+        // 4. Update journal superblock
+        sb.s_start = commit_block + 1;
+        sb.s_sequence = txn.tid + 1;
+
+        let sb_buf = unsafe {
+            core::slice::from_raw_parts(&*sb as *const JournalSuperblock as *const u8, core::mem::size_of::<JournalSuperblock>())
+        };
+        let mut sb_write_buf = vec![0u8; block_size];
+        sb_write_buf[0..sb_buf.len()].copy_from_slice(sb_buf);
+        self.device.write(self.journal_start, &sb_write_buf)?;
+
+        drop(sb);
+        drop(blocks);
 
         txn.set_state(TransactionState::Committed);
 
         // Clear current transaction
         *self.current_transaction.lock() = None;
 
-        crate::debug!("JBD2: Transaction {} committed", txn.tid);
+        crate::debug!("JBD2: Transaction {} committed (desc={}, commit={})", txn.tid, descriptor_block, commit_block);
         Ok(())
     }
 
@@ -302,11 +395,14 @@ impl Journal {
             return Ok(());
         }
 
-        // MVP: Simple replay - just scan journal
-        // Full implementation would parse descriptors and replay blocks
-
-        let mut replayed = 0;
+        // Full journal replay: parse descriptors and replay metadata blocks
+        let block_size = sb.s_blocksize as usize;
+        let mut replayed_txns = 0;
+        let mut replayed_blocks = 0;
         let mut current_block = start_block;
+
+        // Revoke list (blocks that should not be replayed)
+        let mut revoked: Vec<u64> = Vec::new();
 
         while current_block < start_block + max_len {
             // Read block header
@@ -315,6 +411,7 @@ impl Journal {
 
             let magic = u32::from_le_bytes([header_buf[0], header_buf[1], header_buf[2], header_buf[3]]);
             let blocktype = u32::from_le_bytes([header_buf[4], header_buf[5], header_buf[6], header_buf[7]]);
+            let sequence = u32::from_le_bytes([header_buf[8], header_buf[9], header_buf[10], header_buf[11]]);
 
             if magic != JBD2_MAGIC_NUMBER {
                 break; // End of valid journal entries
@@ -322,31 +419,130 @@ impl Journal {
 
             match blocktype {
                 1 => {
-                    // Descriptor block
-                    crate::debug!("JBD2: Found descriptor at block {}", current_block);
-                    // TODO: Parse and replay metadata blocks
-                    replayed += 1;
+                    // Descriptor block - parse tags and replay
+                    crate::debug!("JBD2: Replaying descriptor at block {} (seq={})", current_block, sequence);
+
+                    // Read full descriptor block
+                    let mut desc_buf = vec![0u8; block_size];
+                    self.device.read(self.journal_start + current_block as u64, &mut desc_buf)?;
+
+                    // Parse tags (starting at offset 12 after header)
+                    let mut tag_offset = 12;
+                    let mut journal_data_block = current_block + 1;
+
+                    loop {
+                        if tag_offset + 8 > block_size {
+                            break;
+                        }
+
+                        // Parse tag
+                        let tag_blocknr = u32::from_le_bytes([
+                            desc_buf[tag_offset],
+                            desc_buf[tag_offset + 1],
+                            desc_buf[tag_offset + 2],
+                            desc_buf[tag_offset + 3],
+                        ]) as u64;
+
+                        let tag_flags = u32::from_le_bytes([
+                            desc_buf[tag_offset + 4],
+                            desc_buf[tag_offset + 5],
+                            desc_buf[tag_offset + 6],
+                            desc_buf[tag_offset + 7],
+                        ]);
+
+                        // Check if block is revoked
+                        if !revoked.contains(&tag_blocknr) {
+                            // Read data block from journal
+                            let mut data_buf = vec![0u8; block_size];
+                            self.device.read(self.journal_start + journal_data_block as u64, &mut data_buf)?;
+
+                            // Write to final filesystem location
+                            self.device.write(tag_blocknr, &data_buf)?;
+
+                            replayed_blocks += 1;
+                            crate::debug!("JBD2: Replayed block {} -> {}", journal_data_block, tag_blocknr);
+                        } else {
+                            crate::debug!("JBD2: Skipped revoked block {}", tag_blocknr);
+                        }
+
+                        journal_data_block += 1;
+                        tag_offset += 8;
+
+                        // Check for last tag
+                        if (tag_flags & JBD2_FLAG_LAST_TAG) != 0 {
+                            break;
+                        }
+                    }
+
+                    current_block = journal_data_block;
                 }
                 2 => {
-                    // Commit block
-                    crate::debug!("JBD2: Found commit at block {}", current_block);
-                    // Transaction completed, continue
+                    // Commit block - transaction completed successfully
+                    crate::debug!("JBD2: Found commit at block {} (seq={})", current_block, sequence);
+                    replayed_txns += 1;
+                    current_block += 1;
                 }
                 5 => {
-                    // Revoke block
-                    crate::debug!("JBD2: Found revoke at block {}", current_block);
-                    // TODO: Process revocations
+                    // Revoke block - add blocks to revoke list
+                    crate::debug!("JBD2: Processing revoke block at {}", current_block);
+
+                    let mut revoke_buf = vec![0u8; block_size];
+                    self.device.read(self.journal_start + current_block as u64, &mut revoke_buf)?;
+
+                    // Parse revoke count (at offset 12)
+                    let r_count = u32::from_le_bytes([
+                        revoke_buf[12],
+                        revoke_buf[13],
+                        revoke_buf[14],
+                        revoke_buf[15],
+                    ]);
+
+                    // Parse revoked block numbers (starting at offset 16)
+                    let mut offset = 16;
+                    for _ in 0..r_count {
+                        if offset + 8 > block_size {
+                            break;
+                        }
+
+                        let revoked_block = u64::from_le_bytes([
+                            revoke_buf[offset],
+                            revoke_buf[offset + 1],
+                            revoke_buf[offset + 2],
+                            revoke_buf[offset + 3],
+                            revoke_buf[offset + 4],
+                            revoke_buf[offset + 5],
+                            revoke_buf[offset + 6],
+                            revoke_buf[offset + 7],
+                        ]);
+
+                        revoked.push(revoked_block);
+                        offset += 8;
+                    }
+
+                    crate::debug!("JBD2: Added {} blocks to revoke list", r_count);
+                    current_block += 1;
                 }
                 _ => {
                     crate::warn!("JBD2: Unknown block type {} at block {}", blocktype, current_block);
                     break;
                 }
             }
-
-            current_block += 1;
         }
 
-        crate::info!("JBD2: Journal replay complete ({} transactions replayed)", replayed);
+        // Clear journal after successful replay
+        drop(sb);
+        let mut sb = self.superblock.lock();
+        sb.s_start = 0;
+        sb.s_sequence_start = sb.s_sequence + 1;
+
+        let sb_buf = unsafe {
+            core::slice::from_raw_parts(&*sb as *const JournalSuperblock as *const u8, core::mem::size_of::<JournalSuperblock>())
+        };
+        let mut sb_write_buf = vec![0u8; block_size];
+        sb_write_buf[0..sb_buf.len()].copy_from_slice(sb_buf);
+        self.device.write(self.journal_start, &sb_write_buf)?;
+
+        crate::info!("JBD2: Journal replay complete ({} transactions, {} blocks replayed)", replayed_txns, replayed_blocks);
         Ok(())
     }
 
