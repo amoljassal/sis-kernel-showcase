@@ -5,7 +5,7 @@
 #![cfg_attr(feature = "strict", deny(warnings))]
 #![cfg_attr(feature = "strict", deny(unsafe_op_in_unsafe_fn))]
 // During early bringup, suppress warnings to keep logs clean
-#![cfg_attr(feature = "bringup", allow(warnings))]
+#![cfg_attr(all(feature = "bringup", not(feature = "strict")), allow(warnings))]
 
 // Required for heap allocation
 extern crate alloc;
@@ -605,7 +605,40 @@ mod bringup {
         crate::autonomy::AUTONOMY_READY.store(true, core::sync::atomic::Ordering::Release);
         super::uart_print(b"AUTONOMY: set_ready complete\n");
 
-        // 11) Launch interactive shell
+        // 11) Optionally auto-enable autonomy (timer ticks) during bringup
+        #[cfg(all(target_arch = "aarch64", feature = "bringup"))]
+        {
+            // Enable autonomous control and arm EL1 physical timer similar to `autoctl on`
+            crate::autonomy::AUTONOMOUS_CONTROL.enable();
+            unsafe {
+                // Disable timer first and clear any pending ISTATUS
+                let ctl_off: u64 = 0;
+                core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl_off);
+                core::arch::asm!("dsb sy; isb");
+                let clear_val: u64 = 1;
+                core::arch::asm!("msr cntp_tval_el0, {x}", x = in(reg) clear_val);
+                core::arch::asm!("isb");
+
+                // Compute absolute compare value: now + cycles (default decision interval)
+                let mut frq: u64; core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
+                let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL
+                    .decision_interval_ms
+                    .load(core::sync::atomic::Ordering::Relaxed)
+                    .clamp(100, 60_000);
+                let cycles = if frq > 0 { (frq / 1000).saturating_mul(interval_ms) } else { (62_500u64).saturating_mul(interval_ms) };
+                let mut now: u64; core::arch::asm!("mrs {x}, cntpct_el0", x = out(reg) now);
+                let next = now.saturating_add(cycles);
+
+                core::arch::asm!("msr cntp_cval_el0, {x}", x = in(reg) next);
+                core::arch::asm!("isb");
+                let ctl_on: u64 = 1; // ENABLE=1, IMASK=0
+                core::arch::asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl_on);
+                core::arch::asm!("isb");
+                super::uart_print(b"[AUTOCTL] Autonomous mode ENABLED at boot (bringup)\n");
+            }
+        }
+
+        // 12) Launch interactive shell
         super::uart_print(b"LAUNCHING SHELL\n");
         super::uart_print(b"[MAIN] STARTING FULL SHELL\n");
 
