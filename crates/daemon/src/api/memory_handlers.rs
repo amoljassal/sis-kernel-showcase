@@ -2,7 +2,7 @@
 //!
 //! These endpoints wrap `memctl` shell commands for memory approval management
 
-use crate::qemu::{QemuSupervisor, ShellCommandRequest};
+use crate::qemu::QemuSupervisor;
 use axum::{
     extract::{Query, State},
     http::StatusCode,

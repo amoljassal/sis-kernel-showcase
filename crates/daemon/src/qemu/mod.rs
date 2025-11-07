@@ -10,9 +10,7 @@ pub mod shell_executor;
 pub mod supervisor;
 pub mod types;
 
-pub use live::{spawn_qemu, LiveProcess};
 pub use replay::{ReplayManager, ReplaySpeed, ReplayState, ReplayStatus, ReplayTransport};
 pub use shell::{SelfCheckResponse, ShellCommandRequest, ShellCommandResponse, TestResultEntry};
-pub use shell_executor::ShellExecutor;
 pub use supervisor::{QemuEvent, QemuSupervisor};
-pub use types::{QemuConfig, QemuMode, QemuState, QemuStatus};
+pub use types::{QemuConfig, QemuState, QemuStatus};

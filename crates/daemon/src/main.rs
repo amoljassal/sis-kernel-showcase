@@ -19,7 +19,7 @@ mod tracing_layer;
 use anyhow::Result;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tracing::{info, Level};
+use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main]

@@ -2,15 +2,13 @@
 //!
 //! Wraps `graphctl` shell commands with REST API.
 
-use super::handlers::{exec_and_parse, ErrorResponse};
+use super::handlers::exec_and_parse;
 use crate::qemu::supervisor::{
-    GraphChannel as EventGraphChannel, GraphOperator as EventGraphOperator,
-    GraphOperatorStats, GraphStateData,
+    GraphChannel as EventGraphChannel, GraphOperator as EventGraphOperator, GraphStateData,
 };
 use crate::qemu::{QemuEvent, QemuSupervisor, ReplayManager};
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };

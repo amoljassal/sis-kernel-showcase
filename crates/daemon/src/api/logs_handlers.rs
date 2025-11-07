@@ -2,7 +2,6 @@
 //!
 //! Provides log tailing, run history, and troubleshooting tools.
 
-use super::handlers::ErrorResponse;
 use crate::qemu::{QemuSupervisor, ReplayManager};
 use axum::{
     extract::{Path, Query, State},

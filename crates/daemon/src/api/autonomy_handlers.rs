@@ -2,7 +2,7 @@
 //!
 //! These endpoints wrap `autoctl` shell commands for autonomy management
 
-use crate::qemu::{QemuSupervisor, ShellCommandRequest};
+use crate::qemu::QemuSupervisor;
 use axum::{
     extract::{Query, State},
     http::StatusCode,

@@ -1,7 +1,6 @@
 //! API middleware
 
 use axum::{
-    body::Body,
     extract::Request,
     http::{header, HeaderValue},
     middleware::Next,

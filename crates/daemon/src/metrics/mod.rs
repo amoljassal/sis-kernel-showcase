@@ -9,6 +9,5 @@ pub mod series;
 pub mod store;
 
 pub use lttb::downsample_lttb;
-pub use parser::MetricParser;
-pub use series::{MetricPoint, MetricSeries, SeriesStats};
+pub use series::{MetricPoint, SeriesStats};
 pub use store::{MetricsConfig, MetricsStore};

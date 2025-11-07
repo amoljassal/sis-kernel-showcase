@@ -4,10 +4,10 @@
 //! Useful for testing, demos, and development without running actual QEMU.
 
 use super::supervisor::QemuEvent;
-use crate::parser::{LineParser, ParsedEvent};
+use crate::parser::LineParser;
 use anyhow::{Context, Result};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs;
