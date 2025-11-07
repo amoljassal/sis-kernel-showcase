@@ -511,6 +511,7 @@ impl InodeOps for Ext2InodeOps {
             mode: inode.i_mode as u32,
             uid: inode.i_uid as u32,
             gid: inode.i_gid as u32,
+            nlink: inode.i_links_count as u32,
             size: inode.i_size as u64,
             atime: inode.i_atime as u64,
             mtime: inode.i_mtime as u64,

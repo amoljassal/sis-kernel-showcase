@@ -87,6 +87,7 @@ impl InodeOps for PtsfsRoot {
             mode: S_IFDIR | 0o755,
             uid: 0,
             gid: 0,
+            nlink: 2,
             size: 0,
             atime: 0,
             mtime: 0,
@@ -142,6 +143,7 @@ impl InodeOps for PtsDevice {
             mode: S_IFCHR | 0o620, // crw--w----
             uid: 0,
             gid: 0,
+            nlink: 1,
             size: 0,
             atime: 0,
             mtime: 0,

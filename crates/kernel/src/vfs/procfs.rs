@@ -18,9 +18,15 @@ impl InodeOps for ProcfsRoot {
     fn getattr(&self) -> Result<super::inode::InodeMeta> {
         Ok(super::inode::InodeMeta {
             ino: 1,
-            size: 0,
+            itype: InodeType::Directory,
             mode: crate::vfs::S_IFDIR | 0o555,
+            uid: 0,
+            gid: 0,
             nlink: 2,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
         })
     }
 
