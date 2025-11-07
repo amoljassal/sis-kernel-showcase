@@ -120,9 +120,15 @@ impl InodeOps for CpuInfoFile {
     fn getattr(&self) -> Result<super::inode::InodeMeta> {
         Ok(super::inode::InodeMeta {
             ino: 2,
-            size: 0,
+            itype: InodeType::Regular,
             mode: crate::vfs::S_IFREG | 0o444,
+            uid: 0,
+            gid: 0,
             nlink: 1,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
         })
     }
 
@@ -162,9 +168,15 @@ impl InodeOps for MemInfoFile {
     fn getattr(&self) -> Result<super::inode::InodeMeta> {
         Ok(super::inode::InodeMeta {
             ino: 3,
-            size: 0,
+            itype: InodeType::Regular,
             mode: crate::vfs::S_IFREG | 0o444,
+            uid: 0,
+            gid: 0,
             nlink: 1,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
         })
     }
 
@@ -208,9 +220,15 @@ impl InodeOps for UptimeFile {
     fn getattr(&self) -> Result<super::inode::InodeMeta> {
         Ok(super::inode::InodeMeta {
             ino: 4,
-            size: 0,
+            itype: InodeType::Regular,
             mode: crate::vfs::S_IFREG | 0o444,
+            uid: 0,
+            gid: 0,
             nlink: 1,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
         })
     }
 
@@ -242,9 +260,15 @@ impl InodeOps for MountsFile {
     fn getattr(&self) -> Result<super::inode::InodeMeta> {
         Ok(super::inode::InodeMeta {
             ino: 5,
-            size: 0,
+            itype: InodeType::Regular,
             mode: crate::vfs::S_IFREG | 0o444,
+            uid: 0,
+            gid: 0,
             nlink: 1,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
         })
     }
 
@@ -278,9 +302,15 @@ impl InodeOps for ProcPidDir {
     fn getattr(&self) -> Result<super::inode::InodeMeta> {
         Ok(super::inode::InodeMeta {
             ino: 100 + self.pid as u64,
-            size: 0,
+            itype: InodeType::Directory,
             mode: crate::vfs::S_IFDIR | 0o555,
+            uid: 0,
+            gid: 0,
             nlink: 2,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
         })
     }
 
@@ -350,9 +380,15 @@ impl InodeOps for ProcPidCmdline {
     fn getattr(&self) -> Result<super::inode::InodeMeta> {
         Ok(super::inode::InodeMeta {
             ino: 200 + self.pid as u64,
-            size: 0,
+            itype: InodeType::Regular,
             mode: crate::vfs::S_IFREG | 0o444,
+            uid: 0,
+            gid: 0,
             nlink: 1,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
         })
     }
 
@@ -391,9 +427,15 @@ impl InodeOps for ProcPidStat {
     fn getattr(&self) -> Result<super::inode::InodeMeta> {
         Ok(super::inode::InodeMeta {
             ino: 300 + self.pid as u64,
-            size: 0,
+            itype: InodeType::Regular,
             mode: crate::vfs::S_IFREG | 0o444,
+            uid: 0,
+            gid: 0,
             nlink: 1,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
         })
     }
 
@@ -445,9 +487,15 @@ impl InodeOps for ProcPidStatus {
     fn getattr(&self) -> Result<super::inode::InodeMeta> {
         Ok(super::inode::InodeMeta {
             ino: 400 + self.pid as u64,
-            size: 0,
+            itype: InodeType::Regular,
             mode: crate::vfs::S_IFREG | 0o444,
+            uid: 0,
+            gid: 0,
             nlink: 1,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
         })
     }
 
@@ -505,9 +553,15 @@ impl InodeOps for ProcPidMaps {
     fn getattr(&self) -> Result<super::inode::InodeMeta> {
         Ok(super::inode::InodeMeta {
             ino: 500 + self.pid as u64,
-            size: 0,
+            itype: InodeType::Regular,
             mode: crate::vfs::S_IFREG | 0o444,
+            uid: 0,
+            gid: 0,
             nlink: 1,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
         })
     }
 
