@@ -6,6 +6,7 @@
 use crate::lib::error::{Result, Errno};
 use crate::mm;
 use core::ptr;
+use core::sync::atomic::{compiler_fence, Ordering};
 
 /// Virtqueue descriptor flags
 pub const VIRTQ_DESC_F_NEXT: u16 = 1;     // Descriptor continues via next field
@@ -38,6 +39,8 @@ pub struct VirtQueue {
     avail_base: u64,
     /// Used ring base address
     used_base: u64,
+    /// Legacy contiguous region base (if allocated that way)
+    region_base: u64,
     /// Next available descriptor index
     next_desc: u16,
     /// Last seen used index
@@ -101,6 +104,58 @@ impl VirtQueue {
             desc_table,
             avail_base: avail_phys,
             used_base: used_phys,
+            region_base: 0,
+            next_desc: 0,
+            last_used_idx: 0,
+            avail_idx_shadow: 0,
+            free_list,
+        })
+    }
+
+    /// Create a legacy (0.9) virtqueue: a single contiguous region holding
+    /// descriptor table, available ring and used ring. Used with MMIO version=1.
+    pub fn new_contiguous(index: u16, size: u16) -> Result<Self> {
+        if !size.is_power_of_two() || size > 32768 {
+            return Err(Errno::EINVAL);
+        }
+
+        let desc_size = size as usize * core::mem::size_of::<VirtqDesc>();
+        let avail_size = 6 + 2 * size as usize; // includes used_event
+        let used_size = 6 + 8 * size as usize;  // excludes avail_event (not negotiated)
+
+        // Place used ring at 4096-aligned offset after avail to satisfy legacy QueueAlign
+        let mut offset: usize = 0;
+        let desc_off = offset; offset += desc_size;
+        // Align avail to 2 bytes (already true), keep simple
+        let avail_off = offset; offset += avail_size;
+        // Align to 4096 for used ring
+        let used_off = (offset + 4095) & !4095usize; offset = used_off + used_size;
+        let total = offset;
+
+        // Allocate region as 2^order pages
+        let pages = (total + 4095) / 4096;
+        let mut order: u8 = 0; while (1usize << order) < pages { order += 1; }
+        let region_pa = mm::alloc_pages(order).ok_or(Errno::ENOMEM)?;
+        let region_va = region_pa as usize as *mut u8;
+
+        unsafe {
+            core::ptr::write_bytes(region_va, 0, (1usize << order) * 4096);
+        }
+
+        let desc_table = unsafe { region_va.add(desc_off) } as *mut VirtqDesc;
+        let avail_base = region_pa + (avail_off as u64);
+        let used_base = region_pa + (used_off as u64);
+
+        // Initialize free descriptor list
+        let free_list: alloc::vec::Vec<u16> = (0..size).collect();
+
+        Ok(Self {
+            index,
+            size,
+            desc_table,
+            avail_base,
+            used_base,
+            region_base: region_pa,
             next_desc: 0,
             last_used_idx: 0,
             avail_idx_shadow: 0,
@@ -127,6 +182,9 @@ impl VirtQueue {
     pub fn get_addresses(&self) -> (u64, u64, u64) {
         (self.desc_table_addr(), self.avail_ring_addr(), self.used_ring_addr())
     }
+
+    /// Get contiguous region base (legacy); 0 if not contiguous
+    pub fn region_base(&self) -> u64 { self.region_base }
 
     /// Allocate a descriptor from the free list
     pub fn alloc_desc(&mut self) -> Option<u16> {
@@ -195,6 +253,9 @@ impl VirtQueue {
             let idx_ptr = (self.avail_base + 2) as *mut u16;
             ptr::write_volatile(idx_ptr, self.avail_idx_shadow);
         }
+
+        // Ensure ring updates are visible to the device before notify
+        compiler_fence(Ordering::Release);
 
         Ok(head)
     }
@@ -274,11 +335,12 @@ impl VirtQueue {
     /// Busy-wait for at least one used buffer to appear
     pub fn wait_for_used(&mut self) -> Result<()> {
         // Simple bounded spin-wait; replace with IRQ/notify integration later
+        // Some devices (e.g., virtio-gpu) may take longer on first command.
         let mut spins = 0usize;
         while self.get_used_buf().is_none() {
             core::hint::spin_loop();
             spins = spins.wrapping_add(1);
-            if spins > 1_000_000 {
+            if spins > 50_000_000 {
                 return Err(Errno::ETIMEDOUT);
             }
         }

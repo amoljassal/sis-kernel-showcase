@@ -12,6 +12,7 @@ use core::alloc::{GlobalAlloc, Layout};
 use linked_list_allocator::LockedHeap;
 use spin::Mutex;
 use core::sync::atomic::{AtomicBool, Ordering};
+use crate::mm;
 
 /// Cache-aligned array wrapper for heap memory
 #[repr(align(64))] // Align to cache line size for RISC-V
@@ -52,7 +53,7 @@ static HEAP_STATS: Mutex<HeapStats> = Mutex::new(HeapStats {
 
 /// Heap configuration
 const HEAP_START: usize = 0x444_44440_0000;
-const HEAP_SIZE: usize = 4 * 1024 * 1024; // 4 MiB heap for bringup
+const HEAP_SIZE: usize = 8 * 1024 * 1024; // 8 MiB heap for bringup (avoid WM test OOM)
 
 /// Heap initialization status (lock-free, avoids potential early boot stalls)
 static HEAP_INIT_DONE: AtomicBool = AtomicBool::new(false);
@@ -108,7 +109,13 @@ unsafe impl GlobalAlloc for StatsTrackingAllocator {
             crate::verify_lightweight!(CriticalOperation::MemoryAllocation, "heap_alloc");
         }
 
-        let ptr = ALLOCATOR.alloc(layout);
+        // Large-allocation fast path: back big blocks with contiguous pages from buddy
+        const LARGE_ALLOC_THRESHOLD: usize = 1 * 1024 * 1024; // 1 MiB
+        let ptr = if layout.size() >= LARGE_ALLOC_THRESHOLD {
+            large_alloc(layout)
+        } else {
+            ALLOCATOR.alloc(layout)
+        };
 
         if !ptr.is_null() {
             let mut stats = HEAP_STATS.lock();
@@ -164,6 +171,11 @@ unsafe impl GlobalAlloc for StatsTrackingAllocator {
             }
         }
 
+        // Check if this was a large allocation backed by buddy pages
+        if large_dealloc(ptr) {
+            // deallocated via buddy path
+            return;
+        }
         ALLOCATOR.dealloc(ptr, layout);
 
         let mut stats = HEAP_STATS.lock();
@@ -212,6 +224,50 @@ pub extern "C" fn __rust_alloc_error_handler(_size: usize, _align: usize) -> ! {
 #[no_mangle]
 pub extern "C" fn __rg_oom(_layout: core::alloc::Layout) -> ! {
     loop {}
+}
+
+// --------- Large allocation fallback using buddy pages ---------
+
+const LARGE_MAGIC: u64 = 0x4C4152475F414C4Cu64; // "LARG_ALL"
+
+#[repr(C)]
+struct LargeAllocHeader {
+    magic: u64,
+    phys: u64,
+    order: u8,
+    _pad: [u8; 7],
+}
+
+#[inline(always)]
+fn align_up(value: usize, align: usize) -> usize {
+    let a = align.max(1);
+    (value + a - 1) & !(a - 1)
+}
+
+unsafe fn large_alloc(layout: core::alloc::Layout) -> *mut u8 {
+    let header_size = core::mem::size_of::<LargeAllocHeader>();
+    let align_req = layout.align().min(mm::PAGE_SIZE);
+    let need = layout.size().saturating_add(header_size).saturating_add(align_req);
+    let pages = (need + mm::PAGE_SIZE - 1) / mm::PAGE_SIZE;
+    let mut order: u8 = 0; while (1usize << order) < pages { order += 1; }
+    let phys = match mm::alloc_pages(order) { Some(p) => p, None => return core::ptr::null_mut() };
+    let base = phys as usize; // identity map: VA == PA for RAM
+    let ret_ptr = align_up(base + header_size, align_req);
+    let header_ptr = (ret_ptr - header_size) as *mut LargeAllocHeader;
+    // Write header immediately before the returned pointer
+    core::ptr::write(header_ptr, LargeAllocHeader { magic: LARGE_MAGIC, phys, order, _pad: [0;7] });
+    ret_ptr as *mut u8
+}
+
+unsafe fn large_dealloc(ptr: *mut u8) -> bool {
+    if ptr.is_null() { return false; }
+    let header_size = core::mem::size_of::<LargeAllocHeader>();
+    let header_ptr = (ptr as usize - header_size) as *const LargeAllocHeader;
+    // Best-effort check; invalid read is unlikely since we always place header
+    let hdr = &*header_ptr;
+    if hdr.magic != LARGE_MAGIC { return false; }
+    mm::free_pages(hdr.phys, hdr.order);
+    true
 }
 
 

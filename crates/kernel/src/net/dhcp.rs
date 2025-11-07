@@ -30,7 +30,7 @@ impl DhcpClient {
         }
     }
 
-    /// Start DHCP and acquire IP address
+    /// Start DHCP and acquire IP address with retry/backoff
     pub fn acquire_lease(&mut self) -> Result<DhcpConfig> {
         crate::info!("dhcp: Starting DHCP discovery...");
 
@@ -44,9 +44,11 @@ impl DhcpClient {
 
         self.socket_handle = Some(handle);
 
-        // Poll until we get an IP address (with timeout)
-        let mut attempts = 0;
-        const MAX_ATTEMPTS: usize = 100;
+        // Poll until we get an IP address with exponential backoff between bursts
+        let mut attempts: usize = 0;
+        let mut backoff_iters: usize = 1_000; // initial small delay
+        const MAX_ATTEMPTS: usize = 400; // ~4x previous
+        const MAX_BACKOFF_ITERS: usize = 200_000; // clamp backoff
 
         loop {
             // Poll network
@@ -108,10 +110,9 @@ impl DhcpClient {
                 return Err(Errno::ETIMEDOUT);
             }
 
-            // Small delay between attempts
-            for _ in 0..1000 {
-                core::hint::spin_loop();
-            }
+            // Exponential backoff delay between polls
+            for _ in 0..backoff_iters { core::hint::spin_loop(); }
+            backoff_iters = (backoff_iters.saturating_mul(2)).min(MAX_BACKOFF_ITERS);
         }
     }
 
