@@ -42,6 +42,13 @@ fn main() {
     println!("cargo:rustc-env=FEATURES={}", get_enabled_features());
     println!("cargo:rustc-env=PROFILE={}", env::var("PROFILE").unwrap_or_else(|_| "unknown".to_string()));
     println!("cargo:rustc-env=TARGET={}", env::var("TARGET").unwrap_or_else(|_| "unknown".to_string()));
+
+    // Optional: embed models initramfs for integration tests
+    if let Ok(initramfs_path) = env::var("INITRAMFS_MODELS") {
+        println!("cargo:rerun-if-changed={}", initramfs_path);
+        println!("cargo:rustc-env=INITRAMFS_MODELS_FILE={}", initramfs_path);
+        println!("cargo:rustc-cfg=have_initramfs_models");
+    }
 }
 
 fn get_git_commit() -> String {

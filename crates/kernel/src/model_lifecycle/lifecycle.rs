@@ -96,7 +96,18 @@ impl ModelLifecycle {
         // 4. Update registry (ext4 journaled)
         {
             let mut reg = self.registry.lock();
-
+            // Ensure registry entry exists for this version
+            let exists = reg.list().iter().any(|m| m.version == new_version);
+            if !exists {
+                reg.add_model(ModelMetadata {
+                    version: String::from(new_version),
+                    hash: new_model.hash,
+                    signature: alloc::vec::Vec::new(),
+                    status: ModelStatus::Active,
+                    loaded_at: crate::time::get_uptime_ms(),
+                    health: None,
+                });
+            }
             // Set new active
             reg.set_active(new_version);
 
@@ -152,6 +163,18 @@ impl ModelLifecycle {
         // Update registry
         {
             let mut reg = self.registry.lock();
+            // Ensure registry entry exists for this version
+            let exists = reg.list().iter().any(|m| m.version == version);
+            if !exists {
+                reg.add_model(ModelMetadata {
+                    version: String::from(version),
+                    hash: [0u8; 32],
+                    signature: alloc::vec::Vec::new(),
+                    status: ModelStatus::Shadow,
+                    loaded_at: crate::time::get_uptime_ms(),
+                    health: None,
+                });
+            }
             reg.set_shadow(version);
             reg.update_health(version, health)?;
             reg.save()?;

@@ -123,7 +123,9 @@ pub fn unpack_initramfs(data: &[u8]) -> Result<(), Errno> {
         }
 
         let name_bytes = &data[offset..offset + entry.namesize as usize - 1]; // -1 to skip null terminator
-        let name = core::str::from_utf8(name_bytes).map_err(|_| Errno::EINVAL)?;
+        let mut name = core::str::from_utf8(name_bytes).map_err(|_| Errno::EINVAL)?;
+        // Normalize leading "./" from BSD/GNU cpio archives
+        if let Some(stripped) = name.strip_prefix("./") { name = stripped; }
         offset += entry.namesize as usize;
         offset = align_4(offset);
 

@@ -18,6 +18,27 @@ impl super::Shell {
     #[cfg(feature = "shadow-mode")]
     fn shadowctl_impl(&self, args: &[&str]) {
         use crate::shadow::{SHADOW_AGENT, ShadowMode};
+        use crate::model_lifecycle::lifecycle::{get_model_lifecycle, ModelLifecycle};
+        use crate::model_lifecycle::registry::ModelRegistry;
+        use alloc::sync::Arc;
+        use spin::Mutex;
+
+        let ensure_lifecycle = || {
+            let global = get_model_lifecycle().expect("global lifecycle mutex present");
+            let need_init = {
+                let guard = global.lock();
+                guard.is_none()
+            };
+            if need_init {
+                let reg = Arc::new(Mutex::new(ModelRegistry::new()));
+                let _ = reg.lock().load();
+                let mut guard = global.lock();
+                if guard.is_none() {
+                    *guard = Some(ModelLifecycle::new(reg));
+                }
+            }
+            global
+        };
         use crate::shadow::rollback::auto_rollback_if_needed;
 
         if args.is_empty() {
@@ -44,8 +65,25 @@ impl super::Shell {
             "enable" => {
                 if let Some(version) = args.get(1) {
                     crate::kprintln!("Enabling shadow agent with model: {}", version);
-                    crate::kprintln!("Shadow agent enabled (LogOnly mode)");
-                    crate::kprintln!("Use 'shadowctl mode compare' to enable comparison");
+                    // Load shadow into lifecycle registry/state
+                    let global = ensure_lifecycle();
+                    let mut guard = global.lock();
+                    if let Some(lc) = guard.as_mut() {
+                        match lc.load_shadow(version) {
+                            Ok(()) => {
+                                if let Some(model) = lc.get_shadow() {
+                                    let _ = SHADOW_AGENT.enable(model, ShadowMode::LogOnly);
+                                    crate::kprintln!("Shadow agent enabled (LogOnly mode)");
+                                    crate::kprintln!("Use 'shadowctl mode compare' to enable comparison");
+                                } else {
+                                    crate::kprintln!("enable: shadow model not present after load");
+                                }
+                            }
+                            Err(e) => crate::kprintln!("enable: failed to load shadow (errno={:?})", e),
+                        }
+                    } else {
+                        crate::kprintln!("shadowctl: lifecycle not initialized");
+                    }
                 } else {
                     crate::kprintln!("Usage: shadowctl enable <version>");
                 }

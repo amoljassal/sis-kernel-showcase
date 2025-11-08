@@ -17,7 +17,7 @@ impl super::Shell {
 
     #[cfg(feature = "model-lifecycle")]
     fn modelctl_impl(&self, args: &[&str]) {
-        use crate::model_lifecycle::lifecycle::{get_model_lifecycle, init_model_lifecycle};
+        use crate::model_lifecycle::lifecycle::{get_model_lifecycle, ModelLifecycle};
         use crate::model_lifecycle::registry::ModelRegistry;
         use alloc::sync::Arc;
         use spin::Mutex;
@@ -25,14 +25,19 @@ impl super::Shell {
         // Ensure lifecycle is initialized if commands need it
         let ensure_lifecycle = || {
             let global = get_model_lifecycle().expect("global lifecycle mutex present");
-            let mut guard = global.lock();
-            if guard.is_none() {
+            // Check without re-entering lock during init to avoid deadlock
+            let need_init = {
+                let guard = global.lock();
+                guard.is_none()
+            };
+            if need_init {
                 let reg = Arc::new(Mutex::new(ModelRegistry::new()));
-                // Best-effort load
                 let _ = reg.lock().load();
-                init_model_lifecycle(reg);
+                let mut guard = global.lock();
+                if guard.is_none() {
+                    *guard = Some(ModelLifecycle::new(reg));
+                }
             }
-            drop(guard);
             global
         };
 
@@ -106,7 +111,16 @@ impl super::Shell {
             "load" => {
                 if let Some(version) = args.get(1) {
                     crate::kprintln!("Loading model: {}", version);
-                    crate::kprintln!("Model loaded (not activated)");
+                    let global = ensure_lifecycle();
+                    let mut guard = global.lock();
+                    if let Some(lc) = guard.as_ref() {
+                        match lc.load_model(version) {
+                            Ok(_) => crate::kprintln!("Model loaded (not activated)"),
+                            Err(e) => crate::kprintln!("load: failed (errno={:?})", e),
+                        }
+                    } else {
+                        crate::kprintln!("modelctl: lifecycle not initialized");
+                    }
                 } else {
                     crate::kprintln!("Usage: modelctl load <version>");
                 }
@@ -114,8 +128,19 @@ impl super::Shell {
             "swap" => {
                 if let Some(version) = args.get(1) {
                     crate::kprintln!("Swapping to model version: {}", version);
-                    crate::kprintln!("Model swap complete: {}", version);
-                    crate::kprintln!("Previous model saved to rollback");
+                    let global = ensure_lifecycle();
+                    let mut guard = global.lock();
+                    if let Some(lc) = guard.as_mut() {
+                        match lc.swap_model(version) {
+                            Ok(()) => {
+                                crate::kprintln!("Model swap complete: {}", version);
+                                crate::kprintln!("Previous model saved to rollback");
+                            }
+                            Err(e) => crate::kprintln!("swap: failed (errno={:?})", e),
+                        }
+                    } else {
+                        crate::kprintln!("modelctl: lifecycle not initialized");
+                    }
                 } else {
                     crate::kprintln!("Usage: modelctl swap <version>");
                 }
