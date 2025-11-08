@@ -16,6 +16,8 @@ pub mod compare;
 
 #[cfg(feature = "shadow-mode")]
 pub mod rollback;
+#[cfg(feature = "shadow-mode")]
+pub mod divergence;
 
 #[cfg(feature = "shadow-mode")]
 pub use agent::{ShadowAgent, ShadowMode, ShadowStats};

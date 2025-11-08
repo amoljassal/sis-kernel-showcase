@@ -7090,3 +7090,29 @@ MIT — see `LICENSE`.
 
 Notes:
 - This README intentionally avoids unverified claims and reflects only what’s in-tree. If you need the previous marketing-heavy README for reference, recover it from VCS history.
+SRE Integration: Incident Bundles
+
+- Path: Bundles are written under `/incidents/INC-<unix-secs>-NNN.json` on the kernel VFS.
+- Export: Use `tracectl export <id...>` for specific traces or `tracectl export-divergences [N]` to export recent shadow divergences as an incident bundle (feature: shadow-mode).
+- Collection: In QEMU, the backing block image contains `/incidents`; collect bundles by:
+  - Attaching the disk image to the host and mounting read-only to archive files.
+  - Using a host-side SRE agent to copy bundles on shutdown or on QMP signal.
+  - Shipping to external systems (S3, Splunk, Elastic) via host service; filenames are stable and idempotent.
+- Automation: The kernel writes atomic files; external agents can safely tail the directory and move uploaded bundles to `/incidents/archive`.
+
+Trace-to-Incident Matching (Automated)
+
+- Divergence Log: The shadow agent records divergence events in a small ring buffer (confidence deltas, action match, timestamp, mode).
+- One‑shot export: `tracectl export-divergences [N]` builds an incident bundle containing the last N divergence events for fast review.
+- Next step: Extend to correlate decisions and divergences by trace ID; today, events carry timestamps to align with trace windows.
+
+Model Registry History / Diff
+
+- History: Every registry update appends a single‑line entry to `/models/registry.log` with uptime timestamp, `active|shadow|rollback` values, and node identity (env `NODE_ID` if set, else build target).
+- Diff: History lines make changes obvious over time; a future enhancement may write structured JSON entries for machine diffs.
+
+Dry‑Run / Simulation Modes
+
+- Shadow dry‑run: Enable log‑only compare without counters/rollback via `shadowctl dry-run on|off|status`. In dry‑run, divergences are logged but do not increment counters or trigger rollbacks.
+- Canary aliases: `shadowctl canary 10|100` sets compare‑only or full canary modes without impact to production until promoted.
+- Model dry‑swap (planned): `modelctl dry-swap <version>` loads + health‑checks a model without promoting it; prints what would change.

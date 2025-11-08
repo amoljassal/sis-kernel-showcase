@@ -7,6 +7,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use serde::{Serialize, Deserialize};
 use crate::lib::error::{Result, Errno};
+use crate::vfs::{self, OpenFlags};
 use super::decision::DecisionTrace;
 
 /// Complete incident bundle for export
@@ -18,6 +19,8 @@ pub struct IncidentBundle {
     pub model_info: ModelInfo,
     pub system_snapshot: SystemSnapshot,
     pub config: ConfigInfo,
+    #[cfg(feature = "shadow-mode")]
+    pub shadow_divergences: Vec<ShadowDivergence>,
 }
 
 /// Model information snapshot
@@ -49,6 +52,16 @@ pub struct ConfigInfo {
     pub features: String,
     pub git_commit: String,
     pub build_timestamp: u64,
+}
+
+/// Shadow divergence item (for incident bundles)
+#[cfg(feature = "shadow-mode")]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ShadowDivergence {
+    pub timestamp_ms: u64,
+    pub confidence_delta: u32,
+    pub action_matches: bool,
+    pub mode: alloc::string::String,
 }
 
 /// Incident bundle exporter
@@ -85,6 +98,8 @@ impl IncidentExporter {
             model_info: self.get_model_info(),
             system_snapshot: self.get_system_snapshot(),
             config: self.get_config(),
+            #[cfg(feature = "shadow-mode")]
+            shadow_divergences: alloc::vec::Vec::new(),
         };
 
         // 3. Serialize to JSON
@@ -97,6 +112,35 @@ impl IncidentExporter {
 
         self.write_file(&filename, json.as_bytes())?;
 
+        Ok(filename)
+    }
+
+    /// Export recent shadow divergences into a bundle (no traces required)
+    #[cfg(feature = "shadow-mode")]
+    pub fn export_shadow_divergences(&self, max: usize) -> Result<String> {
+        use crate::shadow::divergence::DIVERGENCE_LOG;
+
+        let recents = DIVERGENCE_LOG.lock().recent(max);
+        let items: Vec<ShadowDivergence> = recents.iter().map(|e| ShadowDivergence {
+            timestamp_ms: e.timestamp_ms,
+            confidence_delta: e.confidence_delta,
+            action_matches: e.action_matches,
+            mode: alloc::format!("{:?}", e.mode),
+        }).collect();
+
+        let mut bundle = IncidentBundle {
+            incident_id: self.generate_incident_id(),
+            exported_at: crate::time::get_uptime_ms() * 1000,
+            traces: Vec::new(),
+            model_info: self.get_model_info(),
+            system_snapshot: self.get_system_snapshot(),
+            config: self.get_config(),
+            shadow_divergences: items,
+        };
+
+        let json = serde_json::to_string_pretty(&bundle).map_err(|_| Errno::EINVAL)?;
+        let filename = alloc::format!("{}/{}.json", self.export_dir, bundle.incident_id);
+        self.write_file(&filename, json.as_bytes())?;
         Ok(filename)
     }
 
@@ -165,8 +209,13 @@ impl IncidentExporter {
     }
 
     fn write_file(&self, _path: &str, _data: &[u8]) -> Result<()> {
-        // TODO: Implement VFS write
-        // For now, just return OK
+        // Ensure directory exists
+        let _ = vfs::mkdir(Self::EXPORT_DIR, 0o755);
+        let file = match vfs::open(_path, OpenFlags::O_WRONLY | OpenFlags::O_TRUNC) {
+            Ok(f) => f,
+            Err(_) => vfs::create(_path, 0o644, OpenFlags::O_WRONLY | OpenFlags::O_CREAT | OpenFlags::O_TRUNC)?,
+        };
+        let _ = file.write(_data)?;
         Ok(())
     }
 }

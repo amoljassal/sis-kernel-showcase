@@ -7,6 +7,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use serde::{Deserialize, Serialize};
 use crate::lib::error::{Result, Errno};
+use crate::vfs::{self, OpenFlags};
+use crate::time;
 
 /// Model metadata stored in registry
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,21 +64,76 @@ impl ModelRegistry {
 
     /// Load registry from ext4
     pub fn load(&mut self) -> Result<()> {
-        // TODO: Read /models/registry.json via VFS
-        // TODO: Parse with serde_json
-        // TODO: Populate self.models
+        // Try to open registry file; if not present, return Ok with empty registry
+        if let Ok(file) = vfs::open(self.registry_path, OpenFlags::O_RDONLY) {
+            let size = file.size().unwrap_or(0) as usize;
+            let mut buf = alloc::vec::Vec::with_capacity(size.max(1));
+            buf.resize(size, 0);
+            let _ = file.read(&mut buf[..])?;
 
-        // For now, return OK - VFS integration needed
+            // Deserialize
+            #[derive(Serialize, Deserialize)]
+            struct SerializedRegistry {
+                models: alloc::vec::Vec<ModelMetadata>,
+                active: Option<String>,
+                shadow: Option<String>,
+                rollback: Option<String>,
+            }
+            if let Ok(sr) = serde_json::from_slice::<SerializedRegistry>(&buf) {
+                self.models = sr.models;
+                self.active = sr.active;
+                self.shadow = sr.shadow;
+                self.rollback = sr.rollback;
+            }
+        }
         Ok(())
     }
 
     /// Save registry to ext4 (journaled)
     pub fn save(&self) -> Result<()> {
-        // TODO: Serialize to JSON with serde_json
-        // TODO: Write to /models/registry.json via VFS
-        // TODO: ext4 journal ensures atomicity
+        // Ensure directory exists
+        let _ = vfs::mkdir("/models", 0o755);
 
-        // For now, return OK - VFS integration needed
+        // Serialize
+        #[derive(Serialize)]
+        struct SerializedRegistry<'a> {
+            models: &'a [ModelMetadata],
+            active: &'a Option<String>,
+            shadow: &'a Option<String>,
+            rollback: &'a Option<String>,
+        }
+        let sr = SerializedRegistry {
+            models: &self.models,
+            active: &self.active,
+            shadow: &self.shadow,
+            rollback: &self.rollback,
+        };
+        let json = serde_json::to_vec(&sr).map_err(|_| Errno::EINVAL)?;
+
+        // Create or truncate file and write
+        let file = match vfs::open(self.registry_path, OpenFlags::O_WRONLY | OpenFlags::O_TRUNC) {
+            Ok(f) => f,
+            Err(_) => vfs::create(self.registry_path, 0o644, OpenFlags::O_WRONLY | OpenFlags::O_CREAT | OpenFlags::O_TRUNC)?,
+        };
+        let _ = file.write(&json[..])?;
+
+        // Append history entry
+        let history_path = "/models/registry.log";
+        let mut entry = alloc::format!(
+            "ts={} active={:?} shadow={:?} rollback={:?} node={}\n",
+            time::get_uptime_ms(),
+            self.active,
+            self.shadow,
+            self.rollback,
+            option_env!("NODE_ID").unwrap_or(option_env!("TARGET").unwrap_or("unknown"))
+        );
+        let hist = match vfs::open(history_path, OpenFlags::O_WRONLY) {
+            Ok(f) => f,
+            Err(_) => vfs::create(history_path, 0o644, OpenFlags::O_WRONLY | OpenFlags::O_CREAT)?,
+        };
+        // Seek to end (simple: read size and set offset)
+        let _ = hist.lseek(0, 2); // SEEK_END
+        let _ = hist.write(entry.as_bytes());
         Ok(())
     }
 

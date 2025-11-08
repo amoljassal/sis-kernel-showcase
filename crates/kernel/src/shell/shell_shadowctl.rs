@@ -18,6 +18,7 @@ impl super::Shell {
     #[cfg(feature = "shadow-mode")]
     fn shadowctl_impl(&self, args: &[&str]) {
         use crate::shadow::{SHADOW_AGENT, ShadowMode};
+        use crate::shadow::rollback::auto_rollback_if_needed;
 
         if args.is_empty() {
             let stats = SHADOW_AGENT.get_stats();
@@ -30,6 +31,16 @@ impl super::Shell {
         }
 
         match args[0] {
+            "dry-run" => {
+                match args.get(1).copied() {
+                    Some("on") => { SHADOW_AGENT.set_dry_run(true); crate::kprintln!("Shadow dry-run: ON"); }
+                    Some("off") => { SHADOW_AGENT.set_dry_run(false); crate::kprintln!("Shadow dry-run: OFF"); }
+                    Some("status") | None => {
+                        crate::kprintln!("Shadow dry-run: {}", if SHADOW_AGENT.is_dry_run() { "ON" } else { "OFF" });
+                    }
+                    Some(_) => { crate::kprintln!("Usage: shadowctl dry-run on|off|status"); }
+                }
+            }
             "enable" => {
                 if let Some(version) = args.get(1) {
                     crate::kprintln!("Enabling shadow agent with model: {}", version);
@@ -37,6 +48,40 @@ impl super::Shell {
                     crate::kprintln!("Use 'shadowctl mode compare' to enable comparison");
                 } else {
                     crate::kprintln!("Usage: shadowctl enable <version>");
+                }
+            }
+            // Back-compat alias for README examples
+            "stats" => {
+                let stats = SHADOW_AGENT.get_stats();
+                crate::kprintln!("Shadow Agent Status:");
+                crate::kprintln!("  Mode:        {:?}", stats.mode);
+                crate::kprintln!("  Decisions:   {}", stats.decision_count);
+                crate::kprintln!("  Divergences: {} ({:.2}%)",
+                    stats.divergence_count, stats.divergence_rate);
+            }
+            // Canary routing percentage alias
+            "canary" => {
+                if let Some(pct) = args.get(1).and_then(|s| s.parse::<u32>().ok()) {
+                    let mode = match pct {
+                        10 => Some(ShadowMode::CanaryPartial),
+                        100 => Some(ShadowMode::CanaryFull),
+                        _ => None,
+                    };
+                    if let Some(m) = mode {
+                        SHADOW_AGENT.set_mode(m);
+                        crate::kprintln!("Shadow mode set to canary{}", pct);
+                    } else {
+                        crate::kprintln!("Invalid canary %. Use 10 or 100");
+                    }
+                } else {
+                    crate::kprintln!("Usage: shadowctl canary <10|100>");
+                }
+            }
+            // Manual rollback request alias
+            "rollback" => {
+                match auto_rollback_if_needed() {
+                    Ok(()) => crate::kprintln!("Rollback not required (no trigger)"),
+                    Err(_) => { /* messages printed by rollback */ }
                 }
             }
             "disable" => {
@@ -69,8 +114,9 @@ impl super::Shell {
             }
             "threshold" => {
                 if let Some(threshold_str) = args.get(1) {
-                    if let Ok(_threshold) = threshold_str.parse::<u32>() {
-                        crate::kprintln!("Divergence threshold set to: {}", threshold_str);
+                    if let Ok(threshold) = threshold_str.parse::<u32>() {
+                        SHADOW_AGENT.set_threshold(threshold);
+                        crate::kprintln!("Divergence threshold set to: {}", threshold);
                     } else {
                         crate::kprintln!("Invalid threshold value");
                     }
