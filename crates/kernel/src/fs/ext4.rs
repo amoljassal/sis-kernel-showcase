@@ -10,6 +10,7 @@ use crate::lib::error::{Result, Errno};
 use crate::block::BlockDevice;
 use crate::vfs::{Inode, InodeOps, InodeType, DirEntry};
 use super::jbd2::{Journal, TransactionHandle, JBD2_MAGIC_NUMBER};
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -371,17 +372,23 @@ pub struct Ext4FileSystem {
 }
 
 impl Ext4FileSystem {
+    /// Expose filesystem block size (bytes)
+    pub fn block_size_bytes(&self) -> usize {
+        let sb = self.superblock.lock();
+        sb.block_size() as usize
+    }
     /// Mount ext4 filesystem
     pub fn mount(device: Arc<BlockDevice>) -> Result<Arc<Self>> {
         crate::info!("ext4: Mounting filesystem...");
 
-        // Read superblock (at offset 1024)
+        // Read superblock (at byte offset 1024). Our block layer addresses in 1024-byte blocks.
+        // The superblock starts at block 1 (1024 bytes), not 2.
         let mut sb_buf = vec![0u8; 1024];
-        device.read(2, &mut sb_buf)?; // Block 2 (1024 bytes offset)
+        device.read(1, &mut sb_buf)?; // Block 1 = 1024-byte offset
 
         // Parse superblock
         let sb: Ext4Superblock = unsafe {
-            core::ptr::read(sb_buf.as_ptr() as *const Ext4Superblock)
+            core::ptr::read_unaligned(sb_buf.as_ptr() as *const Ext4Superblock)
         };
 
         // Verify magic number
@@ -414,7 +421,7 @@ impl Ext4FileSystem {
             device.read(block, &mut buf)?;
 
             let bg_desc: Ext4BlockGroupDesc = unsafe {
-                core::ptr::read((buf.as_ptr().add(block_offset)) as *const Ext4BlockGroupDesc)
+                core::ptr::read_unaligned((buf.as_ptr().add(block_offset)) as *const Ext4BlockGroupDesc)
             };
             block_groups.push(bg_desc);
         }
@@ -1091,7 +1098,7 @@ impl Ext4FileSystem {
 
         // Parse inode
         let inode: Ext4Inode = unsafe {
-            core::ptr::read((buf.as_ptr().add(block_offset)) as *const Ext4Inode)
+            core::ptr::read_unaligned((buf.as_ptr().add(block_offset)) as *const Ext4Inode)
         };
 
         Ok(inode)
@@ -1174,8 +1181,8 @@ impl Ext4FileSystem {
                     break;
                 }
 
-                let entry: &Ext4DirEntry2 = unsafe {
-                    &*(block_data.as_ptr().add(offset) as *const Ext4DirEntry2)
+                let entry: Ext4DirEntry2 = unsafe {
+                    core::ptr::read_unaligned(block_data.as_ptr().add(offset) as *const Ext4DirEntry2)
                 };
 
                 if entry.rec_len == 0 {
@@ -1254,8 +1261,8 @@ impl Ext4FileSystem {
                     break;
                 }
 
-                let entry: &Ext4DirEntry2 = unsafe {
-                    &*(block_data.as_ptr().add(offset) as *const Ext4DirEntry2)
+                let entry: Ext4DirEntry2 = unsafe {
+                    core::ptr::read_unaligned(block_data.as_ptr().add(offset) as *const Ext4DirEntry2)
                 };
 
                 if entry.rec_len == 0 {
@@ -1373,7 +1380,7 @@ impl Ext4FileSystem {
 
     /// Helper: Get physical block number for inode's logical block
     /// Supports extents and falls back to direct blocks.
-    fn get_inode_block(&self, inode: &Ext4Inode, logical_block: u64) -> Result<u64> {
+    pub fn get_inode_block(&self, inode: &Ext4Inode, logical_block: u64) -> Result<u64> {
         let lbn = logical_block as u32;
         if inode.uses_extents() {
             if let Some(p) = self.lookup_extent(inode, lbn)? { return Ok(p); }
@@ -1449,18 +1456,144 @@ impl Ext4FileSystem {
         Err(Errno::ENOTSUP)
     }
 
+    /// Read file data into buffer starting at offset. Returns bytes read.
+    pub fn read_data(&self, inode: &Ext4Inode, offset: u64, buf: &mut [u8]) -> Result<usize> {
+        let file_size = inode.size();
+        if offset >= file_size { return Ok(0); }
+
+        let bsz = self.block_size_bytes();
+        let to_read = core::cmp::min(buf.len(), (file_size - offset) as usize);
+
+        let mut read = 0usize;
+        while read < to_read {
+            let lbn = ((offset + read as u64) / bsz as u64) as u64;
+            let off_in_block = ((offset + read as u64) % bsz as u64) as usize;
+            let chunk = core::cmp::min(to_read - read, bsz - off_in_block);
+
+            match self.get_inode_block(inode, lbn) {
+                Ok(pbn) => {
+                    let mut tmp = vec![0u8; bsz];
+                    self.device.read(pbn, &mut tmp)?;
+                    buf[read..read + chunk]
+                        .copy_from_slice(&tmp[off_in_block..off_in_block + chunk]);
+                }
+                Err(_) => {
+                    // Sparse or unmapped block: zero-fill
+                    for b in &mut buf[read..read + chunk] { *b = 0; }
+                }
+            }
+            read += chunk;
+        }
+        Ok(read)
+    }
+
+    /// Minimal write path for small files (uses direct blocks only; journaled if present).
+    /// Supports writes within first 12 blocks; returns bytes written.
+    pub fn write_data_direct(&self, inode_num: u32, offset: u64, data: &[u8]) -> Result<usize> {
+        if data.is_empty() { return Ok(0); }
+
+        let mut inode = self.read_inode(inode_num)?;
+        // Force non-extent mode for simplicity (use direct blocks)
+        inode.i_flags &= !0x80000; // clear EXT4_EXTENTS_FL
+
+        let bsz = self.block_size_bytes();
+        let end_offset = offset + data.len() as u64;
+
+        // Begin transaction
+        let txn = self.begin_transaction();
+
+        let mut written = 0usize;
+        while written < data.len() {
+            let lbn = ((offset + written as u64) / bsz as u64) as usize;
+            if lbn >= 12 { // direct blocks only
+                if let Some(tx) = txn { let _ = self.commit_transaction(tx); }
+                return Err(Errno::ENOTSUP);
+            }
+            let off_in_block = ((offset + written as u64) % bsz as u64) as usize;
+            let chunk = core::cmp::min(data.len() - written, bsz - off_in_block);
+
+            // Ensure block is allocated
+            let pbn = if inode.i_block[lbn] == 0 {
+                let new_block = self.allocate_block(0)?;
+                inode.i_block[lbn] = new_block as u32;
+                // Track block bitmap update
+                if let Some(ref tx) = txn { tx.add_block(new_block); }
+                new_block
+            } else {
+                inode.i_block[lbn] as u64
+            };
+
+            // Read-modify-write the block
+            let mut tmp = vec![0u8; bsz];
+            self.device.read(pbn, &mut tmp)?;
+            tmp[off_in_block..off_in_block + chunk]
+                .copy_from_slice(&data[written..written + chunk]);
+            self.device.write(pbn, &tmp)?;
+            if let Some(ref tx) = txn { tx.add_block(pbn); }
+
+            written += chunk;
+        }
+
+        // Update file size if extended
+        if end_offset > inode.size() { inode.set_size(end_offset); }
+        self.write_inode(inode_num, &inode)?;
+        if let Some(ref tx) = txn {
+            // Track inode table
+            let sb = self.superblock.lock();
+            let bgs = self.block_groups.lock();
+            let group_idx = ((inode_num - 1) / sb.s_inodes_per_group) as usize;
+            if group_idx < bgs.len() { tx.add_block(bgs[group_idx].inode_table()); }
+            drop(bgs); drop(sb);
+        }
+
+        // Commit transaction
+        if let Some(tx) = txn { self.commit_transaction(tx)?; }
+
+        Ok(written)
+    }
+
+    /// Simple directory listing helper used by VFS wrapper
+    pub fn list_dir(&self, dir_inode: &Ext4Inode) -> Result<Vec<(u32, String, Ext4FileType)>> {
+        if !dir_inode.is_dir() { return Err(Errno::ENOTDIR); }
+        let bsz = self.block_size_bytes();
+        let nblocks = (dir_inode.size() as usize + bsz - 1) / bsz;
+        let mut out = Vec::new();
+        for block_idx in 0..nblocks {
+            let pbn = match self.get_inode_block(dir_inode, block_idx as u64) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            let mut block_data = vec![0u8; bsz];
+            self.device.read(pbn, &mut block_data)?;
+            let mut off = 0usize;
+            while off + Ext4DirEntry2::MIN_SIZE <= bsz {
+                let entry: &Ext4DirEntry2 = unsafe { &*(block_data.as_ptr().add(off) as *const Ext4DirEntry2) };
+                if entry.rec_len == 0 { break; }
+                if entry.inode != 0 && entry.name_len > 0 {
+                    let name_off = off + Ext4DirEntry2::MIN_SIZE;
+                    let name_slice = &block_data[name_off..name_off + entry.name_len as usize];
+                    if let Ok(name) = core::str::from_utf8(name_slice) {
+                        out.push((entry.inode, name.to_string(), match entry.file_type { 1 => Ext4FileType::RegularFile, 2 => Ext4FileType::Directory, 3 => Ext4FileType::CharDevice, 4 => Ext4FileType::BlockDevice, 7 => Ext4FileType::Symlink, _ => Ext4FileType::Unknown }));
+                    }
+                }
+                off += entry.rec_len as usize;
+            }
+        }
+        Ok(out)
+    }
+
     /// Look up extent mapping for a logical block; returns physical block or None
     fn lookup_extent(&self, inode: &Ext4Inode, lbn: u32) -> Result<Option<u64>> {
         unsafe {
             let base = inode.i_block.as_ptr() as *const u8;
-            let hdr: Ext4ExtentHeader = core::ptr::read(base as *const Ext4ExtentHeader);
+            let hdr: Ext4ExtentHeader = core::ptr::read_unaligned(base as *const Ext4ExtentHeader);
             if hdr.eh_magic != 0xF30A { return Ok(None); }
 
             // Helper to scan a leaf extent array at given pointer
             unsafe fn scan_leaf(ptr: *const u8, entries: u16, lbn: u32) -> Option<u64> {
                 let mut p = ptr;
                 for _ in 0..entries {
-                    let ext: Ext4Extent = core::ptr::read(p as *const Ext4Extent);
+                    let ext: Ext4Extent = core::ptr::read_unaligned(p as *const Ext4Extent);
                     let first = ext.ee_block;
                     let len = ext.ee_len as u32;
                     if lbn >= first && lbn < first + len {
@@ -1484,7 +1617,7 @@ impl Ext4FileSystem {
                 let mut chosen: Option<Ext4ExtentIdx> = None;
                 let mut p = idx_ptr;
                 for _ in 0..header.eh_entries {
-                    let ix: Ext4ExtentIdx = core::ptr::read(p as *const Ext4ExtentIdx);
+                    let ix: Ext4ExtentIdx = core::ptr::read_unaligned(p as *const Ext4ExtentIdx);
                     if ix.ei_block <= lbn { chosen = Some(ix); } else { break; }
                     p = p.add(core::mem::size_of::<Ext4ExtentIdx>());
                 }
@@ -1498,7 +1631,7 @@ impl Ext4FileSystem {
                 let mut buf = vec![0u8; bsz];
                 self.device.read(next_block, &mut buf)?;
 
-                let bh: Ext4ExtentHeader = core::ptr::read(buf.as_ptr() as *const Ext4ExtentHeader);
+                let bh: Ext4ExtentHeader = core::ptr::read_unaligned(buf.as_ptr() as *const Ext4ExtentHeader);
                 if bh.eh_magic != 0xF30A { return Ok(None); }
                 if bh.eh_depth == 0 {
                     let leaf = unsafe { buf.as_ptr().add(core::mem::size_of::<Ext4ExtentHeader>()) };

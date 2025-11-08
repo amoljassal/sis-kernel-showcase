@@ -381,6 +381,7 @@ mod bringup {
         super::uart_print(b"BLOCK: READY\n");
 
         // Optional: Mount ext2 (read-only) at /models if a virtio-blk device is present
+        // TODO: ext4 (rw+journal) is temporarily disabled due to hang during journal replay
         {
             use crate::block::list_block_devices;
             let devs = list_block_devices();
@@ -390,6 +391,7 @@ mod bringup {
                 // Try each device until one mounts
                 let mut mounted = false;
                 for dev in devs {
+                    // Try ext2 (read-only) for now
                     match crate::vfs::ext2::mount_ext2(dev.clone()) {
                         Ok(ext2_root) => {
                             let _ = crate::vfs::mount("ext2", ext2_root, "/models");
