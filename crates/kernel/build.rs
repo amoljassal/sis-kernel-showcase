@@ -6,8 +6,6 @@
 use std::env;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::fs;
-use std::path::Path;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -23,17 +21,17 @@ fn main() {
         .map(|d| d.as_secs().to_string())
         .unwrap_or_else(|_| "0".to_string());
 
-    // Get Rust version
-    let rust_version = get_rust_version();
+    // Get Rust version (unused, but kept for consistency with runtime exports)
+    let _rust_version = get_rust_version();
 
-    // Get enabled features
-    let features = get_enabled_features();
+    // Get enabled features (unused, but kept for consistency with runtime exports)
+    let _features = get_enabled_features();
 
-    // Get build profile (debug/release)
-    let profile = env::var("PROFILE").unwrap_or_else(|_| "unknown".to_string());
+    // Get build profile (debug/release) (unused, but kept for consistency with runtime exports)
+    let _profile = env::var("PROFILE").unwrap_or_else(|_| "unknown".to_string());
 
-    // Get target triple
-    let target = env::var("TARGET").unwrap_or_else(|_| "unknown".to_string());
+    // Get target triple (unused, but kept for consistency with runtime exports)
+    let _target = env::var("TARGET").unwrap_or_else(|_| "unknown".to_string());
 
     // Export as environment variables only; runtime module reads these via option_env!
     println!("cargo:rustc-env=GIT_COMMIT={}", git_commit);
@@ -124,6 +122,7 @@ fn get_enabled_features() -> String {
     features.join(",")
 }
 
+#[allow(dead_code)]
 fn escape_json(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace('"', "\\\"")
@@ -132,6 +131,7 @@ fn escape_json(s: &str) -> String {
         .replace('\t', "\\t")
 }
 
+#[allow(dead_code)]
 fn escape_rust(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace('"', "\\\"")

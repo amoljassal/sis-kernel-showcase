@@ -61,6 +61,12 @@ pub struct Shell {
 mod shell_metricsctl;
 #[cfg(feature = "chaos")]
 mod shell_chaos;
+#[cfg(feature = "model-lifecycle")]
+mod shell_modelctl;
+#[cfg(feature = "decision-traces")]
+mod shell_tracectl;
+#[cfg(feature = "shadow-mode")]
+mod shell_shadowctl;
 mod autoctl_helpers;
 mod memctl_helpers;
 mod schedctl_helpers;
@@ -237,6 +243,12 @@ impl Shell {
                 "metrics" => { self.cmd_metrics(&parts[1..]); true },
                 #[cfg(feature = "chaos")]
                 "chaos" => { self.cmd_chaos(&parts[1..]); true },
+                #[cfg(feature = "model-lifecycle")]
+                "modelctl" => { self.cmd_modelctl(&parts[1..]); true },
+                #[cfg(feature = "decision-traces")]
+                "tracectl" => { self.cmd_tracectl(&parts[1..]); true },
+                #[cfg(feature = "shadow-mode")]
+                "shadowctl" => { self.cmd_shadowctl(&parts[1..]); true },
                 "stresstest" => { self.stresstest_cmd(&parts[1..]); true },
                 "benchmark" => { self.cmd_benchmark(&parts[1..]); true },
                 "fullautodemo" => { self.cmd_fullautodemo(&parts[1..]); true },
