@@ -20,6 +20,8 @@ Notes:
 INITRAMFS_MODELS=/tmp/models.cpio SIS_FEATURES="bringup,ai-ops,initramfs-models" ./scripts/uefi_run.sh build
 ```
 
+Note: On AArch64, the kernel boots via the `uefi-boot` crate; `bootloader`/`bootloader_api` are gated to `x86_64` and are not compiled for this flow.
+
 ## Verify in the Shell
 
 ```
@@ -31,3 +33,4 @@ modelctl dry-swap v1
 
 Troubleshooting:
 - If `/models` doesn’t show entries, recheck the archive with `cpio -tv < /tmp/models.cpio` and rebuild.
+ - For exporting incidents, prefer the new flags: `tracectl export [--path <file>] [--all | --recent N | <id...>]` and `tracectl export-divergences [N] [--path <file>]`.

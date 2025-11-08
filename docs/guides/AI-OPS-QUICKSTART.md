@@ -10,6 +10,8 @@ This guide shows a fast end‑to‑end run of the Phase 7 features: model lifecy
 SIS_FEATURES="bringup,ai-ops" ./scripts/uefi_run.sh build
 ```
 
+Note: Bootloader crates (`bootloader`, `bootloader_api`) are compiled only on `x86_64`. AArch64 builds skip them and boot via the `uefi-boot` crate.
+
 - With embedded models initramfs (recommended for modelctl demos):
 
 ```
@@ -70,18 +72,28 @@ tracectl list 10
 tracectl show 1000
 ```
 
-- Export a bundle containing specific traces:
+- Export bundles (choose one):
 
 ```
+# Specific trace IDs to default incidents dir
 tracectl export 1000 1001 1002
 ls /incidents
 cat /incidents/INC-<id>.json
+
+# Last N recent traces to a specific path
+tracectl export --recent 5 --path /traces5.json
+cat /traces5.json
+
+# All traces currently in buffer to a specific path
+tracectl export --all --path /all_traces.json
+cat /all_traces.json
 ```
 
 - Export recent shadow divergences (see Shadow section):
 
 ```
-tracectl export-divergences 10
+tracectl export-divergences 10 --path /div10.json
+cat /div10.json
 ```
 
 ## Shadow / Canary (shadowctl)
