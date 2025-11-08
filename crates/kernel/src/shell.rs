@@ -829,7 +829,7 @@ impl Shell {
 
     fn cmd_schedctl(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: schedctl <workload|priorities|affinity|shadow|feature> ...\n"); }
+            unsafe { crate::uart_print(b"Usage: schedctl <workload|priorities|affinity|shadow|feature|transformer> ...\n"); }
             return;
         }
         match args[0] {
@@ -838,7 +838,8 @@ impl Shell {
             "affinity" => self.schedctl_affinity(),
             "shadow" => self.schedctl_shadow(&args[1..]),
             "feature" => self.schedctl_feature(&args[1..]),
-            _ => unsafe { crate::uart_print(b"Usage: schedctl <workload|priorities|affinity|shadow|feature> ...\n"); }
+            "transformer" => self.schedctl_transformer(&args[1..]),
+            _ => unsafe { crate::uart_print(b"Usage: schedctl <workload|priorities|affinity|shadow|feature|transformer> ...\n"); }
         }
     }
 
@@ -1739,7 +1740,20 @@ impl Shell {
                     self.autoctl_conf_threshold(None);
                 }
             }
-            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|reset|status|interval N|limits|audit last N|rewards --breakdown|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck|rollout|circuit-breaker|preview [N]|phase [A|B|C|D]|attention|conf-threshold [N]>\n"); }
+            "ai-metrics" => {
+                self.autoctl_ai_metrics();
+            }
+            "export-metrics" => {
+                if args.len() >= 2 {
+                    self.autoctl_export_metrics(args[1]);
+                } else {
+                    unsafe { crate::uart_print(b"Usage: autoctl export-metrics <path>\n"); }
+                }
+            }
+            "reset-baseline" => {
+                self.autoctl_reset_baseline();
+            }
+            _ => unsafe { crate::uart_print(b"Usage: autoctl <on|off|reset|status|interval N|limits|audit last N|rewards --breakdown|explain ID|dashboard|checkpoints|saveckpt|restoreckpt N|restorebest|tick|oodcheck|driftcheck|rollout|circuit-breaker|preview [N]|phase [A|B|C|D]|attention|conf-threshold [N]|ai-metrics|export-metrics <path>|reset-baseline>\n"); }
         }
     }
 
