@@ -194,6 +194,7 @@ impl Shell {
                 "test" => { self.cmd_test(); true },
                 "perf" => { self.cmd_perf(); true },
                 "bench" => { self.cmd_bench(); true },
+                "ls" => { self.cmd_ls(&parts[1..]); true },
                 "stress" => { self.cmd_stress(); true },
                 "overhead" => { self.cmd_overhead(); true },
                 #[cfg(feature = "demos")]
@@ -319,6 +320,7 @@ impl Shell {
             crate::uart_print(b"  help     - Show this help message\n");
             crate::uart_print(b"  version  - Show kernel version and build info\n");
             crate::uart_print(b"  echo     - Echo text to output\n");
+            crate::uart_print(b"  ls       - List directory: ls [path]\n");
             crate::uart_print(b"  info     - Show kernel information\n");
             crate::uart_print(b"  test     - Run syscall tests\n");
             crate::uart_print(b"  perf     - Show performance metrics report\n");
@@ -410,6 +412,39 @@ impl Shell {
             crate::uart_print(b"  ai_bench - Run AI/ML benchmarks (AI mode only)\n");
             crate::uart_print(b"  clear    - Clear screen\n");
             crate::uart_print(b"  exit     - Exit shell\n");
+        }
+    }
+
+    /// List directory contents (simple VFS helper)
+    fn cmd_ls(&self, args: &[&str]) {
+        use crate::vfs::{self, OpenFlags};
+        let path = args.get(0).copied().unwrap_or("/");
+        match vfs::open(path, OpenFlags::O_RDONLY) {
+            Ok(file) => {
+                match file.is_dir() {
+                    Ok(true) => {
+                        crate::kprintln!("Listing {}:", path);
+                        match file.readdir() {
+                            Ok(entries) => {
+                                for e in entries {
+                                    let t = match e.itype { crate::vfs::InodeType::Directory => 'd', crate::vfs::InodeType::Regular => 'f', _ => '-' };
+                                    crate::kprintln!("{} {}", t, e.name);
+                                }
+                            }
+                            Err(e) => crate::kprintln!("ls: readdir failed ({:?})", e),
+                        }
+                    }
+                    Ok(false) => {
+                        // File: print size
+                        match file.size() {
+                            Ok(sz) => crate::kprintln!("{} (file, {} bytes)", path, sz),
+                            Err(e) => crate::kprintln!("{} (file, size error {:?})", path, e),
+                        }
+                    }
+                    Err(e) => crate::kprintln!("ls: getattr failed ({:?})", e),
+                }
+            }
+            Err(e) => crate::kprintln!("ls: cannot open {} ({:?})", path, e),
         }
     }
 

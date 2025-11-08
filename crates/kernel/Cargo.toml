@@ -79,6 +79,7 @@ model-lifecycle = []  # Model registry, hot-swap, rollback
 shadow-mode = []      # Shadow agent, canary deployment
 otel = []             # OpenTelemetry exporter, drift detection
 decision-traces = []  # Decision trace buffer and export
+initramfs-models = [] # Embed models as initramfs (cpio newc) for integration tests
 
 [build-dependencies]
 bootloader_api = { version = "0.11.12" }

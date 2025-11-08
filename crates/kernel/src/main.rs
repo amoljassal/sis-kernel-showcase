@@ -121,6 +121,13 @@ pub mod ai_benchmark;
 #[cfg(feature = "llm")]
 pub mod llm;
 
+// Optional embedded initramfs for models (integration tests)
+#[cfg(all(feature = "initramfs-models", have_initramfs_models, any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "riscv64")))]
+#[allow(non_upper_case_globals)]
+mod embedded_models_initramfs {
+    pub static data: &[u8] = include_bytes!(env!("INITRAMFS_MODELS_FILE"));
+}
+
 // Phase 7: AI Operations Platform
 #[cfg(feature = "model-lifecycle")]
 pub mod model_lifecycle;
@@ -336,6 +343,17 @@ mod bringup {
         super::uart_print(b"VFS: MOUNT TMPFS AT /\n");
         let root = crate::vfs::tmpfs::mount_tmpfs().expect("Failed to mount tmpfs");
         crate::vfs::set_root(root.clone());
+
+        // Optionally unpack embedded initramfs (models for integration)
+        #[cfg(all(feature = "initramfs-models", have_initramfs_models))]
+        {
+            super::uart_print(b"INITRAMFS: UNPACK MODELS\n");
+            if let Err(e) = crate::initramfs::unpack_initramfs(crate::embedded_models_initramfs::data) {
+                crate::warn!("initramfs: unpack failed: {:?}", e);
+            } else {
+                super::uart_print(b"INITRAMFS: MODELS READY\n");
+            }
+        }
 
         // Mount devfs at /dev
         super::uart_print(b"VFS: MOUNT DEVFS AT /dev\n");

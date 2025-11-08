@@ -1611,17 +1611,23 @@ The model lifecycle subsystem provides enterprise-grade model deployment and man
 # List registered models
 modelctl list
 
-# Load new model with verification
-modelctl load /models/neural_v2.bin
+# Dry-run a swap (load + health check, no state change)
+modelctl dry-swap v1
+
+# Hot-swap to new model (atomic)
+modelctl swap v1
+
+# Load and verify model without activation
+modelctl load v1
+
+# Show JSONL history (last N entries)
+modelctl history 20
 
 # Check model health
 modelctl health
 
 # Rollback to previous version
 modelctl rollback
-
-# Hot-swap to new model (atomic)
-modelctl swap neural_v2
 ```
 
 **Architecture:**
@@ -1655,8 +1661,11 @@ tracectl list
 # Show detailed trace by ID
 tracectl show 42
 
-# Export incident bundle (last 100 traces + context)
-tracectl export /incidents/incident_001.json
+# Export incident bundle for specific IDs
+tracectl export 41 42 43
+
+# Export recent shadow divergences as an incident bundle
+tracectl export-divergences 50
 
 # Query traces by confidence threshold
 tracectl query --min-confidence 800
@@ -1695,19 +1704,24 @@ The shadow deployment subsystem enables safe model rollouts with automatic rollb
 **Shell Interface (`shadowctl`):**
 ```bash
 # Enable shadow mode with model v2
-shadowctl enable neural_v2
+shadowctl enable v2
 
-# Set canary traffic percentage
-shadowctl canary 10   # 10% of traffic to shadow
+# Set shadow mode (log-only, compare, or canary)
+shadowctl mode log
+shadowctl mode compare
+shadowctl canary 10   # alias for mode canary10
 
 # Check divergence statistics
-shadowctl stats
+shadowctl status
 
 # Manually trigger rollback
 shadowctl rollback
 
 # Disable shadow mode
 shadowctl disable
+
+# Dry-run (log divergences, no counters/rollback)
+shadowctl dry-run on|off|status
 ```
 
 **Shadow Modes:**
@@ -7115,4 +7129,20 @@ Dry‑Run / Simulation Modes
 
 - Shadow dry‑run: Enable log‑only compare without counters/rollback via `shadowctl dry-run on|off|status`. In dry‑run, divergences are logged but do not increment counters or trigger rollbacks.
 - Canary aliases: `shadowctl canary 10|100` sets compare‑only or full canary modes without impact to production until promoted.
-- Model dry‑swap (planned): `modelctl dry-swap <version>` loads + health‑checks a model without promoting it; prints what would change.
+- Model dry‑swap: `modelctl dry-swap <version>` loads + health‑checks a model without promoting it; prints what would change.
+
+Integration Testing with Embedded Models (Initramfs)
+
+- Create a small model tree and pack it as newc CPIO:
+  - `mkdir -p /tmp/models_root/models/v1`
+  - `dd if=/dev/zero of=/tmp/models_root/models/v1/model.bin bs=1k count=4`
+  - `cd /tmp/models_root && find . -print | cpio -o -H newc > /tmp/models.cpio`
+- Build with the archive embedded:
+  - `INITRAMFS_MODELS=/tmp/models.cpio SIS_FEATURES="bringup,ai-ops,initramfs-models" ./scripts/uefi_run.sh build`
+- In the shell:
+  - `autoctl off`
+  - `ls /models` and `ls /models/v1`
+  - `modelctl dry-swap v1` then `modelctl swap v1`
+  - `modelctl history 10`
+  - `shadowctl enable v1 && shadowctl mode compare`
+  - `tracectl export-divergences 10`
