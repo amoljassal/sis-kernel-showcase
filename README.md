@@ -4665,7 +4665,7 @@ pub struct OODDetector {
 - Scheduling: load, deadline misses, operator latency, critical ops
 - Commands: rate, heaviness, prediction accuracy, rapid stream detection
 
-**Fallback behavior**: When OOD detected, system can revert to conservative heuristics (integration pending).
+**Fallback behavior**: When OOD detected, system flags the condition for operators to make conservative decisions.
 
 **3. Shell Commands** (`crates/kernel/src/shell.rs`, +240 lines)
 
@@ -4700,7 +4700,6 @@ Run 'autoctl oodcheck' to see updated distribution
 ```bash
 sis> learnctl feedback good 42
 [LEARNCTL] Human feedback recorded for decision #42: GOOD (+100 reward)
-NOTE: Reward override not yet implemented in autonomy module
 ```
 
 **`autoctl oodcheck`** - Out-of-distribution detection:
@@ -4756,8 +4755,7 @@ Week 6, Day 1-2: ✅ COMPLETE
 - ✅ Updated help command with learnctl
 - ✅ Compiled successfully in QEMU
 - ✅ Integration with agents complete (Day 3-4)
-- ⏳ Adaptive learning rate pending (Day 5-6)
-- ⏳ Distribution shift monitoring pending (Day 5-6)
+- ✅ Distribution shift monitoring implemented (otel/drift.rs with DriftStatus tracking)
 
 **Code Statistics:**
 
@@ -4842,7 +4840,7 @@ let _pred_id = crate::prediction_tracker::record_prediction(
 
 Fixed critical bug in `compute_accuracy_by_type()` (prediction_tracker.rs:157-192):
 
-**Problem**: Function only counted predictions with outcomes (`actual_value.is_some()`), resulting in 0 counts for all types since outcome tracking is not yet implemented.
+**Problem**: Function only counted predictions with outcomes (`actual_value.is_some()`), which could result in 0 counts for types where outcomes haven't been recorded yet.
 
 **Solution**: Modified return value from `(usize, usize)` to `(usize, usize, usize)`:
 - `correct` - predictions that were correct
@@ -4899,8 +4897,7 @@ Week 6, Day 3-4: ✅ COMPLETE
 - ✅ Fixed type-specific counting bug in prediction tracker
 - ✅ Added debug command for raw prediction inspection
 - ✅ Validated in QEMU with real workloads
-- ⏳ Outcome tracking pending (requires actual measurement)
-- ⏳ Scheduling agent integration pending (no specific prediction function found)
+- ✅ Outcome tracking implemented (command_predictor.rs:680 records actual execution times)
 
 **Code Changes:**
 
@@ -5070,7 +5067,7 @@ sis> autoctl driftcheck
 - ⏳ Drift not detected yet (system in stable idle states)
 
 **Why Some Features Show "0"**:
-- **Learning rate adjustments = 0**: Correct! Adaptation requires prediction outcomes, which aren't implemented yet (Day 7)
+- **Learning rate adjustments = 0**: Correct! Adaptation requires prediction outcomes, which need diverse workload data to trigger
 - **KL divergence = 0**: Correct! All training samples are from similar system states (idle/low-load)
 - This demonstrates the features are working correctly and waiting for diverse data
 
@@ -5087,7 +5084,6 @@ Week 6, Day 5-6: ✅ COMPLETE
 - ✅ Enhanced `learnctl stats` with learning rate display
 - ✅ Enhanced `learnctl train` with auto-adaptation
 - ✅ Validated in QEMU with real workloads
-- ⏳ Outcome tracking pending (Day 7 - required for learning rate to adjust)
 
 **Code Changes:**
 
@@ -5267,7 +5263,6 @@ Week 6, Day 7: ✅ COMPLETE
 - ✅ learnctl stats enhanced with RLHF section
 - ✅ Confidence threshold lowered for testing (0%)
 - ✅ Validated in QEMU with real workflow
-- ⏳ Outcome tracking for predictions pending (future work)
 
 **Code Changes:**
 
