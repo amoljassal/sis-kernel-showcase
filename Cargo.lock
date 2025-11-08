@@ -1853,6 +1853,8 @@ dependencies = [
  "pic8259",
  "riscv",
  "riscv-rt",
+ "serde",
+ "serde_json",
  "sha2",
  "signature",
  "smoltcp",

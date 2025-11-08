@@ -121,6 +121,16 @@ pub mod ai_benchmark;
 #[cfg(feature = "llm")]
 pub mod llm;
 
+// Phase 7: AI Operations Platform
+#[cfg(feature = "model-lifecycle")]
+pub mod model_lifecycle;
+#[cfg(feature = "decision-traces")]
+pub mod trace_decision;
+#[cfg(feature = "shadow-mode")]
+pub mod shadow;
+#[cfg(feature = "otel")]
+pub mod otel;
+
 // Architecture-specific modules
 #[cfg(target_arch = "aarch64")]
 pub mod arch {
