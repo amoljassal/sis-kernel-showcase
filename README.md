@@ -98,6 +98,8 @@ Phase A implements the foundational OS infrastructure that transforms SIS from a
 
 The VFS layer provides a unified interface for all filesystem operations with support for multiple filesystem types.
 
+**See:** `crates/kernel/src/vfs/README.md` for complete VFS integration guide (InodeOps trait, filesystem implementation, testing)
+
 **Core Components:**
 - `crates/kernel/src/vfs/mod.rs` - VFS core layer with mount table and file descriptor management
 - `crates/kernel/src/vfs/inode.rs` - Inode abstraction with `InodeOps` trait for filesystem-agnostic operations
@@ -286,6 +288,8 @@ Complete system call layer providing user-kernel boundary crossing and ARM64 exc
 ### A.4 Device Drivers
 
 VirtIO-based device driver framework with block, network, and GPU support.
+
+**See:** `crates/kernel/src/drivers/README.md` for complete driver implementation guide (Device traits, VirtIO initialization, interrupt handling, testing)
 
 **Core Components:**
 - `crates/kernel/src/driver.rs` - Driver framework with registration and discovery
@@ -1695,7 +1699,8 @@ sis-kernel/
 │   │       │
 │   │       ├── syscall/                # System call interface
 │   │       │   ├── mod.rs              # Syscall dispatcher and table
-│   │       │   └── uaccess.rs          # User-space memory access
+│   │       │   ├── uaccess.rs          # User-space memory access
+│   │       │   └── validation.rs       # Input validation and security hardening (Phase 4)
 │   │       │
 │   │       ├── arch/aarch64/           # ARM64 architecture support
 │   │       │   ├── mod.rs              # ARM64 core
@@ -1787,6 +1792,19 @@ sis-kernel/
 │   │       ├── network_predictor.rs    # Network flow control AI (Week 11)
 │   │       ├── benchmark.rs            # Comparative benchmarks (Week 12)
 │   │       ├── compliance.rs           # EU AI Act compliance (Week 12)
+│   │       │
+│   │       ├── Phase 4: Production Readiness
+│   │       ├── build_info.rs           # Build metadata tracking (git commit, timestamp, features, etc.)
+│   │       ├── chaos.rs                # Chaos engineering with 7 failure modes (DiskFull, NetworkFail, MemoryPressure, etc.)
+│   │       ├── metrics_export.rs       # Metrics export (JSON/CSV formats)
+│   │       │
+│   │       ├── lib/                    # Core library modules (Phase 4 enhancements)
+│   │       │   ├── mod.rs              # Library core
+│   │       │   ├── panic.rs            # Enhanced panic handler with stack traces and forensics
+│   │       │   ├── printk.rs           # Structured logging (Human/JSON dual-format, atomic switching)
+│   │       │   ├── ringbuf.rs          # Ring buffer for bounded data structures
+│   │       │   ├── debug.rs            # Debug utilities
+│   │       │   └── error.rs            # Error handling
 │   │       │
 │   │       ├── Core Kernel Services
 │   │       ├── interrupts.rs           # IRQ handling, timer
@@ -1942,6 +1960,15 @@ sis-kernel/
 │   ├── llm_demo.sh                     # LLM demo
 │   ├── llm_audit_demo.sh               # LLM audit demo
 │   │
+│   ├── Phase 4: Production Readiness Scripts
+│   ├── automated_shell_tests.sh        # Automated shell testing with QMP
+│   ├── run_chaos_tests.sh              # Chaos engineering test runner
+│   ├── soak_test.sh                    # 24-hour stability testing
+│   ├── soak_report.py                  # Soak test analysis and reporting
+│   ├── collect_metrics.sh              # Metrics collection automation
+│   ├── docker_build.sh                 # Docker containerized builds
+│   ├── qmp_input.py                    # QEMU Monitor Protocol client
+│   │
 │   └── esp/                            # UEFI ESP directory
 │       └── EFI/
 │           ├── BOOT/
@@ -1952,39 +1979,62 @@ sis-kernel/
 ├── docs/                               # Documentation (organized by category)
 │   ├── README.md                       # Documentation index and navigation
 │   │
-│   ├── plans/                          # Planning documents and roadmaps
+│   ├── plans/                          # Planning documents and roadmaps (15 files)
 │   │   ├── AI-ML-KERNEL-IMPLEMENTATION-PLAN.md
 │   │   ├── NEURAL-PHASE3-PLAN.md
 │   │   ├── NEURAL-PHASE-4-INTEGRATION-PLAN.md
-│   │   └── PHASE5-AI-NATIVE-INTELLIGENCE.md
+│   │   ├── PHASE4-SOLIDIFICATION-PLAN.md
+│   │   ├── PHASE5-AI-NATIVE-INTELLIGENCE.md
+│   │   ├── PHASE6-EXPLAINABILITY-PLAN.md
+│   │   ├── PHASE7-AI-OPERATIONS-PLAN.md        # P0: Model lifecycle, shadow/canary, traces, OTel
+│   │   ├── PRODUCTION-READINESS-PLAN.md
+│   │   ├── OS-BLUEPRINT.md                     # Comprehensive OS architecture (98KB)
+│   │   ├── PHASE-G-DESKTOP-BLUEPRINT.md        # GUI/desktop environment
+│   │   └── ... (5 more planning docs)
 │   │
-│   ├── results/                        # Week-by-week implementation results
+│   ├── results/                        # Completion reports and test results (27 files)
+│   │   ├── PHASE_A1_COMPLETION.md              # Phase A.1 OS foundation results
+│   │   ├── PHASE_B_COMPLETION.md               # Phase B results
+│   │   ├── PHASE4-COMPLETION-REPORT.md         # Phase 4 production readiness
+│   │   ├── PHASE5-6-COMPLETION-REPORT.md       # Phases 5-6 results
+│   │   ├── IMPLEMENTATION_STATUS.md
+│   │   ├── PRODUCTION_READINESS_IMPLEMENTATION.md
 │   │   ├── WEEK1-IMPLEMENTATION-SUMMARY.md
 │   │   ├── week-7-shell-results.md
 │   │   ├── week-8-test-guide.md
-│   │   └── NEURAL-PHASE-4-WEEK-12-RESULTS.md
+│   │   ├── NEURAL-PHASE-4-WEEK-12-RESULTS.md
+│   │   └── ... (17 more result docs)
 │   │
-│   ├── architecture/                   # Architecture and design docs
+│   ├── architecture/                   # Architecture and design docs (3 files)
 │   │   ├── ARCHITECTURE.md
 │   │   ├── kernel-neural-net.md
 │   │   └── MODULAR_OS_EXTRACTIONS.md
 │   │
-│   ├── guides/                         # How-to guides and operational docs
+│   ├── guides/                         # How-to guides and operational docs (28 files)
 │   │   ├── DEV_HANDOFF.md
 │   │   ├── LLM-KERNEL-INTEGRATION.md
 │   │   ├── real-hardware-bringup-advisory.md
 │   │   ├── refactoring-during-phase4-week-8.md
 │   │   ├── phase-4-add-ons-from-modular-OS-project.md
-│   │   └── PRODUCTION_MODES.md
+│   │   ├── PRODUCTION_MODES.md
+│   │   ├── BUILD.md                            # Build instructions (Phase 4)
+│   │   ├── CHAOS_TESTING.md                    # Chaos engineering guide (Phase 4)
+│   │   ├── MOCK_DEVICES.md                     # Mock device drivers (Phase 4)
+│   │   ├── PANIC_HANDLER.md                    # Enhanced panic handler (Phase 4)
+│   │   ├── SECURITY.md                         # Security hardening guide (Phase 4)
+│   │   └── ... (18 more guides)
 │   │
-│   ├── dev-logs/                       # Development conversation logs
+│   ├── dev-logs/                       # Development conversation logs (5 files)
 │   │   ├── chatgpt-kernel-till-last-bits-of-llm-integration.md
-│   │   └── claude-phase-4-week-6.txt
+│   │   ├── claude-phase-4-week-6.txt
+│   │   ├── claude-till-production-readiness-plan.txt
+│   │   └── ... (2 more logs)
 │   │
 │   ├── schemas/                        # JSON schemas
 │   │   └── sis-metrics-v1.schema.json
 │   │
 │   └── one-pager/                      # Project summaries
+│       └── AI-Native-Kernel-OnePager.md
 │
 └── tools/                              # Python utilities
     ├── sis_datactl.py                  # Data control tool
@@ -2058,7 +2108,9 @@ sis-kernel/
 
 This kernel is structured as a set of small, decoupled modules with narrow APIs. Most can be compiled out via feature flags or toggled at runtime from the shell.
 
-For a deeper, module-by-module breakdown and a shell command map, see `docs/ARCHITECTURE.md`.
+**Module integration guide:** `crates/kernel/src/README.md` - Module-by-module integration points, trait boundaries, cross-module communication patterns, and boundary rules.
+
+**System architecture:** `docs/architecture/ARCHITECTURE.md` - System-wide architecture and shell command map.
 
 Hardware bring-up guide: see `docs/real-hardware-bringup-advisory.md` for an advisory on porting to real boards without bloat while preserving features.
 Refactoring roadmap: see `docs/refactoring-during-phase4-week-8.md` for the HW‑first refactor plan to keep QEMU development aligned with real hardware.
@@ -2082,6 +2134,7 @@ These standards are enforced by review and advisory CI checks (see `docs/real-ha
 ### Core Runtime
 
 - Shell (`crates/kernel/src/shell.rs`)
+  - **See:** `crates/kernel/src/shell/README.md` for command implementation guide (routing pattern, adding new commands, helper modules)
   - Purpose: Operator control, inspection, demos, and stress scenarios.
   - Enable/disable: Always built; command groups gated by features (`llm`, `deterministic`, `virtio-console`, `arm64-ai`).
   - Interfaces: `help`, `metricsctl`, `metrics`, `stresstest …`, `autoctl …`, `neuralctl …`, `memctl …`, `schedctl …`, `agentctl …`, `coordctl …`, `metaclassctl …`, `mlctl …`, `actorctl …`, `graphctl …`, `det …`, `pmu`, `mem`, `regs`, plus LLM commands when `llm` is on.
