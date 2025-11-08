@@ -80,7 +80,7 @@ impl IncidentExporter {
         // 2. Build bundle
         let bundle = IncidentBundle {
             incident_id: self.generate_incident_id(),
-            exported_at: crate::time::uptime_ms() * 1000,
+            exported_at: crate::time::get_uptime_ms() * 1000,
             traces,
             model_info: self.get_model_info(),
             system_snapshot: self.get_system_snapshot(),
@@ -127,7 +127,7 @@ impl IncidentExporter {
         let id = *counter;
         *counter += 1;
 
-        let timestamp = crate::time::uptime_ms() / 1000;  // Seconds
+        let timestamp = crate::time::get_uptime_ms() / 1000;  // Seconds
         alloc::format!("INC-{}-{:03}", timestamp, id)
     }
 
@@ -142,7 +142,7 @@ impl IncidentExporter {
 
     fn get_system_snapshot(&self) -> SystemSnapshot {
         SystemSnapshot {
-            uptime_ms: crate::time::uptime_ms(),
+            uptime_ms: crate::time::get_uptime_ms(),
             heap_stats: HeapStats {
                 allocated: 0,  // TODO: Get from heap allocator
                 peak: 0,
@@ -152,10 +152,15 @@ impl IncidentExporter {
     }
 
     fn get_config(&self) -> ConfigInfo {
+        let features = option_env!("FEATURES").unwrap_or("");
+        let git_commit = option_env!("GIT_COMMIT").unwrap_or("unknown");
+        let build_timestamp = option_env!("BUILD_TIMESTAMP")
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(0);
         ConfigInfo {
-            features: String::from(crate::build_info::FEATURES),
-            git_commit: String::from(crate::build_info::GIT_COMMIT),
-            build_timestamp: crate::build_info::BUILD_TIMESTAMP,
+            features: String::from(features),
+            git_commit: String::from(git_commit),
+            build_timestamp,
         }
     }
 

@@ -28,7 +28,7 @@ impl Model {
         Ok(Self {
             version,
             weights: Vec::new(),
-            loaded_at: crate::time::uptime_ms(),
+            loaded_at: crate::time::get_uptime_ms(),
             hash: [0u8; 32],
         })
     }

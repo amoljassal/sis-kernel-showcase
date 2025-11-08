@@ -57,6 +57,7 @@ pub enum Errno {
     EADDRNOTAVAIL = 99, // Cannot assign requested address
     ENOTSOCK = 88,  // Socket operation on non-socket
     ETIMEDOUT = 110, // Connection timed out
+    ECANCELED = 125, // Operation canceled
 }
 
 impl From<KernelError> for Errno {
@@ -121,6 +122,7 @@ impl Errno {
             95 => Errno::ENOTSUP,
             99 => Errno::EADDRNOTAVAIL,
             110 => Errno::ETIMEDOUT,
+            125 => Errno::ECANCELED,
             _ => Errno::EINVAL, // Default to EINVAL for unknown values
         }
     }
