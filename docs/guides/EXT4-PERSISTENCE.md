@@ -21,6 +21,22 @@ Notes:
 - The current VFS mounts ext2 read‑only. Use this to validate mountpoint overlay and readback.
 - Write‑side ext4 mounting via VFS is planned; use the durability harness below to exercise journaling today.
 
+## Incident Exports (Paths and Flags)
+
+- Default location: Incident bundles are written under `/incidents/INC-<unix-secs>-NNN.json` if no output path is specified.
+- Export commands:
+  - `tracectl export [--path <file>] [--all | --recent N | <id...>]`
+  - `tracectl export-divergences [N] [--path <file>]`
+  - Examples:
+    - `tracectl export --recent 5 --path /traces5.json`
+    - `tracectl export 1001 1002 --path /picked.json`
+    - `tracectl export --all --path /all_traces.json`
+    - `tracectl export-divergences 25 --path /div25.json`
+
+Notes:
+- The `/models` ext2 overlay in this guide is read‑only; attempting to export bundles under `/models` will fail (EROFS). Use `/incidents` or another writable path.
+- For durable, journaled persistence to the attached image, use the ext4 durability harness below (and future VFS ext4 write mount at `/models`).
+
 ## B) ext4/JBD2 Durability Harness (Crash/Replay)
 
 Run the full ext4 journaling cycle (create image → write → crash → replay → fsck):

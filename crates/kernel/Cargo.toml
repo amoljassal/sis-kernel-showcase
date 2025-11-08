@@ -8,7 +8,6 @@ name = "sis_kernel"
 path = "src/main.rs"
 
 [dependencies]
-bootloader_api = { version = "0.11.12", default-features = false }
 linked_list_allocator = { version = "0.10.5", default-features = false, features = ["use_spin"] }
 spin = { version = "0.9.8", default-features = false, features = ["spin_mutex", "once", "rwlock"] }
 lazy_static = { version = "1.4.0", default-features = false, features = ["spin_no_std"] }
@@ -38,6 +37,7 @@ serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 x86_64 = { version = "=0.14.13", default-features = false, features = ["instructions", "abi_x86_interrupt"] }
 uart_16550 = { version = "0.2.0", default-features = false }
 pic8259 = { version = "0.10.1", default-features = false }
+bootloader_api = { version = "0.11.12", default-features = false }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 
@@ -82,7 +82,6 @@ decision-traces = []  # Decision trace buffer and export
 initramfs-models = [] # Embed models as initramfs (cpio newc) for integration tests
 
 [build-dependencies]
-bootloader_api = { version = "0.11.12" }
 chrono = "0.4"
 
 [target.'cfg(target_arch = "x86_64")'.build-dependencies]

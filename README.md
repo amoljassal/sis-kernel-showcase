@@ -1025,6 +1025,7 @@ Target:    aarch64-unknown-none
 **Build Compatibility:**
 - Rust nightly pinned: `nightly-2025-01-15`
 - Bootloader upgraded: `0.11.11` → `0.11.12`
+- Bootloader crates gated: `bootloader`/`bootloader_api` are now compiled only on `x86_64` (Cargo target cfg). AArch64 builds skip them for faster, leaner builds; ARM64 boots via the separate `uefi-boot` crate.
 - Build system: Environment variable-based (no generated file dependencies)
 - Clean compilation with only minor warnings
 
@@ -1663,11 +1664,16 @@ tracectl list
 # Show detailed trace by ID
 tracectl show 42
 
-# Export incident bundle for specific IDs
-tracectl export 41 42 43
+# Export incident bundle (choose one):
+#  - Specific IDs
+tracectl export 41 42 43 --path /picked.json
+#  - Last N traces (defaults to 10 if omitted)
+tracectl export --recent 5 --path /traces5.json
+#  - All traces in buffer
+tracectl export --all --path /all_traces.json
 
 # Export recent shadow divergences as an incident bundle
-tracectl export-divergences 50
+tracectl export-divergences 50 --path /div50.json
 
 # Query traces by confidence threshold
 tracectl query --min-confidence 800
@@ -7113,7 +7119,10 @@ Notes:
 SRE Integration: Incident Bundles
 
 - Path: Bundles are written under `/incidents/INC-<unix-secs>-NNN.json` on the kernel VFS.
-- Export: Use `tracectl export <id...>` for specific traces or `tracectl export-divergences [N]` to export recent shadow divergences as an incident bundle (feature: shadow-mode).
+- Export:
+  - `tracectl export [--path <file>] [--all | --recent N | <id...>]` to export decision traces.
+  - `tracectl export-divergences [N] [--path <file>]` to export recent shadow divergences (feature: shadow-mode).
+  - If `--path` is omitted, files are written under `/incidents/INC-*.json`.
 - Collection: In QEMU, the backing block image contains `/incidents`; collect bundles by:
   - Attaching the disk image to the host and mounting read-only to archive files.
   - Using a host-side SRE agent to copy bundles on shutdown or on QMP signal.
