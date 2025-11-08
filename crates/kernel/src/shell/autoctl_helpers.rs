@@ -767,15 +767,18 @@ impl super::Shell {
         }
 
         // LLM Inference Metrics
-        unsafe { crate::uart_print(b"\nLLM State Inference:\n"); }
-        if let Some(stats) = crate::llm::get_inference_stats() {
-            unsafe { crate::uart_print(b"  Total Queries:        "); }
-            self.print_number_simple(stats.total_queries);
-            unsafe { crate::uart_print(b"\n  Successful:           "); }
-            self.print_number_simple(stats.successful_executions);
-            unsafe { crate::uart_print(b"\n  Success Rate:         "); }
-            self.print_number_simple(stats.success_rate as u64);
-            unsafe { crate::uart_print(b"%\n"); }
+        #[cfg(feature = "llm")]
+        {
+            unsafe { crate::uart_print(b"\nLLM State Inference:\n"); }
+            if let Some(stats) = crate::llm::get_inference_stats() {
+                unsafe { crate::uart_print(b"  Total Queries:        "); }
+                self.print_number_simple(stats.total_queries);
+                unsafe { crate::uart_print(b"\n  Successful:           "); }
+                self.print_number_simple(stats.successful_executions);
+                unsafe { crate::uart_print(b"\n  Success Rate:         "); }
+                self.print_number_simple(stats.success_rate as u64);
+                unsafe { crate::uart_print(b"%\n"); }
+            }
         }
 
         unsafe { crate::uart_print(b"\nUse 'autoctl export-metrics <path>' to export detailed metrics.\n"); }

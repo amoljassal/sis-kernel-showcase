@@ -146,7 +146,7 @@ impl AttentionLayer {
     /// Create new attention layer with initialized weights
     pub fn new() -> Self {
         // Xavier/Glorot initialization
-        let scale = (2.0 / EMBEDDING_DIM as f32).sqrt();
+        let scale = libm::sqrtf(2.0 / EMBEDDING_DIM as f32);
 
         Self {
             query_weights: Self::init_weights(scale),
@@ -201,7 +201,7 @@ impl AttentionLayer {
         let q = Self::linear_transform(&self.query_weights, query);
 
         // Compute attention scores: score_i = Q · K_i / sqrt(d)
-        let scale = 1.0 / (EMBEDDING_DIM as f32).sqrt();
+        let scale = 1.0 / libm::sqrtf(EMBEDDING_DIM as f32);
         let mut scores: Vec<f32> = keys.iter()
             .map(|key| {
                 let k = Self::linear_transform(&self.key_weights, key);
@@ -262,7 +262,7 @@ fn softmax(scores: &mut [f32]) {
     // Compute exp(x - max) and sum
     let mut sum = 0.0;
     for score in scores.iter_mut() {
-        *score = (*score - max_score).exp();
+        *score = libm::expf(*score - max_score);
         sum += *score;
     }
 

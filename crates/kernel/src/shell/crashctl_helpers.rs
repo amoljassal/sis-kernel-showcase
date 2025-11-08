@@ -38,11 +38,11 @@ impl super::Shell {
                 let level = if status.confidence >= 0.9 {
                     b"CRITICAL"
                 } else if status.confidence >= 0.8 {
-                    b"WARNING"
+                    b"WARNING "  // Padded to 8 bytes
                 } else if status.confidence >= 0.6 {
                     b"ELEVATED"
                 } else {
-                    b"NORMAL"
+                    b"NORMAL  "  // Padded to 8 bytes
                 };
                 unsafe { crate::uart_print(b"Risk Level: "); }
                 unsafe { crate::uart_print(level); }

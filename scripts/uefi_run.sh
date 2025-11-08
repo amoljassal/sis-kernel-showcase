@@ -14,9 +14,9 @@ echo "[*] Building UEFI app (aarch64-unknown-uefi)..."
 rustup target add aarch64-unknown-uefi >/dev/null 2>&1 || true
 if [[ -n "${BOOT_FEATURES:-}" ]]; then
   echo "[*] Building uefi-boot with features: ${BOOT_FEATURES}"
-  cargo build -p uefi-boot --release --target aarch64-unknown-uefi --features "${BOOT_FEATURES}"
+  cargo build --manifest-path crates/uefi-boot/Cargo.toml --release --target aarch64-unknown-uefi --features "${BOOT_FEATURES}"
 else
-  cargo build -p uefi-boot --release --target aarch64-unknown-uefi
+  cargo build --manifest-path crates/uefi-boot/Cargo.toml --release --target aarch64-unknown-uefi
 fi
 
 UEFI_APP="$ROOT_DIR/target/aarch64-unknown-uefi/release/uefi-boot.efi"
@@ -88,9 +88,9 @@ FEATURES="${FEATURES#,}"
 
 if [[ -n "$FEATURES" ]]; then
   echo "[*] Building with features: $FEATURES"
-  cargo +nightly build -p sis_kernel -Z build-std=core,alloc --target aarch64-unknown-none --features "$FEATURES"
+  cargo +nightly build --manifest-path crates/kernel/Cargo.toml -Z build-std=core,alloc --target aarch64-unknown-none --features "$FEATURES"
 else
-  cargo +nightly build -p sis_kernel -Z build-std=core,alloc --target aarch64-unknown-none
+  cargo +nightly build --manifest-path crates/kernel/Cargo.toml -Z build-std=core,alloc --target aarch64-unknown-none
 fi
 KERNEL_ELF="$ROOT_DIR/target/aarch64-unknown-none/debug/sis_kernel"
 if [[ ! -f "$KERNEL_ELF" ]]; then
