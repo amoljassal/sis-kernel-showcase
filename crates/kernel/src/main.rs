@@ -186,8 +186,9 @@ unsafe fn uart_print(msg: &[u8]) {
 #[macro_export]
 macro_rules! kprint {
     ($($t:tt)*) => {{
+        let s = alloc::format!($($t)*);
         #[allow(unused_unsafe)]
-        unsafe { crate::uart_print(format_args!($($t)*).to_string().as_bytes()); }
+        unsafe { crate::uart_print(s.as_bytes()); }
     }};
 }
 

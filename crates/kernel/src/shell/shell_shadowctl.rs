@@ -11,7 +11,7 @@ impl super::Shell {
         }
         #[cfg(not(feature = "shadow-mode"))]
         {
-            crate::println!("shadowctl: shadow-mode feature not enabled");
+            crate::kprintln!("shadowctl: shadow-mode feature not enabled");
         }
     }
 
@@ -21,10 +21,10 @@ impl super::Shell {
 
         if args.is_empty() {
             let stats = SHADOW_AGENT.get_stats();
-            crate::println!("Shadow Agent Status:");
-            crate::println!("  Mode:        {:?}", stats.mode);
-            crate::println!("  Decisions:   {}", stats.decision_count);
-            crate::println!("  Divergences: {} ({:.2}%)",
+            crate::kprintln!("Shadow Agent Status:");
+            crate::kprintln!("  Mode:        {:?}", stats.mode);
+            crate::kprintln!("  Decisions:   {}", stats.decision_count);
+            crate::kprintln!("  Divergences: {} ({:.2}%)",
                 stats.divergence_count, stats.divergence_rate);
             return;
         }
@@ -32,50 +32,50 @@ impl super::Shell {
         match args[0] {
             "enable" => {
                 if let Some(version) = args.get(1) {
-                    crate::println!("Enabling shadow agent with model: {}", version);
-                    crate::println!("Shadow agent enabled (LogOnly mode)");
-                    crate::println!("Use 'shadowctl mode compare' to enable comparison");
+                    crate::kprintln!("Enabling shadow agent with model: {}", version);
+                    crate::kprintln!("Shadow agent enabled (LogOnly mode)");
+                    crate::kprintln!("Use 'shadowctl mode compare' to enable comparison");
                 } else {
-                    crate::println!("Usage: shadowctl enable <version>");
+                    crate::kprintln!("Usage: shadowctl enable <version>");
                 }
             }
             "disable" => {
                 SHADOW_AGENT.disable();
-                crate::println!("Shadow agent disabled");
+                crate::kprintln!("Shadow agent disabled");
             }
             "promote" => {
                 let stats = SHADOW_AGENT.get_stats();
-                crate::println!("Shadow Agent Statistics:");
-                crate::println!("  Decisions:   {}", stats.decision_count);
-                crate::println!("  Divergences: {} ({:.2}%)",
+                crate::kprintln!("Shadow Agent Statistics:");
+                crate::kprintln!("  Decisions:   {}", stats.decision_count);
+                crate::kprintln!("  Divergences: {} ({:.2}%)",
                     stats.divergence_count, stats.divergence_rate);
 
                 if stats.divergence_rate > 10.0 {
-                    crate::println!("\nWARNING: Divergence rate > 10%");
-                    crate::println!("Promotion not recommended");
+                    crate::kprintln!("\nWARNING: Divergence rate > 10%");
+                    crate::kprintln!("Promotion not recommended");
                 } else {
-                    crate::println!("\nPromoting shadow to production...");
+                    crate::kprintln!("\nPromoting shadow to production...");
                     SHADOW_AGENT.disable();
-                    crate::println!("Promotion complete");
+                    crate::kprintln!("Promotion complete");
                 }
             }
             "status" => {
                 let stats = SHADOW_AGENT.get_stats();
-                crate::println!("Shadow Agent Status:");
-                crate::println!("  Mode:        {:?}", stats.mode);
-                crate::println!("  Decisions:   {}", stats.decision_count);
-                crate::println!("  Divergences: {} ({:.2}%)",
+                crate::kprintln!("Shadow Agent Status:");
+                crate::kprintln!("  Mode:        {:?}", stats.mode);
+                crate::kprintln!("  Decisions:   {}", stats.decision_count);
+                crate::kprintln!("  Divergences: {} ({:.2}%)",
                     stats.divergence_count, stats.divergence_rate);
             }
             "threshold" => {
                 if let Some(threshold_str) = args.get(1) {
                     if let Ok(_threshold) = threshold_str.parse::<u32>() {
-                        crate::println!("Divergence threshold set to: {}", threshold_str);
+                        crate::kprintln!("Divergence threshold set to: {}", threshold_str);
                     } else {
-                        crate::println!("Invalid threshold value");
+                        crate::kprintln!("Invalid threshold value");
                     }
                 } else {
-                    crate::println!("Usage: shadowctl threshold <N>");
+                    crate::kprintln!("Usage: shadowctl threshold <N>");
                 }
             }
             "mode" => {
@@ -90,24 +90,24 @@ impl super::Shell {
 
                     if let Some(m) = mode {
                         SHADOW_AGENT.set_mode(m);
-                        crate::println!("Shadow mode set to: {:?}", m);
+                        crate::kprintln!("Shadow mode set to: {:?}", m);
                     } else {
-                        crate::println!("Unknown mode: {}", mode_str);
-                        crate::println!("Valid modes: log, compare, canary10, canary100");
+                        crate::kprintln!("Unknown mode: {}", mode_str);
+                        crate::kprintln!("Valid modes: log, compare, canary10, canary100");
                     }
                 } else {
-                    crate::println!("Usage: shadowctl mode <MODE>");
+                    crate::kprintln!("Usage: shadowctl mode <MODE>");
                 }
             }
             _ => {
-                crate::println!("Unknown shadowctl command: {}", args[0]);
-                crate::println!("Usage:");
-                crate::println!("  shadowctl enable <version>    - Enable shadow agent");
-                crate::println!("  shadowctl disable             - Disable shadow mode");
-                crate::println!("  shadowctl promote             - Promote shadow to production");
-                crate::println!("  shadowctl status              - Show statistics");
-                crate::println!("  shadowctl threshold <N>       - Set divergence threshold");
-                crate::println!("  shadowctl mode <MODE>         - Set mode (log/compare/canary10/canary100)");
+                crate::kprintln!("Unknown shadowctl command: {}", args[0]);
+                crate::kprintln!("Usage:");
+                crate::kprintln!("  shadowctl enable <version>    - Enable shadow agent");
+                crate::kprintln!("  shadowctl disable             - Disable shadow mode");
+                crate::kprintln!("  shadowctl promote             - Promote shadow to production");
+                crate::kprintln!("  shadowctl status              - Show statistics");
+                crate::kprintln!("  shadowctl threshold <N>       - Set divergence threshold");
+                crate::kprintln!("  shadowctl mode <MODE>         - Set mode (log/compare/canary10/canary100)");
             }
         }
     }

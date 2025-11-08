@@ -146,14 +146,14 @@ pub fn handle_drift(status: DriftStatus) {
     match status {
         DriftStatus::Ok => {}
         DriftStatus::Warning { ref metric, delta } => {
-            crate::println!("[DRIFT WARNING] {}: delta={:.2}", metric, delta);
+            crate::kprintln!("[DRIFT WARNING] {}: delta={:.2}", metric, delta);
         }
         DriftStatus::Alert { ref metric, baseline, current, delta } => {
-            crate::println!("[DRIFT ALERT] {}: baseline={:.2}, current={:.2}, delta={:.2}",
+            crate::kprintln!("[DRIFT ALERT] {}: baseline={:.2}, current={:.2}, delta={:.2}",
                 metric, baseline, current, delta);
 
             // TODO: Automatic action - switch to safe mode
-            crate::println!("[DRIFT] Switching to safe mode (not implemented)");
+            crate::kprintln!("[DRIFT] Switching to safe mode (not implemented)");
         }
     }
 }

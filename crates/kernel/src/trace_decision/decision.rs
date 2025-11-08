@@ -78,7 +78,7 @@ impl DecisionTrace {
     pub fn new(trace_id: u64) -> Self {
         Self {
             trace_id,
-            timestamp_us: crate::time::uptime_ms() * 1000,
+            timestamp_us: crate::time::get_uptime_ms() * 1000,
             model_version: String::from("unknown"),
             model_hash: [0u8; 32],
             telemetry: Telemetry {
@@ -89,10 +89,10 @@ impl DecisionTrace {
             },
             features: Vec::new(),
             system_state: SystemState {
-                uptime_ms: crate::time::uptime_ms(),
-                heap_used: 0,
-                processes_running: 0,
-            },
+                uptime_ms: crate::time::get_uptime_ms(),
+            heap_used: 0,
+            processes_running: 0,
+        },
             hidden_activations: Vec::new(),
             policy_checks: Vec::new(),
             predictions: Vec::new(),

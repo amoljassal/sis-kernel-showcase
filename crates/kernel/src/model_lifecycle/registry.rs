@@ -13,7 +13,7 @@ use crate::lib::error::{Result, Errno};
 pub struct ModelMetadata {
     pub version: String,
     pub hash: [u8; 32],              // SHA-256
-    pub signature: [u8; 64],         // Ed25519
+    pub signature: alloc::vec::Vec<u8>,         // Ed25519 (64 bytes)
     pub status: ModelStatus,
     pub loaded_at: u64,              // UNIX timestamp
     pub health: Option<HealthMetrics>,
@@ -194,7 +194,7 @@ mod tests {
         let metadata = ModelMetadata {
             version: String::from("v1.0.0"),
             hash: [0u8; 32],
-            signature: [0u8; 64],
+            signature: alloc::vec::Vec::new(),
             status: ModelStatus::Active,
             loaded_at: 0,
             health: None,
@@ -211,7 +211,7 @@ mod tests {
         let metadata = ModelMetadata {
             version: String::from("v1.0.0"),
             hash: [0u8; 32],
-            signature: [0u8; 64],
+            signature: alloc::vec::Vec::new(),
             status: ModelStatus::Active,
             loaded_at: 0,
             health: None,

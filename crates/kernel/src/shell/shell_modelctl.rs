@@ -11,80 +11,80 @@ impl super::Shell {
         }
         #[cfg(not(feature = "model-lifecycle"))]
         {
-            crate::println!("modelctl: model-lifecycle feature not enabled");
+            crate::kprintln!("modelctl: model-lifecycle feature not enabled");
         }
     }
 
     #[cfg(feature = "model-lifecycle")]
     fn modelctl_impl(&self, args: &[&str]) {
         if args.is_empty() {
-            crate::println!("Model Status:");
-            crate::println!("  Active:   (not set)");
-            crate::println!("  Shadow:   (not set)");
-            crate::println!("  Rollback: (not set)");
+            crate::kprintln!("Model Status:");
+            crate::kprintln!("  Active:   (not set)");
+            crate::kprintln!("  Shadow:   (not set)");
+            crate::kprintln!("  Rollback: (not set)");
             return;
         }
 
         match args[0] {
             "list" => {
-                crate::println!("Model Registry:");
-                crate::println!("  Version      Status       Loaded At           Health");
-                crate::println!("  ------------ ------------ ------------------- ----------------------------");
-                crate::println!("  (registry not initialized)");
+                crate::kprintln!("Model Registry:");
+                crate::kprintln!("  Version      Status       Loaded At           Health");
+                crate::kprintln!("  ------------ ------------ ------------------- ----------------------------");
+                crate::kprintln!("  (registry not initialized)");
             }
             "load" => {
                 if let Some(version) = args.get(1) {
-                    crate::println!("Loading model: {}", version);
-                    crate::println!("Model loaded (not activated)");
+                    crate::kprintln!("Loading model: {}", version);
+                    crate::kprintln!("Model loaded (not activated)");
                 } else {
-                    crate::println!("Usage: modelctl load <version>");
+                    crate::kprintln!("Usage: modelctl load <version>");
                 }
             }
             "swap" => {
                 if let Some(version) = args.get(1) {
-                    crate::println!("Swapping to model version: {}", version);
-                    crate::println!("Model swap complete: {}", version);
-                    crate::println!("Previous model saved to rollback");
+                    crate::kprintln!("Swapping to model version: {}", version);
+                    crate::kprintln!("Model swap complete: {}", version);
+                    crate::kprintln!("Previous model saved to rollback");
                 } else {
-                    crate::println!("Usage: modelctl swap <version>");
+                    crate::kprintln!("Usage: modelctl swap <version>");
                 }
             }
             "rollback" => {
-                crate::println!("Rolling back to last known good model...");
-                crate::println!("Rollback complete");
+                crate::kprintln!("Rolling back to last known good model...");
+                crate::kprintln!("Rollback complete");
             }
             "health" => {
                 let target = args.get(1).copied().unwrap_or("active");
-                crate::println!("Running health checks on: {}", target);
-                crate::println!("Health check results:");
-                crate::println!("  Latency P99:     < 1ms     [PASS]");
-                crate::println!("  Memory:          < 10MB    [PASS]");
-                crate::println!("  Accuracy:        > 95%     [PASS]");
+                crate::kprintln!("Running health checks on: {}", target);
+                crate::kprintln!("Health check results:");
+                crate::kprintln!("  Latency P99:     < 1ms     [PASS]");
+                crate::kprintln!("  Memory:          < 10MB    [PASS]");
+                crate::kprintln!("  Accuracy:        > 95%     [PASS]");
             }
             "status" => {
-                crate::println!("Model Status:");
-                crate::println!("  Active:   (not set)");
-                crate::println!("  Shadow:   (not set)");
-                crate::println!("  Rollback: (not set)");
+                crate::kprintln!("Model Status:");
+                crate::kprintln!("  Active:   (not set)");
+                crate::kprintln!("  Shadow:   (not set)");
+                crate::kprintln!("  Rollback: (not set)");
             }
             "remove" => {
                 if let Some(version) = args.get(1) {
-                    crate::println!("Removing model: {}", version);
-                    crate::println!("Model removed: {}", version);
+                    crate::kprintln!("Removing model: {}", version);
+                    crate::kprintln!("Model removed: {}", version);
                 } else {
-                    crate::println!("Usage: modelctl remove <version>");
+                    crate::kprintln!("Usage: modelctl remove <version>");
                 }
             }
             _ => {
-                crate::println!("Unknown modelctl command: {}", args[0]);
-                crate::println!("Usage:");
-                crate::println!("  modelctl list                 - List all models");
-                crate::println!("  modelctl load <version>       - Load model");
-                crate::println!("  modelctl swap <version>       - Hot-swap to model");
-                crate::println!("  modelctl rollback             - Rollback to last known good");
-                crate::println!("  modelctl health [version]     - Run health checks");
-                crate::println!("  modelctl status               - Show status");
-                crate::println!("  modelctl remove <version>     - Remove model");
+                crate::kprintln!("Unknown modelctl command: {}", args[0]);
+                crate::kprintln!("Usage:");
+                crate::kprintln!("  modelctl list                 - List all models");
+                crate::kprintln!("  modelctl load <version>       - Load model");
+                crate::kprintln!("  modelctl swap <version>       - Hot-swap to model");
+                crate::kprintln!("  modelctl rollback             - Rollback to last known good");
+                crate::kprintln!("  modelctl health [version]     - Run health checks");
+                crate::kprintln!("  modelctl status               - Show status");
+                crate::kprintln!("  modelctl remove <version>     - Remove model");
             }
         }
     }

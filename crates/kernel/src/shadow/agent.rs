@@ -7,6 +7,7 @@ use alloc::sync::Arc;
 use core::sync::atomic::{AtomicU64, Ordering};
 use spin::Mutex;
 use crate::lib::error::Result;
+use crate::model_lifecycle::lifecycle::Model;
 
 /// Shadow deployment mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +38,7 @@ pub struct ShadowAgent {
 
 impl ShadowAgent {
     /// Create new shadow agent
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             mode: Mutex::new(ShadowMode::Disabled),
             model: Arc::new(Mutex::new(None)),
@@ -48,7 +49,7 @@ impl ShadowAgent {
     }
 
     /// Enable shadow agent with model and mode
-    pub fn enable(&self, model: crate::model::lifecycle::Model, mode: ShadowMode) -> Result<()> {
+    pub fn enable(&self, model: Model, mode: ShadowMode) -> Result<()> {
         *self.model.lock() = Some(model);
         *self.mode.lock() = mode;
         self.divergence_count.store(0, Ordering::Relaxed);
@@ -174,8 +175,7 @@ pub struct ShadowStats {
     pub divergence_rate: f32,
 }
 
-/// Global shadow agent instance
-pub static SHADOW_AGENT: ShadowAgent = ShadowAgent::new();
+// Global instance is provided from shadow::mod via lazy_static
 
 #[cfg(test)]
 mod tests {

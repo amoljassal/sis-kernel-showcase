@@ -46,7 +46,7 @@ impl HealthChecker {
         // 1. Latency test
         let latency_p99 = self.measure_latency_p99(model)?;
         if latency_p99 > self.latency_threshold_us {
-            crate::println!("[HEALTH] Latency check failed: {}μs > {}μs",
+            crate::kprintln!("[HEALTH] Latency check failed: {}μs > {}μs",
                 latency_p99, self.latency_threshold_us);
             return Err(Errno::ETIMEDOUT);
         }
@@ -54,7 +54,7 @@ impl HealthChecker {
         // 2. Memory test
         let mem_footprint = self.measure_memory(model)?;
         if mem_footprint > self.memory_threshold_bytes {
-            crate::println!("[HEALTH] Memory check failed: {} bytes > {} bytes",
+            crate::kprintln!("[HEALTH] Memory check failed: {} bytes > {} bytes",
                 mem_footprint, self.memory_threshold_bytes);
             return Err(Errno::ENOMEM);
         }
@@ -63,7 +63,7 @@ impl HealthChecker {
         let accuracy = if !self.test_inputs.is_empty() {
             let acc = self.measure_accuracy(model)?;
             if acc < self.accuracy_threshold {
-                crate::println!("[HEALTH] Accuracy check failed: {:.2}% < {:.2}%",
+                crate::kprintln!("[HEALTH] Accuracy check failed: {:.2}% < {:.2}%",
                     acc * 100.0, self.accuracy_threshold * 100.0);
                 return Err(Errno::EINVAL);
             }
@@ -93,9 +93,9 @@ impl HealthChecker {
         };
 
         for _ in 0..NUM_SAMPLES {
-            let start = crate::time::uptime_ms() * 1000;  // Convert to microseconds
+            let start = crate::time::get_uptime_ms() * 1000;  // Convert to microseconds
             let _ = model.predict(test_input);
-            let end = crate::time::uptime_ms() * 1000;
+            let end = crate::time::get_uptime_ms() * 1000;
             latencies.push(end.saturating_sub(start));
         }
 

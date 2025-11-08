@@ -61,7 +61,7 @@ pub enum RollbackDecision {
 
 /// Execute automatic rollback if needed
 pub fn auto_rollback_if_needed() -> crate::lib::error::Result<()> {
-    use super::agent::SHADOW_AGENT;
+    use crate::shadow::SHADOW_AGENT;
     use crate::lib::error::Errno;
 
     let stats = SHADOW_AGENT.get_stats();
@@ -70,7 +70,7 @@ pub fn auto_rollback_if_needed() -> crate::lib::error::Result<()> {
     match trigger.check(&stats) {
         RollbackDecision::Continue => Ok(()),
         RollbackDecision::Rollback { reason, metric } => {
-            crate::println!("[ROLLBACK] Triggered: {} ({})", reason, metric);
+            crate::kprintln!("[ROLLBACK] Triggered: {} ({})", reason, metric);
 
             // Disable shadow
             SHADOW_AGENT.disable();
@@ -79,7 +79,7 @@ pub fn auto_rollback_if_needed() -> crate::lib::error::Result<()> {
             // let mut lifecycle = MODEL_LIFECYCLE.lock();
             // lifecycle.rollback()?;
 
-            crate::println!("[ROLLBACK] Complete - reverted to production model");
+            crate::kprintln!("[ROLLBACK] Complete - reverted to production model");
 
             Err(Errno::ECANCELED)
         }
