@@ -62,6 +62,7 @@ pub struct ShadowDivergence {
     pub confidence_delta: u32,
     pub action_matches: bool,
     pub mode: alloc::string::String,
+    pub trace_id: Option<u64>,
 }
 
 /// Incident bundle exporter
@@ -126,6 +127,7 @@ impl IncidentExporter {
             confidence_delta: e.confidence_delta,
             action_matches: e.action_matches,
             mode: alloc::format!("{:?}", e.mode),
+            trace_id: e.trace_id,
         }).collect();
 
         let mut bundle = IncidentBundle {

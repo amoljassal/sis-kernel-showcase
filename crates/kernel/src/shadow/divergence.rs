@@ -10,6 +10,7 @@ pub struct DivergenceEvent {
     pub confidence_delta: u32,
     pub action_matches: bool,
     pub mode: ShadowMode,
+    pub trace_id: Option<u64>,
 }
 
 pub struct DivergenceLog {
@@ -39,12 +40,10 @@ impl DivergenceLog {
 pub static DIVERGENCE_LOG: Mutex<DivergenceLog> = Mutex::new(DivergenceLog::new());
 
 pub fn log_event(confidence_delta: u32, action_matches: bool, mode: ShadowMode) {
-    let ev = DivergenceEvent {
-        timestamp_ms: crate::time::get_uptime_ms(),
-        confidence_delta,
-        action_matches,
-        mode,
-    };
-    DIVERGENCE_LOG.lock().push(ev);
+    log_event_with_trace(None, confidence_delta, action_matches, mode);
 }
 
+pub fn log_event_with_trace(trace_id: Option<u64>, confidence_delta: u32, action_matches: bool, mode: ShadowMode) {
+    let ev = DivergenceEvent { timestamp_ms: crate::time::get_uptime_ms(), confidence_delta, action_matches, mode, trace_id };
+    DIVERGENCE_LOG.lock().push(ev);
+}

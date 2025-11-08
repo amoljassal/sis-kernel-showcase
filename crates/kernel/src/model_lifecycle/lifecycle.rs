@@ -165,6 +165,16 @@ impl ModelLifecycle {
         self.shadow_model.lock().clone()
     }
 
+    /// Dry-run a swap: load + health-check but do not change state
+    pub fn dry_swap(&self, version: &str) -> Result<HealthMetrics> {
+        let model = self.load_model(version)?;
+        let health = {
+            let mut checker = self.health_checker.lock();
+            checker.check(&model)?
+        };
+        Ok(health)
+    }
+
     // Private helper methods
 
     fn read_file(&self, _path: &str) -> Result<Vec<u8>> {
