@@ -729,5 +729,86 @@ impl super::Shell {
             }
         }
     }
+
+    /// Display AI performance metrics dashboard (Phase 1.5)
+    pub(crate) fn autoctl_ai_metrics(&self) {
+        // This would normally call crate::control::ai_metrics::get_snapshot()
+        // For now, display placeholder structure to show integration
+
+        unsafe { crate::uart_print(b"\n=== AI Performance Metrics ===\n\n"); }
+
+        // Crash Prediction Metrics
+        unsafe { crate::uart_print(b"Crash Prediction:\n"); }
+        if let Some(status) = crate::ai_insights::get_crash_status() {
+            unsafe { crate::uart_print(b"  Current Risk:         "); }
+            self.print_number_simple((status.confidence * 100.0) as u64);
+            unsafe { crate::uart_print(b"%\n"); }
+            unsafe { crate::uart_print(b"  Recent Failures:      "); }
+            self.print_number_simple(status.recent_failures as u64);
+            unsafe { crate::uart_print(b"\n"); }
+        }
+
+        // Transformer Scheduler Metrics
+        unsafe { crate::uart_print(b"\nTransformer Scheduler:\n"); }
+        if let Some(metrics) = crate::sched::get_transformer_metrics() {
+            unsafe { crate::uart_print(b"  Status:               "); }
+            if crate::sched::is_transformer_enabled() {
+                unsafe { crate::uart_print(b"ENABLED\n"); }
+            } else {
+                unsafe { crate::uart_print(b"DISABLED\n"); }
+            }
+            unsafe { crate::uart_print(b"  Total Decisions:      "); }
+            self.print_number_simple(metrics.total_decisions);
+            unsafe { crate::uart_print(b"\n  Avg Latency:          "); }
+            self.print_number_simple(metrics.avg_inference_latency_us);
+            unsafe { crate::uart_print(b" us\n  Avg Score:            "); }
+            self.print_number_simple((metrics.avg_prediction_score * 100.0) as u64);
+            unsafe { crate::uart_print(b"%\n"); }
+        }
+
+        // LLM Inference Metrics
+        unsafe { crate::uart_print(b"\nLLM State Inference:\n"); }
+        if let Some(stats) = crate::llm::get_inference_stats() {
+            unsafe { crate::uart_print(b"  Total Queries:        "); }
+            self.print_number_simple(stats.total_queries);
+            unsafe { crate::uart_print(b"\n  Successful:           "); }
+            self.print_number_simple(stats.successful_executions);
+            unsafe { crate::uart_print(b"\n  Success Rate:         "); }
+            self.print_number_simple(stats.success_rate as u64);
+            unsafe { crate::uart_print(b"%\n"); }
+        }
+
+        unsafe { crate::uart_print(b"\nUse 'autoctl export-metrics <path>' to export detailed metrics.\n"); }
+        unsafe { crate::uart_print(b"Use 'autoctl reset-baseline' to reset performance baselines.\n\n"); }
+    }
+
+    /// Export AI metrics to JSON
+    pub(crate) fn autoctl_export_metrics(&self, path: &str) {
+        // This would normally call crate::control::ai_metrics::export_json()
+        // and write to VFS at the specified path
+
+        unsafe { crate::uart_print(b"[AI_METRICS] Exporting metrics to: "); }
+        unsafe { crate::uart_print(path.as_bytes()); }
+        unsafe { crate::uart_print(b"\n"); }
+
+        // Placeholder for actual export logic
+        unsafe { crate::uart_print(b"[AI_METRICS] Export complete (stub implementation)\n"); }
+        unsafe { crate::uart_print(b"Full implementation requires VFS write support\n"); }
+    }
+
+    /// Reset AI performance baselines
+    pub(crate) fn autoctl_reset_baseline(&self) {
+        // This would reset baseline metrics in crate::control::ai_metrics
+
+        unsafe { crate::uart_print(b"[AI_METRICS] Resetting performance baselines...\n"); }
+
+        // Reset crash predictor peak
+        crate::ai_insights::reset_peak();
+
+        // Reset transformer scheduler
+        crate::sched::reset_transformer();
+
+        unsafe { crate::uart_print(b"[AI_METRICS] Baselines reset complete\n"); }
+    }
 }
 
