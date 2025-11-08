@@ -98,6 +98,8 @@ Phase A implements the foundational OS infrastructure that transforms SIS from a
 
 The VFS layer provides a unified interface for all filesystem operations with support for multiple filesystem types.
 
+**See:** `crates/kernel/src/vfs/README.md` for complete VFS integration guide (InodeOps trait, filesystem implementation, testing)
+
 **Core Components:**
 - `crates/kernel/src/vfs/mod.rs` - VFS core layer with mount table and file descriptor management
 - `crates/kernel/src/vfs/inode.rs` - Inode abstraction with `InodeOps` trait for filesystem-agnostic operations
@@ -286,6 +288,8 @@ Complete system call layer providing user-kernel boundary crossing and ARM64 exc
 ### A.4 Device Drivers
 
 VirtIO-based device driver framework with block, network, and GPU support.
+
+**See:** `crates/kernel/src/drivers/README.md` for complete driver implementation guide (Device traits, VirtIO initialization, interrupt handling, testing)
 
 **Core Components:**
 - `crates/kernel/src/driver.rs` - Driver framework with registration and discovery
@@ -2104,7 +2108,9 @@ sis-kernel/
 
 This kernel is structured as a set of small, decoupled modules with narrow APIs. Most can be compiled out via feature flags or toggled at runtime from the shell.
 
-For a deeper, module-by-module breakdown and a shell command map, see `docs/ARCHITECTURE.md`.
+**Module integration guide:** `crates/kernel/src/README.md` - Module-by-module integration points, trait boundaries, cross-module communication patterns, and boundary rules.
+
+**System architecture:** `docs/architecture/ARCHITECTURE.md` - System-wide architecture and shell command map.
 
 Hardware bring-up guide: see `docs/real-hardware-bringup-advisory.md` for an advisory on porting to real boards without bloat while preserving features.
 Refactoring roadmap: see `docs/refactoring-during-phase4-week-8.md` for the HW‑first refactor plan to keep QEMU development aligned with real hardware.
@@ -2128,6 +2134,7 @@ These standards are enforced by review and advisory CI checks (see `docs/real-ha
 ### Core Runtime
 
 - Shell (`crates/kernel/src/shell.rs`)
+  - **See:** `crates/kernel/src/shell/README.md` for command implementation guide (routing pattern, adding new commands, helper modules)
   - Purpose: Operator control, inspection, demos, and stress scenarios.
   - Enable/disable: Always built; command groups gated by features (`llm`, `deterministic`, `virtio-console`, `arm64-ai`).
   - Interfaces: `help`, `metricsctl`, `metrics`, `stresstest …`, `autoctl …`, `neuralctl …`, `memctl …`, `schedctl …`, `agentctl …`, `coordctl …`, `metaclassctl …`, `mlctl …`, `actorctl …`, `graphctl …`, `det …`, `pmu`, `mem`, `regs`, plus LLM commands when `llm` is on.
