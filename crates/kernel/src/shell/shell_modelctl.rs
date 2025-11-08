@@ -82,27 +82,27 @@ impl super::Shell {
                 let n = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(20);
                 use crate::vfs::{self, OpenFlags};
                 if let Ok(f) = vfs::open("/models/registry.log", OpenFlags::O_RDONLY) {
-                    let size = f.size().unwrap_or(0) as usize;
-                    let mut buf = alloc::vec::Vec::with_capacity(size.max(1));
-                    buf.resize(size, 0);
-                    if let Ok(_) = f.read(&mut buf[..]) {
-                        let text = core::str::from_utf8(&buf).unwrap_or("");
-                        let mut lines: alloc::vec::Vec<&str> = text.lines().collect();
-                        let take = core::cmp::min(n, lines.len());
-                        let start = lines.len().saturating_sub(take);
-                        crate::kprintln!("Model Registry History (last {}):", take);
-                        #[derive(serde::Deserialize)]
-                        struct Entry { ts_ms: u64, node: alloc::string::String, active: alloc::string::String, shadow: alloc::string::String, rollback: alloc::string::String }
-                        for ln in &lines[start..] {
-                            if ln.trim().is_empty() { continue; }
-                            if let Ok(e) = serde_json::from_str::<Entry>(ln) {
-                                crate::kprintln!("ts={}ms node={} active='{}' shadow='{}' rollback='{}'", e.ts_ms, e.node, e.active, e.shadow, e.rollback);
-                            } else {
-                                crate::kprintln!("{}", ln);
+                    // Read with fallback size to handle missing inode size updates
+                    let mut buf = [0u8; 4096];
+                    match f.read(&mut buf) {
+                        Ok(bytes) if bytes > 0 => {
+                            let text = core::str::from_utf8(&buf[..bytes]).unwrap_or("");
+                            let mut lines: alloc::vec::Vec<&str> = text.lines().collect();
+                            let take = core::cmp::min(n, lines.len());
+                            let start = lines.len().saturating_sub(take);
+                            crate::kprintln!("Model Registry History (last {}):", take);
+                            #[derive(serde::Deserialize)]
+                            struct Entry { ts_ms: u64, node: alloc::string::String, active: alloc::string::String, shadow: alloc::string::String, rollback: alloc::string::String }
+                            for ln in &lines[start..] {
+                                if ln.trim().is_empty() { continue; }
+                                if let Ok(e) = serde_json::from_str::<Entry>(ln) {
+                                    crate::kprintln!("ts={}ms node={} active='{}' shadow='{}' rollback='{}'", e.ts_ms, e.node, e.active, e.shadow, e.rollback);
+                                } else {
+                                    crate::kprintln!("{}", ln);
+                                }
                             }
                         }
-                    } else {
-                        crate::kprintln!("history: failed to read registry.log");
+                        _ => crate::kprintln!("history: empty"),
                     }
                 } else {
                     crate::kprintln!("history: no history found");

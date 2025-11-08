@@ -380,6 +380,34 @@ mod bringup {
         crate::arch::aarch64::init_virtio_blk();
         super::uart_print(b"BLOCK: READY\n");
 
+        // Optional: Mount ext2 (read-only) at /models if a virtio-blk device is present
+        {
+            use crate::block::list_block_devices;
+            let devs = list_block_devices();
+            if !devs.is_empty() {
+                // Create mountpoint
+                let _ = root.create("models", crate::vfs::S_IFDIR | 0o755);
+                // Try each device until one mounts
+                let mut mounted = false;
+                for dev in devs {
+                    match crate::vfs::ext2::mount_ext2(dev.clone()) {
+                        Ok(ext2_root) => {
+                            let _ = crate::vfs::mount("ext2", ext2_root, "/models");
+                            super::uart_print(b"VFS: MOUNT EXT2 AT /models (read-only)\n");
+                            mounted = true;
+                            break;
+                        }
+                        Err(e) => {
+                            crate::warn!("vfs: ext2 mount failed on {}: {:?}", dev.name, e);
+                        }
+                    }
+                }
+                if !mounted {
+                    crate::warn!("vfs: no ext2-compatible block device mounted at /models");
+                }
+            }
+        }
+
         // Optional ext4 durability self-test
         #[cfg(feature = "ext4-durability-test")]
         {

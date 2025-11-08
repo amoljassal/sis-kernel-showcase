@@ -172,9 +172,9 @@ impl Shell {
                 return;
             }
 
-            // Phase 2: Predict command outcome before execution
+            // Phase 2: Predict command outcome before execution (quiet unless high confidence)
             let (confidence, predicted_success) = crate::neural::predict_command(parts[0]);
-            if confidence > 100 { // Only show prediction if confidence is meaningful
+            if confidence > 300 { // Tune noise for demos
                 crate::uart_print(b"[AI] Predicting: ");
                 if predicted_success {
                     crate::uart_print(b"likely success");
@@ -195,6 +195,8 @@ impl Shell {
                 "perf" => { self.cmd_perf(); true },
                 "bench" => { self.cmd_bench(); true },
                 "ls" => { self.cmd_ls(&parts[1..]); true },
+                "cat" => { self.cmd_cat(&parts[1..]); true },
+                "blkctl" => { self.cmd_blkctl(&parts[1..]); true },
                 "stress" => { self.cmd_stress(); true },
                 "overhead" => { self.cmd_overhead(); true },
                 #[cfg(feature = "demos")]
@@ -321,6 +323,8 @@ impl Shell {
             crate::uart_print(b"  version  - Show kernel version and build info\n");
             crate::uart_print(b"  echo     - Echo text to output\n");
             crate::uart_print(b"  ls       - List directory: ls [path]\n");
+            crate::uart_print(b"  cat      - Print file (first 4KB): cat <path>\n");
+            crate::uart_print(b"  blkctl   - Block devices: list\n");
             crate::uart_print(b"  info     - Show kernel information\n");
             crate::uart_print(b"  test     - Run syscall tests\n");
             crate::uart_print(b"  perf     - Show performance metrics report\n");
@@ -445,6 +449,40 @@ impl Shell {
                 }
             }
             Err(e) => crate::kprintln!("ls: cannot open {} ({:?})", path, e),
+        }
+    }
+
+    /// Print file contents (first 4KB) for quick inspection
+    fn cmd_cat(&self, args: &[&str]) {
+        use crate::vfs::{self, OpenFlags};
+        if args.is_empty() {
+            crate::kprintln!("Usage: cat <path>");
+            return;
+        }
+        let path = args[0];
+        match vfs::open(path, OpenFlags::O_RDONLY) {
+            Ok(file) => {
+                let mut buf = [0u8; 4096];
+                match file.read(&mut buf) {
+                    Ok(n) => unsafe { crate::uart_print(&buf[..n]); crate::uart_print(b"\n"); },
+                    Err(e) => crate::kprintln!("cat: read failed ({:?})", e),
+                }
+            }
+            Err(e) => crate::kprintln!("cat: cannot open {} ({:?})", path, e),
+        }
+    }
+
+    /// Block devices helper
+    fn cmd_blkctl(&self, args: &[&str]) {
+        let sub = args.get(0).copied().unwrap_or("list");
+        match sub {
+            "list" => {
+                let devs = crate::block::list_block_devices();
+                if devs.is_empty() { crate::kprintln!("(no block devices)"); return; }
+                crate::kprintln!("Block devices:");
+                for d in devs { crate::kprintln!("  {} ({} MB)", d.name, d.capacity_bytes() / 1024 / 1024); }
+            }
+            _ => crate::kprintln!("Usage: blkctl list"),
         }
     }
 

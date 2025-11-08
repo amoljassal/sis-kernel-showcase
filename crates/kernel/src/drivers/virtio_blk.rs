@@ -100,10 +100,9 @@ impl VirtioBlkDevice {
     pub fn new(transport: VirtIOMMIOTransport, name: String) -> Result<Self> {
         let transport = Arc::new(Mutex::new(transport));
 
-        // Negotiate features
+        // Negotiate features (common path)
         let features = VIRTIO_BLK_F_SIZE_MAX | VIRTIO_BLK_F_SEG_MAX | VIRTIO_BLK_F_BLK_SIZE | VIRTIO_BLK_F_FLUSH;
-        transport.lock().init_device(features)
-            .map_err(|_| Errno::EIO)?;
+        transport.lock().init_device(features).map_err(|_| Errno::EIO)?;
 
         // Read device configuration
         let config = Self::read_config(&transport.lock());
@@ -111,42 +110,56 @@ impl VirtioBlkDevice {
                      config.capacity, config.capacity / 2048);
         crate::info!("virtio-blk: block_size = {} bytes", config.blk_size);
 
-        // Initialize virtqueue (queue 0)
-        let queue_size = {
-            let t = transport.lock();
-            t.write_reg(VirtIOMMIOOffset::QueueSel, 0);
-            let size = t.read_reg(VirtIOMMIOOffset::QueueNumMax);
-            if size == 0 || size > 32768 {
-                return Err(Errno::EINVAL);
+        // Initialize virtqueue (queue 0), handle legacy (version==1) and modern (>=2)
+        let version = transport.lock().version();
+        let queue = if version >= 2 {
+            // Modern path: use split virtqueues with explicit addresses
+            let queue_size = {
+                let t = transport.lock();
+                t.write_reg(VirtIOMMIOOffset::QueueSel, 0);
+                let size = t.read_reg(VirtIOMMIOOffset::QueueNumMax);
+                if size == 0 || size > 32768 { return Err(Errno::EINVAL); }
+                size as u16
+            };
+            let q = VirtQueue::new(0, queue_size)?;
+            {
+                let t = transport.lock();
+                t.write_reg(VirtIOMMIOOffset::QueueSel, 0);
+                t.write_reg(VirtIOMMIOOffset::QueueNum, queue_size as u32);
+                let (desc_addr, avail_addr, used_addr) = q.get_addresses();
+                t.write_reg(VirtIOMMIOOffset::QueueDescLow, (desc_addr & 0xFFFF_FFFF) as u32);
+                t.write_reg(VirtIOMMIOOffset::QueueDescHigh, (desc_addr >> 32) as u32);
+                t.write_reg(VirtIOMMIOOffset::QueueAvailLow, (avail_addr & 0xFFFF_FFFF) as u32);
+                t.write_reg(VirtIOMMIOOffset::QueueAvailHigh, (avail_addr >> 32) as u32);
+                t.write_reg(VirtIOMMIOOffset::QueueUsedLow, (used_addr & 0xFFFF_FFFF) as u32);
+                t.write_reg(VirtIOMMIOOffset::QueueUsedHigh, (used_addr >> 32) as u32);
+                t.write_reg(VirtIOMMIOOffset::QueueReady, 1);
             }
-            size as u16
+            q
+        } else {
+            // Legacy path: contiguous region + QueuePFN/QueueAlign/GuestPageSize
+            let queue_size = {
+                let t = transport.lock();
+                t.write_reg(VirtIOMMIOOffset::QueueSel, 0);
+                let size = t.read_reg(VirtIOMMIOOffset::QueueNumMax);
+                if size == 0 || size > 32768 { return Err(Errno::EINVAL); }
+                size as u16
+            };
+            let q = VirtQueue::new_contiguous(0, queue_size)?;
+            {
+                let t = transport.lock();
+                t.write_reg(VirtIOMMIOOffset::GuestPageSize, 4096);
+                t.write_reg(VirtIOMMIOOffset::QueueSel, 0);
+                t.write_reg(VirtIOMMIOOffset::QueueNum, queue_size as u32);
+                t.write_reg(VirtIOMMIOOffset::QueueAlign, 4096);
+                let pfn = (q.region_base() >> 12) as u32;
+                t.write_reg(VirtIOMMIOOffset::QueuePFN, pfn);
+                // No QueueReady in legacy
+            }
+            q
         };
 
-        let queue = VirtQueue::new(0, queue_size)?;
-
-        // Configure queue in device
-        {
-            let t = transport.lock();
-            t.write_reg(VirtIOMMIOOffset::QueueSel, 0);
-            t.write_reg(VirtIOMMIOOffset::QueueNum, queue_size as u32);
-
-            // Set queue addresses
-            let desc_addr = queue.desc_table_addr();
-            let avail_addr = queue.avail_ring_addr();
-            let used_addr = queue.used_ring_addr();
-
-            t.write_reg(VirtIOMMIOOffset::QueueDescLow, (desc_addr & 0xFFFFFFFF) as u32);
-            t.write_reg(VirtIOMMIOOffset::QueueDescHigh, (desc_addr >> 32) as u32);
-            t.write_reg(VirtIOMMIOOffset::QueueAvailLow, (avail_addr & 0xFFFFFFFF) as u32);
-            t.write_reg(VirtIOMMIOOffset::QueueAvailHigh, (avail_addr >> 32) as u32);
-            t.write_reg(VirtIOMMIOOffset::QueueUsedLow, (used_addr & 0xFFFFFFFF) as u32);
-            t.write_reg(VirtIOMMIOOffset::QueueUsedHigh, (used_addr >> 32) as u32);
-
-            // Mark queue as ready
-            t.write_reg(VirtIOMMIOOffset::QueueReady, 1);
-        }
-
-        // Mark driver as ready
+        // Mark driver as ready (common)
         transport.lock().driver_ready();
 
         let queue = Arc::new(Mutex::new(queue));
@@ -227,7 +240,8 @@ impl VirtioBlkDevice {
             }
         }
 
-        // Wait for completion (blocking)
+        // Wait for completion (bounded spin)
+        let mut spins: usize = 0;
         loop {
             let mut queue = self.queue.lock();
             if let Some((desc_id, len)) = queue.get_used_buf() {
@@ -248,6 +262,11 @@ impl VirtioBlkDevice {
 
             // Yield to avoid busy-waiting (Phase B: simple spin for now)
             core::hint::spin_loop();
+            spins = spins.wrapping_add(1);
+            if spins > 50_000_000 {
+                crate::warn!("virtio-blk: request timed out (type={}, sector={})", req_type, sector);
+                return Err(Errno::ETIMEDOUT);
+            }
         }
     }
 }

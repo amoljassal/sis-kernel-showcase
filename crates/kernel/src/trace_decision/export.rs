@@ -116,6 +116,29 @@ impl IncidentExporter {
         Ok(filename)
     }
 
+    /// Export selected traces to a specific file path (instead of incidents dir)
+    pub fn export_traces_to_path(&self, trace_ids: &[u64], out_path: &str) -> Result<String> {
+        let traces = self.gather_traces(trace_ids)?;
+        if traces.is_empty() {
+            return Err(Errno::ENOENT);
+        }
+
+        let bundle = IncidentBundle {
+            incident_id: self.generate_incident_id(),
+            exported_at: crate::time::get_uptime_ms() * 1000,
+            traces,
+            model_info: self.get_model_info(),
+            system_snapshot: self.get_system_snapshot(),
+            config: self.get_config(),
+            #[cfg(feature = "shadow-mode")]
+            shadow_divergences: alloc::vec::Vec::new(),
+        };
+
+        let json = serde_json::to_string_pretty(&bundle).map_err(|_| Errno::EINVAL)?;
+        self.write_file(out_path, json.as_bytes())?;
+        Ok(alloc::string::String::from(out_path))
+    }
+
     /// Export recent shadow divergences into a bundle (no traces required)
     #[cfg(feature = "shadow-mode")]
     pub fn export_shadow_divergences(&self, max: usize) -> Result<String> {
@@ -144,6 +167,35 @@ impl IncidentExporter {
         let filename = alloc::format!("{}/{}.json", self.export_dir, bundle.incident_id);
         self.write_file(&filename, json.as_bytes())?;
         Ok(filename)
+    }
+
+    /// Export recent shadow divergences into a specific file path
+    #[cfg(feature = "shadow-mode")]
+    pub fn export_shadow_divergences_to_path(&self, max: usize, out_path: &str) -> Result<String> {
+        use crate::shadow::divergence::DIVERGENCE_LOG;
+
+        let recents = DIVERGENCE_LOG.lock().recent(max);
+        let items: Vec<ShadowDivergence> = recents.iter().map(|e| ShadowDivergence {
+            timestamp_ms: e.timestamp_ms,
+            confidence_delta: e.confidence_delta,
+            action_matches: e.action_matches,
+            mode: alloc::format!("{:?}", e.mode),
+            trace_id: e.trace_id,
+        }).collect();
+
+        let bundle = IncidentBundle {
+            incident_id: self.generate_incident_id(),
+            exported_at: crate::time::get_uptime_ms() * 1000,
+            traces: Vec::new(),
+            model_info: self.get_model_info(),
+            system_snapshot: self.get_system_snapshot(),
+            config: self.get_config(),
+            shadow_divergences: items,
+        };
+
+        let json = serde_json::to_string_pretty(&bundle).map_err(|_| Errno::EINVAL)?;
+        self.write_file(out_path, json.as_bytes())?;
+        Ok(alloc::string::String::from(out_path))
     }
 
     /// Export all traces in buffer

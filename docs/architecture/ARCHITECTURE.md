@@ -74,6 +74,55 @@ This document describes the modular architecture of the SIS kernel, how subsyste
   - Purpose: SHA‑256 + Ed25519 verification, permissions (LOAD/EXECUTE/INSPECT/EXPORT/ATTEST), and audit logging.
   - Notes: Enabled with `--features crypto-real` and `SIS_ED25519_PUBKEY` at build time.
 
+## Phase 7: AI Operations Platform (AI‑Ops)
+
+Feature set bundled under the meta‑feature `ai-ops`:
+
+- Model Lifecycle (`model-lifecycle`) — `crates/kernel/src/model_lifecycle/`:
+  - `registry.rs`: ext4‑backed JSONL registry (JSON history at `/models/registry.log`), health metrics, status (Active/Shadow/Rollback).
+  - `lifecycle.rs`: atomic hot‑swap (RCU), dry‑swap (load+health without state change), symlink stub updates under `/models/<link>`.
+  - `health.rs`: latency P99, memory footprint, accuracy checks (configurable thresholds).
+  - Shell: `modelctl dry-swap <ver> | swap <ver> | load <ver> | history [N] | rollback | status`.
+
+- Decision Traces (`decision-traces`) — `crates/kernel/src/trace_decision/`:
+  - `decision.rs`: DecisionTrace schema (context, predictions, policy checks, outcome).
+  - `buffer.rs`: ring buffer (1024) with `stats`, `get_last_n`, `find_by_trace_id`.
+  - `export.rs`: incident bundles to `/incidents/INC-<ts>-NNN.json` (config + system snapshot + traces).
+  - Shell: `tracectl demo [N] | list [N] | show <id> | export <id...> | export-divergences [N] | stats`.
+
+- Shadow / Canary (`shadow-mode`) — `crates/kernel/src/shadow/`:
+  - `agent.rs`: shadow agent (LogOnly, Compare, Canary), divergence counters, threshold, dry‑run mode.
+  - `compare.rs`: comparison result state machine.
+  - `rollback.rs`: rollback trigger helpers (rate/threshold checks).
+  - `divergence.rs`: ring buffer logging (timestamp, delta, matches, mode, optional trace_id) for incident export.
+  - Shell: `shadowctl enable <ver> | disable | status | promote | threshold <N> | mode <log|compare|canary10|canary100> | canary <10|100> | dry-run on|off|status`.
+
+- Observability (`otel`) — `crates/kernel/src/otel/`:
+  - `exporter.rs`: convert DecisionTraces into OTel‑approx spans (feature gated, JSON encoding under `alloc`).
+  - `drift.rs`: drift monitor (moving average vs baseline), warning/alert callbacks.
+
+SRE integration:
+- Bundles under `/incidents/INC-*.json` (atomic writes). Collect on host via RO mount or QMP‑triggered agent.
+- History under `/models/registry.log` (JSONL). Viewer: `modelctl history [N]`.
+
+Persistence options:
+- Initramfs models (`initramfs-models`): embed a newc CPIO with `/models/...`; unpacked during bring‑up.
+- Block image mount overlay: when an extra VirtIO block device is present, a best‑effort read‑only ext2 mount overlays `/models`.
+- ext4/JBD2 harness: `scripts/ext4_durability_tests.sh` runs journaled writes, simulated power cut via QMP, replay on reboot, and optional host `fsck.ext4`.
+
+Networking support (Phase C updates):
+- DHCP with retry/backoff and static fallback; optional SNTP client (`sntp`) to query a time source.
+
+Graphics support (Phase G):
+- VirtIO‑GPU modern path stabilized; framebuffer initialized to XRGB8888; noisy logs gated.
+
+Shell helpers for demos:
+- `ls [path]`, `cat <path>` to inspect VFS files (e.g., `/models/registry.log`, `/incidents/INC-*.json`).
+
+Relevant features:
+- `ai-ops` (meta): enables `model-lifecycle`, `decision-traces`, `shadow-mode`, `otel`.
+- `initramfs-models`: embeds CPIO pointed to by `INITRAMFS_MODELS` env; unpacked during bring‑up.
+
 ## Devices + Platform
 
 - NPU Emulation + Driver — `crates/kernel/src/npu.rs`, `crates/kernel/src/npu_driver.rs`
@@ -214,4 +263,3 @@ fn cmd_mymodctl(&self, args: &[&str]) {
 - Add a `stresstest` sub‑mode or reuse the engine to exercise your module.
 - Prefer bounded loops and timeouts; avoid heap growth during IRQ or bring‑up windows.
 - Gate new code behind a feature until stabilized.
-
