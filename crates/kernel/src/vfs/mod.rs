@@ -77,13 +77,8 @@ pub fn open(path: &str, flags: OpenFlags) -> Result<Arc<File>, Errno> {
     // Get root inode
     let root = get_root().ok_or(Errno::ENOENT)?;
 
-    // Simple path resolution (absolute paths only)
-    let inode = if path == "/" {
-        root
-    } else {
-        // Walk path components
-        path_walk(root, path)?
-    };
+    // Resolve with mountpoint overlay support
+    let inode = if path == "/" { root } else { path_lookup(&root, path)? };
 
     // Handle O_DIRECTORY flag
     if flags.contains(OpenFlags::O_DIRECTORY) && !inode.is_dir() {
@@ -137,12 +132,8 @@ pub fn create(path: &str, mode: u32, flags: OpenFlags) -> Result<Arc<File>, Errn
     // Split path into parent and name
     let (parent_path, name) = split_path(path)?;
 
-    // Walk to parent
-    let parent = if parent_path == "/" {
-        root
-    } else {
-        path_walk(root, parent_path)?
-    };
+    // Resolve parent with mountpoint overlay support
+    let parent = if parent_path == "/" { root } else { path_lookup(&root, parent_path)? };
 
     // Create file in parent
     let inode = parent.create(name, mode)?;

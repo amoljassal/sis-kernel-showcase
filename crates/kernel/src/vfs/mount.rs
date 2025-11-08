@@ -126,16 +126,29 @@ pub fn path_lookup(root: &Arc<Inode>, path: &str) -> Result<Arc<Inode>, Errno> {
     let components: Vec<&str> = path.split('/').filter(|c| !c.is_empty()).collect();
 
     let mut current = root.clone();
+    // Track the absolute path built so far for mountpoint overlays
+    let mut abs_path = String::from("/");
+    // Snapshot mounts to check overlay points
+    let mounts = get_mounts();
 
     // Walk each path component
-    for component in components {
+    for (i, component) in components.iter().enumerate() {
         // Ensure current is a directory
         let meta = current.getattr()?;
         if meta.itype != InodeType::Directory {
             return Err(Errno::ENOTDIR);
         }
 
-        // Look up the next component
+        // Update absolute path (ensure single '/...')
+        if abs_path.ends_with('/') { abs_path.push_str(component); } else { abs_path.push('/'); abs_path.push_str(component); }
+
+        // If this absolute path is a mountpoint, overlay with mounted root
+        if let Some(m) = mounts.iter().find(|m| m.mountpoint == abs_path) {
+            current = m.root.clone();
+            continue;
+        }
+
+        // Look up the next component on current fs
         current = current.lookup(component)?;
     }
 

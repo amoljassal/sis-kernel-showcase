@@ -1630,6 +1630,8 @@ modelctl health
 modelctl rollback
 ```
 
+See also: docs/guides/AI-OPS-QUICKSTART.md
+
 **Architecture:**
 - `ModelRegistry` - Tracks model metadata, status (Active, Standby, Failed), health metrics
 - `ModelLifecycle` - Manages transitions: Load -> Verify -> Activate -> Monitor -> Rollback
@@ -1673,6 +1675,8 @@ tracectl query --min-confidence 800
 # Clear trace buffer
 tracectl clear
 ```
+
+See also: docs/guides/AI-OPS-QUICKSTART.md
 
 **DecisionTrace Structure:**
 - `decision_id`: Unique identifier
@@ -1723,6 +1727,8 @@ shadowctl disable
 # Dry-run (log divergences, no counters/rollback)
 shadowctl dry-run on|off|status
 ```
+
+See also: docs/guides/AI-OPS-QUICKSTART.md
 
 **Shadow Modes:**
 - **Shadow (0% traffic)** - Parallel prediction only, no production impact
@@ -7146,3 +7152,5 @@ Integration Testing with Embedded Models (Initramfs)
   - `modelctl history 10`
   - `shadowctl enable v1 && shadowctl mode compare`
   - `tracectl export-divergences 10`
+
+See also: docs/guides/INITRAMFS-MODELS.md and docs/guides/AI-OPS-QUICKSTART.md

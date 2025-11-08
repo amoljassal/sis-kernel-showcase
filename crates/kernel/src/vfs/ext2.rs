@@ -161,18 +161,20 @@ pub struct Ext2FileSystem {
 impl Ext2FileSystem {
     /// Mount an ext2 filesystem from a block device
     pub fn mount(device: Arc<BlockDevice>) -> Result<Arc<Self>> {
-        // Read superblock (at byte offset 1024, which is sector 2 for 512-byte sectors)
-        let sb_sector = 1024 / device.sector_size as u64;
-        let sb_buf = get_buffer(device.clone(), sb_sector)?;
+        // Read superblock (at byte offset 1024). Ensure we read enough bytes
+        // to cover the full Ext2Superblock even when sector_size < sizeof(superblock).
+        let sb_offset = 1024 % device.sector_size;
+        let need = sb_offset + core::mem::size_of::<Ext2Superblock>();
+        let sectors = ((need + device.sector_size - 1) / device.sector_size) as u64;
+        let sb_sector = (1024 / device.sector_size) as u64;
+        let mut tmp = alloc::vec![0u8; (sectors as usize) * device.sector_size];
+        device.read_sectors(sb_sector, &mut tmp)?;
 
         let superblock = unsafe {
-            let data = sb_buf.data();
-            let sb_offset = 1024 % device.sector_size;
             core::ptr::read_unaligned(
-                data.as_ptr().add(sb_offset) as *const Ext2Superblock
+                tmp.as_ptr().add(sb_offset) as *const Ext2Superblock
             )
         };
-        put_buffer(sb_buf);
 
         // Validate magic number
         if superblock.s_magic != EXT2_SUPER_MAGIC {
@@ -290,16 +292,17 @@ impl Ext2FileSystem {
                 // Sparse block - fill with zeros
                 buf[bytes_read..bytes_read + copy_size].fill(0);
             } else {
-                // Read block
-                let sector = (phys_block as u64 * self.block_size as u64) / self.device.sector_size as u64;
-                let block_buf = get_buffer(self.device.clone(), sector)?;
+                // Read entire filesystem block into a temporary buffer, then copy the needed range.
+                let block_bytes = self.block_size as usize;
+                let start_byte = phys_block as u64 * self.block_size as u64;
+                let start_sector = start_byte / self.device.sector_size as u64;
 
-                {
-                    let data = block_buf.data();
-                    let src_offset = ((phys_block as u64 * self.block_size as u64) % self.device.sector_size as u64) as usize + block_offset;
-                    buf[bytes_read..bytes_read + copy_size].copy_from_slice(&data[src_offset..src_offset + copy_size]);
-                }
-                put_buffer(block_buf);
+                let mut block_data = alloc::vec![0u8; block_bytes];
+                // Read the block as a contiguous sequence of sectors
+                self.device.read_sectors(start_sector, &mut block_data)?;
+
+                buf[bytes_read..bytes_read + copy_size]
+                    .copy_from_slice(&block_data[block_offset..block_offset + copy_size]);
             }
 
             bytes_read += copy_size;
