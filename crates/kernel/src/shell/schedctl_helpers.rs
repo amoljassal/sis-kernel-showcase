@@ -186,4 +186,66 @@ impl super::Shell {
             _ => unsafe { crate::uart_print(b"Usage: schedctl feature <enable|disable|list> [NAME]\n"); }
         }
     }
+
+    /// Handle transformer scheduler commands
+    pub(crate) fn schedctl_transformer(&self, args: &[&str]) {
+        if args.is_empty() {
+            unsafe { crate::uart_print(b"Usage: schedctl transformer <on|off|stats|reset>\n"); }
+            return;
+        }
+
+        match args[0] {
+            "on" => {
+                crate::sched::set_transformer_enabled(true);
+                unsafe { crate::uart_print(b"Transformer scheduler: ENABLED\n"); }
+            }
+            "off" => {
+                crate::sched::set_transformer_enabled(false);
+                unsafe { crate::uart_print(b"Transformer scheduler: DISABLED\n"); }
+            }
+            "stats" => {
+                self.schedctl_transformer_stats();
+            }
+            "reset" => {
+                crate::sched::reset_transformer();
+                unsafe { crate::uart_print(b"Transformer scheduler: RESET\n"); }
+            }
+            _ => {
+                unsafe { crate::uart_print(b"Unknown transformer command\n"); }
+                unsafe { crate::uart_print(b"Usage: schedctl transformer <on|off|stats|reset>\n"); }
+            }
+        }
+    }
+
+    /// Show transformer scheduler statistics
+    fn schedctl_transformer_stats(&self) {
+        if let Some(metrics) = crate::sched::get_transformer_metrics() {
+            unsafe { crate::uart_print(b"=== Transformer Scheduler Statistics ===\n"); }
+
+            unsafe { crate::uart_print(b"Status: "); }
+            if crate::sched::is_transformer_enabled() {
+                unsafe { crate::uart_print(b"ENABLED\n"); }
+            } else {
+                unsafe { crate::uart_print(b"DISABLED\n"); }
+            }
+
+            unsafe { crate::uart_print(b"Total Decisions: "); }
+            self.print_number_simple(metrics.total_decisions);
+            unsafe { crate::uart_print(b"\n"); }
+
+            unsafe { crate::uart_print(b"Avg Prediction Score: "); }
+            self.print_number_simple((metrics.avg_prediction_score * 100.0) as u64);
+            unsafe { crate::uart_print(b"%\n"); }
+
+            unsafe { crate::uart_print(b"Avg Inference Latency: "); }
+            self.print_number_simple(metrics.avg_inference_latency_us);
+            unsafe { crate::uart_print(b" us\n"); }
+
+            unsafe { crate::uart_print(b"Context Switches Saved: "); }
+            self.print_number_simple(metrics.context_switches_saved);
+            unsafe { crate::uart_print(b"\n"); }
+        } else {
+            unsafe { crate::uart_print(b"Transformer scheduler not initialized\n"); }
+        }
+    }
 }

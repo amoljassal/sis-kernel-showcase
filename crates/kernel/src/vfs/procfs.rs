@@ -220,6 +220,7 @@ impl InodeOps for MemInfoFile {
             total_pages: 0,
             free_pages: 0,
             allocated_pages: 0,
+            allocation_failures: 0,
         });
         let total_kb = (stats.total_pages * 4) as u64; // 4KB pages
         let free_kb = (stats.free_pages * 4) as u64;
