@@ -71,6 +71,7 @@ mod autoctl_helpers;
 mod memctl_helpers;
 mod schedctl_helpers;
 mod cmdctl_helpers;
+mod crashctl_helpers;
 mod netctl_helpers;
 mod neuralctl_helpers;
 mod graphctl_helpers;
@@ -238,6 +239,7 @@ impl Shell {
                 "memctl" => { self.cmd_memctl(&parts[1..]); true },
                 "schedctl" => { self.cmd_schedctl(&parts[1..]); true },
                 "cmdctl" => { self.cmd_cmdctl(&parts[1..]); true },
+                "crashctl" => { self.cmd_crashctl(&parts[1..]); true },
                 "netctl" => { self.cmd_netctl(&parts[1..]); true },
                 "ask-ai" => { self.cmd_ask_ai(&parts[1..]); true },
                 "nnjson" => { self.cmd_nn_json(); true },

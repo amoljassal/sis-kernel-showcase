@@ -30,6 +30,7 @@ pub struct AllocStats {
     pub total_pages: usize,
     pub free_pages: usize,
     pub allocated_pages: usize,
+    pub allocation_failures: u32,
 }
 
 impl BuddyAllocator {
@@ -44,6 +45,7 @@ impl BuddyAllocator {
                 total_pages: 0,
                 free_pages: 0,
                 allocated_pages: 0,
+                allocation_failures: 0,
             },
         }
     }
@@ -189,6 +191,12 @@ impl BuddyAllocator {
 
         // Out of memory
         crate::warn!("Buddy: allocation failed for order {}", order);
+        self.stats.allocation_failures += 1;
+
+        // Update crash predictor with failure
+        #[cfg(feature = "ai-ops")]
+        self.update_crash_predictor();
+
         None
     }
 
@@ -308,6 +316,40 @@ impl BuddyAllocator {
         self.update_stats();
         self.stats
     }
+
+    /// Update crash predictor with current memory metrics
+    #[cfg(feature = "ai-ops")]
+    fn update_crash_predictor(&mut self) {
+        self.update_stats();
+
+        // Get largest free block from free lists
+        let mut largest_free_block = 0;
+        for (order, list) in self.free_lists.iter().enumerate() {
+            if !list.is_empty() {
+                largest_free_block = largest_free_block.max(1 << order);
+            }
+        }
+
+        // Calculate fragmentation ratio
+        let fragmentation = if self.stats.total_pages > 0 {
+            self.stats.allocated_pages as f32 / self.stats.total_pages as f32
+        } else {
+            0.0
+        };
+
+        let metrics = crate::ai_insights::AllocMetrics {
+            timestamp_ms: crate::time::get_uptime_ms(),
+            free_pages: self.stats.free_pages,
+            largest_free_block,
+            fragmentation_ratio: fragmentation,
+            allocation_failures: self.stats.allocation_failures,
+        };
+
+        crate::ai_insights::update_metrics(metrics);
+
+        // Reset failure counter after reporting
+        self.stats.allocation_failures = 0;
+    }
 }
 
 /// Global buddy allocator
@@ -365,5 +407,14 @@ pub fn get_stats() -> Option<AllocStats> {
         Some(alloc.stats())
     } else {
         None
+    }
+}
+
+/// Update crash predictor with current memory metrics (called periodically)
+#[cfg(feature = "ai-ops")]
+pub fn update_crash_predictor() {
+    let mut buddy = BUDDY.lock();
+    if let Some(ref mut alloc) = *buddy {
+        alloc.update_crash_predictor();
     }
 }
