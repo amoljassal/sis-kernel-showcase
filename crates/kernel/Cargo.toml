@@ -31,6 +31,8 @@ smoltcp = { version = "0.11", default-features = false, features = [
     "medium-ethernet",
     "alloc",
 ] }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 x86_64 = { version = "=0.14.13", default-features = false, features = ["instructions", "abi_x86_interrupt"] }
@@ -71,8 +73,16 @@ sntp = []            # Minimal SNTP client for best-effort time sync
 ext4-durability-test = [] # Run ext4 durability self-test harness at boot
 chaos = []           # Chaos engineering for failure injection testing (production readiness)
 mock-devices = []    # Mock device drivers for isolated testing (production readiness)
+# Phase 7: AI Operations Platform
+ai-ops = ["model-lifecycle", "shadow-mode", "otel", "decision-traces"]  # Meta-feature for all AI ops
+model-lifecycle = []  # Model registry, hot-swap, rollback
+shadow-mode = []      # Shadow agent, canary deployment
+otel = []             # OpenTelemetry exporter, drift detection
+decision-traces = []  # Decision trace buffer and export
 
 [build-dependencies]
-bootloader = { version = "0.11.12", default-features = false, features = ["bios"] }
 bootloader_api = { version = "0.11.12" }
 chrono = "0.4"
+
+[target.'cfg(target_arch = "x86_64")'.build-dependencies]
+bootloader = { version = "0.11.12", default-features = false, features = ["bios"] }
