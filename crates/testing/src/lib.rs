@@ -19,6 +19,8 @@ pub mod byzantine;
 pub mod reporting;
 pub mod qemu_runtime;
 pub mod kernel_interface;
+#[cfg(feature = "ext4-stress-test")]
+pub mod ext4_stress;
 
 // Core test result types
 

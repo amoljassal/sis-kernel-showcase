@@ -1,12 +1,12 @@
 [workspace]
 members = [
-  "crates/kernel",
-  "crates/uefi-boot",
   "crates/testing",
   "crates/daemon"
 ]
 exclude = [
-  "gui/desktop/src-tauri"
+  "gui/desktop/src-tauri",
+  "crates/uefi-boot",  # Exclude - only built via uefi_run.sh for aarch64-unknown-uefi target
+  "crates/kernel"      # Exclude - only built via uefi_run.sh for aarch64-unknown-none target
 ]
 resolver = "2"
 [profile.dev.package.bootloader]

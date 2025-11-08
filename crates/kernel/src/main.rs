@@ -133,6 +133,8 @@ mod embedded_models_initramfs {
 pub mod model_lifecycle;
 #[cfg(feature = "decision-traces")]
 pub mod trace_decision;
+pub mod ai_insights;
+pub mod sched;
 #[cfg(feature = "shadow-mode")]
 pub mod shadow;
 #[cfg(feature = "otel")]
