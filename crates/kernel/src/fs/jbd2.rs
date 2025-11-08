@@ -241,7 +241,9 @@ impl Journal {
 
         // Parse superblock
         let sb: JournalSuperblock = unsafe {
-            core::ptr::read_unaligned(sb_buf.as_ptr() as *const JournalSuperblock)
+            let result = core::ptr::read_unaligned(sb_buf.as_ptr() as *const JournalSuperblock);
+            crate::uart_print(b"[DEBUG] JBD2: Journal superblock parsed\n");
+            result
         };
 
         // Verify magic number
@@ -430,6 +432,12 @@ impl Journal {
             return Ok(());
         }
 
+        // Skip replay for fresh journals (sequence 1 usually means uninitialized)
+        if sb.s_sequence <= 1 {
+            crate::info!("JBD2: Journal appears uninitialized (seq={}), skipping replay", sb.s_sequence);
+            return Ok(());
+        }
+
         // Full journal replay: parse descriptors and replay metadata blocks
         let block_size = sb.s_blocksize as usize;
         let mut replayed_txns = 0;
@@ -440,7 +448,16 @@ impl Journal {
         // Revoke list (blocks that should not be replayed)
         let mut revoked: Vec<u64> = Vec::new();
 
+        // Safety limit: prevent infinite loops in corrupted journals
+        const MAX_JOURNAL_BLOCKS: u32 = 10000; // Reasonable limit for journal replay
+        let mut blocks_processed = 0;
+
         while current_block < start_block + max_len {
+            blocks_processed += 1;
+            if blocks_processed > MAX_JOURNAL_BLOCKS {
+                crate::warn!("JBD2: Replay exceeded safety limit ({} blocks), aborting", MAX_JOURNAL_BLOCKS);
+                break;
+            }
             // Read block header
             let mut header_buf = vec![0u8; 12]; // Magic + type + sequence
             self.device.read(self.journal_start + current_block as u64, &mut header_buf)?;

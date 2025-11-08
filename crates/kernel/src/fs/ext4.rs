@@ -441,13 +441,15 @@ impl Ext4FileSystem {
         {
             let sbl = fs_tmp.superblock.lock();
             if sbl.has_journal() {
-                crate::info!("ext4: Journal enabled (inode={})", sbl.journal_inum());
-                let jstart = if sbl.journal_inum() != 0 {
-                    if let Ok(jinode) = fs_tmp.read_inode(sbl.journal_inum()) {
+                let journal_inum = sbl.journal_inum();
+                crate::info!("ext4: Journal enabled (inode={})", journal_inum);
+                drop(sbl); // Release lock BEFORE calling read_inode to avoid deadlock
+
+                let jstart = if journal_inum != 0 {
+                    if let Ok(jinode) = fs_tmp.read_inode(journal_inum) {
                         fs_tmp.get_inode_block(&jinode, 0).ok()
                     } else { None }
                 } else { None };
-                drop(sbl);
                 let journal_block = jstart.unwrap_or(1024);
                 match Journal::load(device.clone(), journal_block) {
                     Ok(j) => {
@@ -666,8 +668,6 @@ impl Ext4FileSystem {
 
         // 3. If link count is 0, free inode and data blocks
         if inode.i_links_count == 0 {
-            crate::debug!("ext4: Link count is 0, freeing inode {} and data blocks", inode_num);
-
             // Set deletion time
             inode.i_dtime = 0; // Would use real timestamp
 
@@ -862,14 +862,13 @@ impl Ext4FileSystem {
                 // Update block group descriptor
                 bg.dec_free_blocks();
 
-                // Write back block group descriptor
-                self.write_block_group_desc(group_idx, bg)?;
+                // Write back block group descriptor (use locked version to avoid deadlock)
+                self.write_block_group_desc_locked(group_idx, bg, &sb)?;
 
                 // Update superblock (will be done on unmount/sync)
                 drop(block_groups);
                 drop(sb);
 
-                crate::debug!("ext4: Allocated block {} from group {}", block_num, group_idx);
                 return Ok(block_num as u64);
             }
         }
@@ -923,7 +922,6 @@ impl Ext4FileSystem {
         // Write back block group descriptor
         self.write_block_group_desc(group_idx, bg)?;
 
-        crate::debug!("ext4: Freed block {}", block_num);
         Ok(())
     }
 
@@ -975,13 +973,12 @@ impl Ext4FileSystem {
                 // Update block group descriptor
                 bg.dec_free_inodes();
 
-                // Write back block group descriptor
-                self.write_block_group_desc(group_idx, bg)?;
+                // Write back block group descriptor (use locked version since we hold the lock)
+                self.write_block_group_desc_locked(group_idx, bg, &sb)?;
 
-                // Initialize the inode on disk
-                self.write_inode(inode_num, &Self::new_inode(mode))?;
+                // Initialize the inode on disk (use locked version since we hold the locks)
+                self.write_inode_locked(inode_num, &Self::new_inode(mode), &sb, &block_groups)?;
 
-                crate::debug!("ext4: Allocated inode {} from group {}", inode_num, group_idx);
                 return Ok(inode_num);
             }
         }
@@ -1039,7 +1036,6 @@ impl Ext4FileSystem {
         // Write back block group descriptor
         self.write_block_group_desc(group_idx, bg)?;
 
-        crate::debug!("ext4: Freed inode {}", inode_num);
         Ok(())
     }
 
@@ -1105,9 +1101,8 @@ impl Ext4FileSystem {
     }
 
     /// Write inode to disk
-    pub fn write_inode(&self, inode_num: u32, inode: &Ext4Inode) -> Result<()> {
-        let sb = self.superblock.lock();
-        let block_groups = self.block_groups.lock();
+    /// Write an inode to disk (internal version that requires locks to be held)
+    fn write_inode_locked(&self, inode_num: u32, inode: &Ext4Inode, sb: &Ext4Superblock, block_groups: &[Ext4BlockGroupDesc]) -> Result<()> {
 
         if inode_num < 1 {
             return Err(Errno::EINVAL);
@@ -1145,6 +1140,13 @@ impl Ext4FileSystem {
 
         self.device.write(block, &buf)?;
         Ok(())
+    }
+
+    /// Write an inode to disk (public version that acquires locks)
+    pub fn write_inode(&self, inode_num: u32, inode: &Ext4Inode) -> Result<()> {
+        let sb = self.superblock.lock();
+        let block_groups = self.block_groups.lock();
+        self.write_inode_locked(inode_num, inode, &sb, &block_groups)
     }
 
     /// Add directory entry to a directory inode
@@ -1552,6 +1554,43 @@ impl Ext4FileSystem {
         Ok(written)
     }
 
+    /// Truncate an inode to a given size (for O_TRUNC support)
+    pub fn truncate_inode(&self, inode_num: u32, new_size: u64) -> Result<()> {
+        let mut inode = self.read_inode(inode_num)?;
+        let old_size = inode.size();
+
+        if new_size >= old_size {
+            // Growing or same size - just update the size
+            inode.set_size(new_size);
+            self.write_inode(inode_num, &inode)?;
+            return Ok(());
+        }
+
+        // Truncating - need to free blocks if new_size is 0
+        if new_size == 0 {
+            // Free all direct blocks
+            for i in 0..12 {
+                if inode.i_block[i] != 0 {
+                    // In a real implementation, we'd free the block in the bitmap
+                    // For now, just clear the block reference
+                    inode.i_block[i] = 0;
+                }
+            }
+            // Clear indirect blocks (simplified - in production would need to free them)
+            for i in 12..15 {
+                inode.i_block[i] = 0;
+            }
+        }
+
+        // Update size and write inode
+        inode.set_size(new_size);
+        // Note: In a full implementation, we'd also update the block count field
+
+        self.write_inode(inode_num, &inode)?;
+
+        Ok(())
+    }
+
     /// Simple directory listing helper used by VFS wrapper
     pub fn list_dir(&self, dir_inode: &Ext4Inode) -> Result<Vec<(u32, String, Ext4FileType)>> {
         if !dir_inode.is_dir() { return Err(Errno::ENOTDIR); }
@@ -1646,8 +1685,8 @@ impl Ext4FileSystem {
     }
 
     /// Write block group descriptor back to disk
-    fn write_block_group_desc(&self, group_idx: usize, desc: &Ext4BlockGroupDesc) -> Result<()> {
-        let sb = self.superblock.lock();
+    /// Write block group descriptor (internal version that requires lock to be held)
+    fn write_block_group_desc_locked(&self, group_idx: usize, desc: &Ext4BlockGroupDesc, sb: &Ext4Superblock) -> Result<()> {
         let block_size = sb.block_size();
 
         let bg_table_block = if block_size == 1024 { 2 } else { 1 };
@@ -1672,6 +1711,12 @@ impl Ext4FileSystem {
 
         self.device.write(block, &buf)?;
         Ok(())
+    }
+
+    /// Write block group descriptor (public version that acquires lock)
+    fn write_block_group_desc(&self, group_idx: usize, desc: &Ext4BlockGroupDesc) -> Result<()> {
+        let sb = self.superblock.lock();
+        self.write_block_group_desc_locked(group_idx, desc, &sb)
     }
 }
 

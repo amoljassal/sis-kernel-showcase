@@ -380,32 +380,49 @@ mod bringup {
         crate::arch::aarch64::init_virtio_blk();
         super::uart_print(b"BLOCK: READY\n");
 
-        // Optional: Mount ext2 (read-only) at /models if a virtio-blk device is present
-        // TODO: ext4 (rw+journal) is temporarily disabled due to hang during journal replay
+        // Optional: Mount ext4 (rw + journaling) at /models if a virtio-blk device is present; fallback to ext2 (ro)
         {
             use crate::block::list_block_devices;
             let devs = list_block_devices();
+            unsafe {
+                use alloc::string::ToString;
+                let count_str = devs.len().to_string();
+                super::uart_print(count_str.as_bytes());
+                super::uart_print(b"\n");
+            }
             if !devs.is_empty() {
                 // Create mountpoint
                 let _ = root.create("models", crate::vfs::S_IFDIR | 0o755);
                 // Try each device until one mounts
                 let mut mounted = false;
                 for dev in devs {
-                    // Try ext2 (read-only) for now
-                    match crate::vfs::ext2::mount_ext2(dev.clone()) {
-                        Ok(ext2_root) => {
-                            let _ = crate::vfs::mount("ext2", ext2_root, "/models");
-                            super::uart_print(b"VFS: MOUNT EXT2 AT /models (read-only)\n");
+                    // Try ext4 first (with journal replay fixes)
+                    match crate::vfs::ext4::mount_ext4(dev.clone()) {
+                        Ok(ext4_root) => {
+                            let _ = crate::vfs::mount("ext4", ext4_root, "/models");
+                            unsafe { super::uart_print(b"VFS: MOUNT EXT4 AT /models (rw+journal)\n"); }
                             mounted = true;
                             break;
                         }
                         Err(e) => {
-                            crate::warn!("vfs: ext2 mount failed on {}: {:?}", dev.name, e);
+                            crate::warn!("vfs: ext4 mount failed on {}: {:?}", dev.name, e);
+                            // Fallback to ext2 read-only
+                            match crate::vfs::ext2::mount_ext2(dev.clone()) {
+                                Ok(ext2_root) => {
+                                    let _ = crate::vfs::mount("ext2", ext2_root, "/models");
+                                    super::uart_print(b"VFS: MOUNT EXT2 AT /models (read-only)\n");
+                                    mounted = true;
+                                    break;
+                                }
+                                Err(e2) => {
+                                    crate::warn!("vfs: ext2 mount failed on {}: {:?}", dev.name, e2);
+                                }
+                            }
                         }
                     }
                 }
                 if !mounted {
-                    crate::warn!("vfs: no ext2-compatible block device mounted at /models");
+                    crate::warn!("vfs: no ext4/ext2-compatible block device mounted at /models");
                 }
             }
         }
