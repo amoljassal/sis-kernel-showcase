@@ -117,23 +117,36 @@ impl ModelRegistry {
         };
         let _ = file.write(&json[..])?;
 
-        // Append history entry
+        // Append JSONL history entry
+        #[derive(Serialize)]
+        struct HistoryEntry {
+            ts_ms: u64,
+            op: &'static str,
+            node: alloc::string::String,
+            active: alloc::string::String,
+            shadow: alloc::string::String,
+            rollback: alloc::string::String,
+        }
+        let node = option_env!("NODE_ID").unwrap_or(option_env!("TARGET").unwrap_or("unknown"));
+        let entry = HistoryEntry {
+            ts_ms: time::get_uptime_ms(),
+            op: "save",
+            node: alloc::string::String::from(node),
+            active: self.active.clone().unwrap_or_else(|| "".into()),
+            shadow: self.shadow.clone().unwrap_or_else(|| "".into()),
+            rollback: self.rollback.clone().unwrap_or_else(|| "".into()),
+        };
+        let mut line = serde_json::to_vec(&entry).map_err(|_| Errno::EINVAL)?;
+        line.push(b'\n');
+
         let history_path = "/models/registry.log";
-        let mut entry = alloc::format!(
-            "ts={} active={:?} shadow={:?} rollback={:?} node={}\n",
-            time::get_uptime_ms(),
-            self.active,
-            self.shadow,
-            self.rollback,
-            option_env!("NODE_ID").unwrap_or(option_env!("TARGET").unwrap_or("unknown"))
-        );
         let hist = match vfs::open(history_path, OpenFlags::O_WRONLY) {
             Ok(f) => f,
             Err(_) => vfs::create(history_path, 0o644, OpenFlags::O_WRONLY | OpenFlags::O_CREAT)?,
         };
         // Seek to end (simple: read size and set offset)
         let _ = hist.lseek(0, 2); // SEEK_END
-        let _ = hist.write(entry.as_bytes());
+        let _ = hist.write(&line);
         Ok(())
     }
 

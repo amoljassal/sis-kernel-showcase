@@ -17,6 +17,25 @@ impl super::Shell {
 
     #[cfg(feature = "model-lifecycle")]
     fn modelctl_impl(&self, args: &[&str]) {
+        use crate::model_lifecycle::lifecycle::{get_model_lifecycle, init_model_lifecycle};
+        use crate::model_lifecycle::registry::ModelRegistry;
+        use alloc::sync::Arc;
+        use spin::Mutex;
+
+        // Ensure lifecycle is initialized if commands need it
+        let ensure_lifecycle = || {
+            let global = get_model_lifecycle().expect("global lifecycle mutex present");
+            let mut guard = global.lock();
+            if guard.is_none() {
+                let reg = Arc::new(Mutex::new(ModelRegistry::new()));
+                // Best-effort load
+                let _ = reg.lock().load();
+                init_model_lifecycle(reg);
+            }
+            drop(guard);
+            global
+        };
+
         if args.is_empty() {
             crate::kprintln!("Model Status:");
             crate::kprintln!("  Active:   (not set)");
@@ -31,6 +50,58 @@ impl super::Shell {
                 crate::kprintln!("  Version      Status       Loaded At           Health");
                 crate::kprintln!("  ------------ ------------ ------------------- ----------------------------");
                 crate::kprintln!("  (registry not initialized)");
+            }
+            "dry-swap" => {
+                if let Some(version) = args.get(1) {
+                    let global = ensure_lifecycle();
+                    let mut g = global.lock();
+                    if let Some(lc) = g.as_ref() {
+                        match lc.dry_swap(version) {
+                            Ok(h) => {
+                                crate::kprintln!("Dry-swap OK: version={} p99={}us mem={}B acc={:.2}%", 
+                                    version, h.inference_latency_p99_us, h.memory_footprint_bytes, h.test_accuracy * 100.0);
+                                crate::kprintln!("Diff: active -> {} (no changes applied)", version);
+                            }
+                            Err(e) => {
+                                crate::kprintln!("Dry-swap FAILED (version={}): errno={:?}", version, e);
+                            }
+                        }
+                    } else {
+                        crate::kprintln!("modelctl: lifecycle not initialized");
+                    }
+                } else {
+                    crate::kprintln!("Usage: modelctl dry-swap <version>");
+                }
+            }
+            "history" => {
+                let n = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(20);
+                use crate::vfs::{self, OpenFlags};
+                if let Ok(f) = vfs::open("/models/registry.log", OpenFlags::O_RDONLY) {
+                    let size = f.size().unwrap_or(0) as usize;
+                    let mut buf = alloc::vec::Vec::with_capacity(size.max(1));
+                    buf.resize(size, 0);
+                    if let Ok(_) = f.read(&mut buf[..]) {
+                        let text = core::str::from_utf8(&buf).unwrap_or("");
+                        let mut lines: alloc::vec::Vec<&str> = text.lines().collect();
+                        let take = core::cmp::min(n, lines.len());
+                        let start = lines.len().saturating_sub(take);
+                        crate::kprintln!("Model Registry History (last {}):", take);
+                        #[derive(serde::Deserialize)]
+                        struct Entry { ts_ms: u64, node: alloc::string::String, active: alloc::string::String, shadow: alloc::string::String, rollback: alloc::string::String }
+                        for ln in &lines[start..] {
+                            if ln.trim().is_empty() { continue; }
+                            if let Ok(e) = serde_json::from_str::<Entry>(ln) {
+                                crate::kprintln!("ts={}ms node={} active='{}' shadow='{}' rollback='{}'", e.ts_ms, e.node, e.active, e.shadow, e.rollback);
+                            } else {
+                                crate::kprintln!("{}", ln);
+                            }
+                        }
+                    } else {
+                        crate::kprintln!("history: failed to read registry.log");
+                    }
+                } else {
+                    crate::kprintln!("history: no history found");
+                }
             }
             "load" => {
                 if let Some(version) = args.get(1) {
@@ -78,6 +149,8 @@ impl super::Shell {
             _ => {
                 crate::kprintln!("Unknown modelctl command: {}", args[0]);
                 crate::kprintln!("Usage:");
+                crate::kprintln!("  modelctl dry-swap <version>  - Load + health-check without promotion");
+                crate::kprintln!("  modelctl history [N]         - Show last N history entries (JSONL)");
                 crate::kprintln!("  modelctl list                 - List all models");
                 crate::kprintln!("  modelctl load <version>       - Load model");
                 crate::kprintln!("  modelctl swap <version>       - Hot-swap to model");
