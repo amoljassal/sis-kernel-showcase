@@ -22,6 +22,7 @@ pub mod procfs;
 pub mod ptmx;
 pub mod ptsfs;
 pub mod ext2;
+pub mod ext4;
 
 pub use inode::{Inode, InodeType, InodeOps, Ino, DirEntry, alloc_ino, InodeMeta};
 pub use file::{File, FileOps, OpenFlags, PipeEnd, PtyEnd};
@@ -31,6 +32,7 @@ pub use procfs::mount_procfs;
 pub use ptmx::open_ptmx;
 pub use ptsfs::mount_ptsfs;
 pub use ext2::mount_ext2;
+pub use ext4::mount_ext4;
 
 /// Initialize VFS subsystem (Phase A)
 /// Wrapper for init_vfs() that returns Result for error handling

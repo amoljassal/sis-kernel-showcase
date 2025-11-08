@@ -241,7 +241,7 @@ impl Journal {
 
         // Parse superblock
         let sb: JournalSuperblock = unsafe {
-            core::ptr::read(sb_buf.as_ptr() as *const JournalSuperblock)
+            core::ptr::read_unaligned(sb_buf.as_ptr() as *const JournalSuperblock)
         };
 
         // Verify magic number
