@@ -101,6 +101,10 @@ impl InodeOps for Ext4InodeOps {
     fn unlink(&self, name: &str) -> Result<()> {
         self.fs.delete_file(self.ino, name)
     }
+
+    fn truncate(&self, size: u64) -> Result<()> {
+        self.fs.truncate_inode(self.ino, size)
+    }
 }
 
 /// Mount an ext4 filesystem on a block device, returning the root VFS inode.

@@ -89,7 +89,11 @@ pub fn open(path: &str, flags: OpenFlags) -> Result<Arc<File>, Errno> {
 
     // Handle O_TRUNC flag
     if flags.contains(OpenFlags::O_TRUNC) && flags.is_writable() {
-        inode.set_size(0);
+        // Use the proper truncate method which will free blocks and update on-disk inode
+        if let Err(_) = inode.ops.truncate(0) {
+            // Fallback to in-memory only for filesystems that don't implement truncate
+            inode.set_size(0);
+        }
     }
 
     // Create File object

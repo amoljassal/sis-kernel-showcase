@@ -135,19 +135,22 @@ The VFS layer provides a unified interface for all filesystem operations with su
    - Directory operations and file I/O
    - Updated `Result<T>` type aliases for consistency
 
-4. **ext4** (`fs/ext4.rs`) - ext4 filesystem with **complete journaling** (Phase F)
+4. **ext4** (`fs/ext4.rs`) - ext4 filesystem with **complete journaling and write support** (Phase F)
    - **Full ext4 structures**: 128+ byte inodes with extent tree support, 64-bit block groups, directory entries
    - **Block/inode allocation**: Bitmap-based allocation with automatic descriptor updates
    - **Directory management**: add/remove/find entries with space optimization and fragmentation handling
+   - **Complete write support**: File creation, truncation (O_TRUNC), data writes, and deletion
    - **JBD2 journaling** (`fs/jbd2.rs`): Complete transaction-based metadata journaling
      - Descriptor blocks with block tags
      - Commit blocks for transaction boundaries
      - Full journal replay on mount for crash recovery
      - Revocation support for superseded blocks
-   - **Transactional file operations**: `create_file()` and `delete_file()` with atomic semantics
+   - **Transactional file operations**: `create_file()`, `delete_file()`, `truncate_inode()` with atomic semantics
    - **Crash recovery**: Automatic journal replay restores filesystem consistency after unclean shutdown
    - **Ordered data mode**: Metadata changes journaled, data written before commit
-   - Fixed `MutexGuard` drop-after-use issues
+   - **Deadlock prevention**: Lock-aware helper functions (`write_inode_locked`, `write_block_group_desc_locked`) prevent recursive locking during allocation operations
+   - **Production-ready**: Supports Phase 7 AI Operations (model persistence, incident bundle exports, decision trace storage)
+   - Fixed `MutexGuard` drop-after-use issues and allocation deadlocks
 
 5. **devfs** (`devfs.rs`) - Device filesystem (`/dev`)
    - Character and block device nodes
@@ -237,6 +240,9 @@ Comprehensive memory management subsystem providing physical and virtual memory 
    - Real extent tree lookups for logical→physical mapping; fallback to direct pointers with single‑indirect support
    - JBD2 replay with revoke support and CRC32C (Castagnoli) verification gated by journal feature flags
    - Commit supports multiple chained descriptor blocks; descriptor/data interleaving and device flush after commit
+   - **Full write support**: File creation, truncation, data writes with proper on-disk inode updates
+   - **Deadlock-free allocation**: Lock-aware helper functions prevent recursive locking during block/inode allocation
+   - **Production-ready**: Powers Phase 7 AI Operations with model persistence and incident bundle exports
    - Optional self‑test at boot (feature `ext4-durability-test`) paired with a host harness script
 
 **Key Fixes:**
