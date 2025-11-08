@@ -2,9 +2,12 @@
 //!
 //! Provides shell commands for decision trace management
 
+use alloc::string::String;
+
 impl super::Shell {
     /// Main entry point for tracectl commands
     pub(crate) fn cmd_tracectl(&self, args: &[&str]) {
+        use alloc::string::String;
         #[cfg(feature = "decision-traces")]
         {
             self.tracectl_impl(args);
@@ -27,6 +30,15 @@ impl super::Shell {
         }
 
         match args[0] {
+            #[cfg(feature = "shadow-mode")]
+            "export-divergences" => {
+                let n = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(50);
+                let path = match crate::trace_decision::export::INCIDENT_EXPORTER.export_shadow_divergences(n) {
+                    Ok(p) => p,
+                    Err(_) => String::from("(error exporting divergences)"),
+                };
+                crate::kprintln!("Shadow divergences exported to: {}", path);
+            }
             "list" => {
                 let count = args.get(1)
                     .and_then(|s| s.parse::<usize>().ok())
@@ -68,6 +80,8 @@ impl super::Shell {
                 crate::kprintln!("  tracectl list [N]           - List last N traces");
                 crate::kprintln!("  tracectl show <trace_id>    - Show detailed trace");
                 crate::kprintln!("  tracectl export <id...>     - Export incident bundle");
+                #[cfg(feature = "shadow-mode")]
+                crate::kprintln!("  tracectl export-divergences [N] - Export recent shadow divergences");
                 crate::kprintln!("  tracectl clear              - Clear trace buffer");
                 crate::kprintln!("  tracectl stats              - Show statistics");
             }

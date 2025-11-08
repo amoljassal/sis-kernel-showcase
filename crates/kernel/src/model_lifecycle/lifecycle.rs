@@ -9,6 +9,7 @@ use alloc::sync::Arc;
 use spin::Mutex;
 use crate::lib::error::{Result, Errno};
 use super::registry::{ModelRegistry, ModelMetadata, ModelStatus, HealthMetrics};
+use crate::vfs::{self, OpenFlags};
 use super::health::HealthChecker;
 
 /// Simplified model representation
@@ -167,9 +168,12 @@ impl ModelLifecycle {
     // Private helper methods
 
     fn read_file(&self, _path: &str) -> Result<Vec<u8>> {
-        // TODO: Implement VFS read
-        // For now, return empty data
-        Ok(Vec::new())
+        let file = vfs::open(_path, OpenFlags::O_RDONLY)?;
+        let size = file.size().unwrap_or(0) as usize;
+        let mut buf = Vec::with_capacity(size.max(1));
+        buf.resize(size, 0);
+        let _ = file.read(&mut buf[..])?;
+        Ok(buf)
     }
 
     fn verify_signature(&self, _data: &[u8], _version: &str) -> Result<()> {
@@ -179,9 +183,15 @@ impl ModelLifecycle {
         Ok(())
     }
 
-    fn update_symlink(&self, _link_name: &str, _target: &str) -> Result<()> {
-        // TODO: Use VFS to update symlink atomically
-        // ln -sf /models/{target} /models/{link_name}
+    fn update_symlink(&self, link_name: &str, target: &str) -> Result<()> {
+        // Minimal stub: write target version into a file under /models/<link_name>
+        let _ = vfs::mkdir("/models", 0o755);
+        let path = alloc::format!("/models/{}", link_name);
+        let file = match vfs::open(&path, OpenFlags::O_WRONLY | OpenFlags::O_TRUNC) {
+            Ok(f) => f,
+            Err(_) => vfs::create(&path, 0o644, OpenFlags::O_WRONLY | OpenFlags::O_CREAT | OpenFlags::O_TRUNC)?,
+        };
+        let _ = file.write(target.as_bytes())?;
         Ok(())
     }
 }

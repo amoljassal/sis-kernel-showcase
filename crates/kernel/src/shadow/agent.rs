@@ -4,7 +4,7 @@
 //! to detect divergence before full deployment.
 
 use alloc::sync::Arc;
-use core::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use spin::Mutex;
 use crate::lib::error::Result;
 use crate::model_lifecycle::lifecycle::Model;
@@ -32,8 +32,9 @@ pub struct ShadowAgent {
     mode: Mutex<ShadowMode>,
     model: Arc<Mutex<Option<crate::model_lifecycle::lifecycle::Model>>>,
     divergence_count: AtomicU64,
-    divergence_threshold: u32,
+    divergence_threshold: AtomicU32,
     decision_count: AtomicU64,
+    dry_run: AtomicBool,
 }
 
 impl ShadowAgent {
@@ -43,8 +44,9 @@ impl ShadowAgent {
             mode: Mutex::new(ShadowMode::Disabled),
             model: Arc::new(Mutex::new(None)),
             divergence_count: AtomicU64::new(0),
-            divergence_threshold: 50,  // Rollback after 50 divergences
+            divergence_threshold: AtomicU32::new(50),  // Rollback after 50 divergences
             decision_count: AtomicU64::new(0),
+            dry_run: AtomicBool::new(false),
         }
     }
 
@@ -96,11 +98,19 @@ impl ShadowAgent {
         let diverged = !action_matches || confidence_delta > 200;  // 20% confidence delta
 
         if diverged {
-            let div_count = self.divergence_count.fetch_add(1, Ordering::Relaxed) + 1;
+            // Log divergence event (even in dry-run)
+            #[cfg(feature = "shadow-mode")]
+            {
+                crate::shadow::divergence::log_event(confidence_delta, action_matches, self.get_mode());
+            }
 
-            // Check if we should rollback
-            if div_count >= self.divergence_threshold as u64 {
-                return ComparisonResult::Rollback;
+            if !self.dry_run.load(Ordering::Relaxed) {
+                let div_count = self.divergence_count.fetch_add(1, Ordering::Relaxed) + 1;
+
+                // Check if we should rollback
+                if div_count >= self.divergence_threshold.load(Ordering::Relaxed) as u64 {
+                    return ComparisonResult::Rollback;
+                }
             }
         }
 
@@ -122,8 +132,8 @@ impl ShadowAgent {
     }
 
     /// Set divergence threshold
-    pub fn set_threshold(&mut self, threshold: u32) {
-        self.divergence_threshold = threshold;
+    pub fn set_threshold(&self, threshold: u32) {
+        self.divergence_threshold.store(threshold, Ordering::Relaxed);
     }
 
     /// Set shadow mode
@@ -135,6 +145,10 @@ impl ShadowAgent {
     pub fn get_mode(&self) -> ShadowMode {
         *self.mode.lock()
     }
+
+    /// Enable/disable dry-run (no counters/rollback)
+    pub fn set_dry_run(&self, on: bool) { self.dry_run.store(on, Ordering::Relaxed); }
+    pub fn is_dry_run(&self) -> bool { self.dry_run.load(Ordering::Relaxed) }
 
     // Private helpers
 

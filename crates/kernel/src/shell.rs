@@ -391,6 +391,12 @@ impl Shell {
             crate::uart_print(b"  metrics  - Show recent metrics: metrics [ctx|mem|real]\n");
             crate::uart_print(b"  graphctl - Control graph: create | add-channel <cap> | add-operator <op_id> [--in N|none] [--out N|none] [--prio P] [--stage acquire|clean|explore|model|explain] [--in-schema S] [--out-schema S] | start <steps> | det <wcet_ns> <period_ns> <deadline_ns> | stats | show | export-json | predict <op_id> <latency_us> <depth> [prio] | feedback <op_id> <helpful|not_helpful|expected>\n");
             crate::uart_print(b"  ctlhex   - Inject control frame as hex (Create/Add/Start)\n");
+            #[cfg(feature = "model-lifecycle")]
+            crate::uart_print(b"  modelctl - Model lifecycle: list | load <version> | swap <version> | rollback | health [version] | status | remove <version>\n");
+            #[cfg(feature = "decision-traces")]
+            crate::uart_print(b"  tracectl - Decision traces: list [N] | show <trace_id> | export <id...> | clear | stats\n");
+            #[cfg(feature = "shadow-mode")]
+            crate::uart_print(b"  shadowctl- Shadow/canary: enable <version> | disable | status | stats | promote | threshold <N> | mode <log|compare|canary10|canary100> | canary <10|100> | rollback | dry-run on|off|status\n");
             #[cfg(feature = "virtio-console")]
             crate::uart_print(b"  vconwrite- Send text to host via virtio-console: vconwrite <text>\n");
             crate::uart_print(b"  pmu      - Run PMU demo (cycles/inst/l1d_refill)\n");
