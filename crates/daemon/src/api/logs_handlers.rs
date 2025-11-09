@@ -98,9 +98,9 @@ pub struct RunHistoryEntry {
 )]
 pub async fn logs_tail(
     State(state): State<(Arc<QemuSupervisor>, Arc<ReplayManager>)>,
-    Query(query): Query<LogTailQuery>,
+    Query(_query): Query<LogTailQuery>,
 ) -> Response {
-    let (supervisor, _) = &state;
+    let (_supervisor, _) = &state;
     // For now, return empty logs as this would need actual log buffer implementation
     // In production, this would read from a circular buffer or log file
     let logs: Vec<LogEntry> = vec![];
@@ -121,9 +121,9 @@ pub async fn logs_tail(
 )]
 pub async fn runs_start(
     State(state): State<(Arc<QemuSupervisor>, Arc<ReplayManager>)>,
-    Json(req): Json<StartRunRequest>,
+    Json(_req): Json<StartRunRequest>,
 ) -> Response {
-    let (supervisor, _) = &state;
+    let (_supervisor, _) = &state;
     // Generate run ID
     let run_id = uuid::Uuid::new_v4().to_string();
 
@@ -148,7 +148,7 @@ pub async fn runs_start(
 pub async fn runs_stop(
     State(state): State<(Arc<QemuSupervisor>, Arc<ReplayManager>)>,
 ) -> Response {
-    let (supervisor, _) = &state;
+    let (_supervisor, _) = &state;
     // In production, this would:
     // 1. Mark current run as stopped
     // 2. Finalize logs and metrics
@@ -170,7 +170,7 @@ pub async fn runs_stop(
 pub async fn runs_list(
     State(state): State<(Arc<QemuSupervisor>, Arc<ReplayManager>)>,
 ) -> Response {
-    let (supervisor, _) = &state;
+    let (_supervisor, _) = &state;
     // For now, return empty history
     // In production, this would read from persistent run history store
     let runs: Vec<RunHistoryEntry> = vec![];
@@ -195,7 +195,7 @@ pub async fn runs_export(
     State(state): State<(Arc<QemuSupervisor>, Arc<ReplayManager>)>,
     Path(run_id): Path<String>,
 ) -> Response {
-    let (supervisor, _) = &state;
+    let (_supervisor, _) = &state;
     // For now, return empty export
     // In production, this would:
     // 1. Collect logs for specified run

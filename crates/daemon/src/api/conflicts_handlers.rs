@@ -5,7 +5,6 @@
 use crate::qemu::QemuSupervisor;
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
@@ -14,7 +13,7 @@ use std::sync::Arc;
 use tracing::debug;
 use utoipa::ToSchema;
 
-use super::handlers::{exec_and_parse, ErrorResponse};
+use super::handlers::exec_and_parse;
 
 /// Conflict resolution statistics
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

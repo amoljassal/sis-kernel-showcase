@@ -1,5 +1,7 @@
 //! QEMU supervisor implementation
 
+#![allow(dead_code)]
+
 use super::live::{spawn_qemu, LiveProcess};
 use super::shell::{ShellCommandRequest, ShellCommandResponse};
 use super::shell_executor::ShellExecutor;

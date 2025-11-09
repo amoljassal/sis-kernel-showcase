@@ -1,8 +1,10 @@
 // Ext4 filesystem stress testing workloads
 // Used for crash recovery testing and durability validation
 
-#![cfg(feature = "ext4-stress-test")]
 #![allow(dead_code)]
+#![allow(unused_imports)]
+
+extern crate alloc;
 
 use alloc::vec::Vec;
 use alloc::string::{String, ToString};
