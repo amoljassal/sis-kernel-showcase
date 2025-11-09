@@ -31,6 +31,147 @@ This will:
 
 Press Ctrl+C to stop all services. The script handles graceful shutdown of all components.
 
+## Build Configurations - Quick Reference
+
+Copy-paste commands for common build scenarios:
+
+### **Full Stack with GUI (Recommended for Development)**
+```bash
+./scripts/start_all.sh
+```
+**What it does:** Starts daemon (8871) + QEMU kernel (llm,crypto-real) + GUI (5173)
+**When to use:** Interactive development, testing GUI features, real-time monitoring
+**Features enabled:** LLM service, cryptographic verification, web interface
+
+---
+
+### **Phase 1 + Phase 2 AI Features with Demos**
+```bash
+SIS_FEATURES="llm,ai-ops,crypto-real,demos" BRINGUP=1 ./scripts/uefi_run.sh
+```
+**What it does:** Builds kernel with complete AI governance stack + demonstration commands
+**When to use:** Testing Phase 1 AI-native features AND Phase 2 multi-agent coordination
+**Features enabled:**
+- ✅ Phase 1: neuralctl, memctl, autoctl, ask-ai
+- ✅ Phase 2: agentctl, coordctl, metaclassctl, mlctl, actorctl
+- ✅ Demos: coorddemo, metademo, actorcriticdemo, mladvdemo
+- ✅ Crypto: Real SHA-256 + Ed25519 verification
+- ❌ Basic LLM commands (llmctl/llminfer) - disabled by ai-ops flag
+
+**Available shell commands:** neuralctl, memctl, autoctl, ask-ai, agentctl, coordctl, metaclassctl, mlctl, actorctl, coorddemo, metademo, actorcriticdemo, mladvdemo
+
+---
+
+### **Phase 1 Only (Basic LLM + Crash Prediction)**
+```bash
+SIS_FEATURES="llm,crypto-real,demos" BRINGUP=1 ./scripts/uefi_run.sh
+```
+**What it does:** Builds kernel with Phase 1 LLM features but WITHOUT Phase 2 multi-agent coordination
+**When to use:** Testing basic LLM inference, crash prediction, simpler AI features
+**Features enabled:**
+- ✅ LLM commands: llmctl, llminfer, llmstats, llmstream, llmgraph
+- ✅ Crash prediction: crashctl (exists but not in help - see note below)
+- ✅ Demos: All demo commands
+- ❌ Phase 2 features: No agentctl, coordctl, metaclassctl (require ai-ops)
+
+**Available shell commands:** llmctl, llminfer, llmstats, llmstream, crashctl (not listed in help), graphdemo, imagedemo, etc.
+
+**Note:** `crashctl` exists but is missing from help text. Use: `crashctl status`, `crashctl predict`, `crashctl autonomous on/off`
+
+---
+
+### **Production Build (Minimal, No Demos)**
+```bash
+SIS_FEATURES="llm,ai-ops,crypto-real" BRINGUP=1 ./scripts/uefi_run.sh
+```
+**What it does:** Production-ready kernel without demo commands (smaller binary)
+**When to use:** Production deployment, hardware testing, size-constrained environments
+**Features enabled:**
+- ✅ All Phase 1 + Phase 2 AI features
+- ✅ Cryptographic verification
+- ❌ Demo commands disabled (coorddemo, metademo, etc.)
+
+**Binary size:** ~15% smaller than build with demos
+
+---
+
+### **Development Build with All Features**
+```bash
+SIS_FEATURES="llm,ai-ops,crypto-real,demos,chaos,perf-verbose" BRINGUP=1 ./scripts/uefi_run.sh
+```
+**What it does:** Maximum feature build for testing and development
+**When to use:** Comprehensive testing, debugging, chaos engineering validation
+**Features enabled:**
+- ✅ All AI features (Phase 1 + Phase 2)
+- ✅ All demo commands
+- ✅ Chaos engineering framework (7 failure injection modes)
+- ✅ Verbose performance logging
+- ✅ Cryptographic verification
+
+**Shell commands added:** `chaos` command for runtime failure injection
+
+---
+
+### **Deterministic Real-Time Build**
+```bash
+SIS_FEATURES="llm,deterministic,crypto-real" BRINGUP=1 ./scripts/uefi_run.sh
+```
+**What it does:** Enables CBS+EDF deterministic scheduler for LLM budgeting
+**When to use:** Real-time AI inference testing, deadline validation, jitter analysis
+**Features enabled:**
+- ✅ LLM with deterministic budgeting
+- ✅ CBS+EDF hybrid scheduler
+- ✅ Temporal isolation
+- ✅ P99 jitter tracking
+
+**Usage:** After boot, use `llmctl budget --period-ns 1000000000 --max-tokens-per-period 8`
+
+---
+
+### **VirtIO Host Control (Experimental)**
+```bash
+VIRTIO=1 SIS_FEATURES="llm,virtio-console,crypto-real" BRINGUP=1 ./scripts/uefi_run.sh
+```
+**What it does:** Enables host-to-kernel control via VirtIO console
+**When to use:** Testing host control plane, automated kernel interaction
+**Requires:** `./tools/sis_datactl.py` for sending commands from host
+
+**Usage:**
+```bash
+# In separate terminal after boot:
+./tools/sis_datactl.py llm-load --wcet-cycles 25000
+```
+
+---
+
+### **Hardware Target Build (Minimal)**
+```bash
+./scripts/hw_build.sh
+```
+**What it does:** Lean build optimized for real hardware (no demos, minimal logging)
+**When to use:** Deploying to real ARM64 hardware, size-constrained platforms
+**Features:** Uses `hw-minimal` preset + `strict` warnings
+
+---
+
+### **Build Options Summary**
+
+| Build Command | Phase 1 | Phase 2 | LLM cmds | Demos | Size | Use Case |
+|--------------|---------|---------|----------|-------|------|----------|
+| `llm,ai-ops,crypto-real,demos` | ✅ | ✅ | ❌ | ✅ | Large | **Full testing** |
+| `llm,crypto-real,demos` | ✅ | ❌ | ✅ | ✅ | Large | **LLM focus** |
+| `llm,ai-ops,crypto-real` | ✅ | ✅ | ❌ | ❌ | Medium | **Production** |
+| `llm,deterministic,crypto-real` | ✅ | ❌ | ✅ | ❌ | Medium | **Real-time** |
+| `hw-minimal` (hw_build.sh) | ✅ | ✅ | ❌ | ❌ | **Small** | **Hardware** |
+
+**Legend:**
+- Phase 1: Basic AI features (neuralctl, memctl, autoctl)
+- Phase 2: Multi-agent coordination (agentctl, coordctl, metaclassctl)
+- LLM cmds: llmctl, llminfer, llmstats
+- Demos: coorddemo, metademo, actorcriticdemo
+
+---
+
 ## Feature Flags and Modes
 
 **Core Features:**
@@ -1488,6 +1629,85 @@ if let PhaseTransition::Advance { to, .. } = deployment.check_auto_advance() {
 - Auto-retraining triggers
 
 **Note on Unit Tests:** The SIS kernel targets `aarch64-unknown-none` (bare-metal, no OS), which does not support Rust's standard test framework. Unit tests in `#[cfg(test)]` blocks serve as documentation, static verification via compilation, and reference implementations. For runtime validation, use integration testing in QEMU.
+
+---
+
+### Shell Command Reference
+
+**Quick reference for Phase 1 and Phase 2 AI features. Feature requirements determine which commands are available based on your build configuration.**
+
+#### **Phase 1 AI-Native Features**
+
+| Command | Description | Feature Requirements | Example Usage |
+|---------|-------------|---------------------|---------------|
+| `neuralctl status` | Show neural network agent status | Always available | `neuralctl status` |
+| `neuralctl feedback <type>` | Provide feedback (helpful/not_helpful/expected) | Always available | `neuralctl feedback helpful` |
+| `neuralctl retrain <N>` | Retrain network with N examples | Always available | `neuralctl retrain 100` |
+| `neuralctl autonomous on/off` | Enable/disable autonomous scheduling | Always available | `neuralctl autonomous on` |
+| `neuralctl audit` | View scheduling audit trail | Always available | `neuralctl audit` |
+| | | | |
+| `memctl status` | Show memory AI agent status | Always available | `memctl status` |
+| `memctl predict` | Predict memory issues | Always available | `memctl predict` |
+| `memctl stress <N>` | Run memory stress test (N iterations) | Always available | `memctl stress 100` |
+| | | | |
+| `autoctl status` | Show autonomous control status | Always available | `autoctl status` |
+| `autoctl on/off` | Enable/disable autonomous mode | Always available | `autoctl on` |
+| `autoctl dashboard` | Show decision dashboard | Always available | `autoctl dashboard` |
+| `autoctl audit last <N>` | View last N decisions | Always available | `autoctl audit last 10` |
+| | | | |
+| `ask-ai "<query>"` | Ask AI about system state | Always available | `ask-ai "what is the system status?"` |
+| | | | |
+| `llmctl load` | Load LLM model with configuration | `llm` AND NOT `ai-ops` | `llmctl load --wcet-cycles 25000` |
+| `llminfer "<text>"` | Submit prompt for LLM inference | `llm` AND NOT `ai-ops` | `llminfer "analyze memory"` |
+| `llmstats` | Show LLM service statistics | `llm` AND NOT `ai-ops` | `llmstats` |
+| `llmstream "<text>"` | Stream tokens in chunks | `llm` AND NOT `ai-ops` | `llmstream "hello" --chunk 5` |
+| | | | |
+| `crashctl status` | Show crash predictor status | Always available* | `crashctl status` |
+| `crashctl predict` | Run crash prediction | Always available* | `crashctl predict` |
+| `crashctl autonomous on/off` | Enable/disable autonomous crash prevention | Always available* | `crashctl autonomous on` |
+
+*Note: `crashctl` commands exist but are not listed in shell help. This is a known issue.
+
+#### **Phase 2 Multi-Agent Coordination**
+
+| Command | Description | Feature Requirements | Example Usage |
+|---------|-------------|---------------------|---------------|
+| `agentctl bus` | View agent message bus | Always available | `agentctl bus` |
+| `agentctl stats` | Show agent bus statistics | Always available | `agentctl stats` |
+| `agentctl clear` | Clear message history | Always available | `agentctl clear` |
+| | | | |
+| `coordctl process` | Process coordination requests | Always available | `coordctl process` |
+| `coordctl stats` | Show coordination statistics | Always available | `coordctl stats` |
+| `coorddemo` | Demo cross-agent coordination under stress | Requires `demos` | `coorddemo` |
+| | | | |
+| `metaclassctl status` | Show meta-agent status | Always available | `metaclassctl status` |
+| `metaclassctl force` | Force immediate meta-agent decision | Always available | `metaclassctl force` |
+| `metaclassctl on/off` | Enable/disable meta-agent | Always available | `metaclassctl on` |
+| `metaclassctl config` | Configure meta-agent thresholds | Always available | `metaclassctl config --interval 100` |
+| `metademo` | Demo meta-agent with multi-subsystem stress | Requires `demos` | `metademo` |
+| | | | |
+| `mlctl status` | Show advanced ML status | Always available | `mlctl status` |
+| `mlctl replay <N>` | Train from experience replay buffer | Always available | `mlctl replay 100` |
+| `mlctl features` | Configure ML features (replay/TD/topology) | Always available | `mlctl features --replay on` |
+| `mladvdemo` | Demo advanced ML features | Requires `demos` | `mladvdemo` |
+| | | | |
+| `actorctl status` | Show actor-critic status | Always available | `actorctl status` |
+| `actorctl policy` | Display current policy parameters | Always available | `actorctl policy` |
+| `actorctl lambda <N>` | Set eligibility trace decay | Always available | `actorctl lambda 800` |
+| `actorctl on/off` | Enable/disable actor-critic | Always available | `actorctl on` |
+| `actorcriticdemo` | Demo actor-critic with policy gradients | Requires `demos` | `actorcriticdemo` |
+
+#### **Build Configuration to Command Mapping**
+
+| Build Configuration | Available Command Groups |
+|---------------------|-------------------------|
+| `llm,ai-ops,crypto-real,demos` | ✅ Phase 1 (neuralctl, memctl, autoctl, ask-ai)<br>✅ Phase 2 (agentctl, coordctl, metaclassctl, mlctl, actorctl)<br>✅ Demos (coorddemo, metademo, actorcriticdemo, mladvdemo)<br>❌ LLM commands (llmctl, llminfer) |
+| `llm,crypto-real,demos` | ✅ Phase 1 (neuralctl, memctl, autoctl, ask-ai)<br>✅ LLM commands (llmctl, llminfer, llmstats)<br>✅ Demos (all demo commands)<br>❌ Phase 2 (agentctl, coordctl, metaclassctl) |
+| `llm,ai-ops,crypto-real` | ✅ Phase 1 (neuralctl, memctl, autoctl, ask-ai)<br>✅ Phase 2 (agentctl, coordctl, metaclassctl, mlctl, actorctl)<br>❌ Demos<br>❌ LLM commands (llmctl, llminfer) |
+
+**See "Build Configurations - Quick Reference" section above for complete build command details.**
+
+---
 
 ### Documentation
 
