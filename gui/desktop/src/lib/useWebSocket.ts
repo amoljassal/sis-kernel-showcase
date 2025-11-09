@@ -51,6 +51,62 @@ export interface LogLineEvent {
   ts: number;
 }
 
+// Phase 2 Event Types
+export interface OrchestrationDecisionEvent {
+  type: 'orchestration_decision';
+  decision_type: string;
+  action: string;
+  confidence?: number;
+  agents: string[];
+  latency_us: number;
+  description: string;
+  ts: number;
+}
+
+export interface ConflictResolvedEvent {
+  type: 'conflict_resolved';
+  conflict_id: string;
+  agents: string[];
+  resolution: string;
+  resolution_time_us: number;
+  ts: number;
+}
+
+export interface PhaseTransitionEvent {
+  type: 'phase_transition';
+  from_phase: string;
+  to_phase: string;
+  trigger: 'auto_advance' | 'auto_rollback' | 'manual_advance' | 'manual_rollback';
+  reason: string;
+  metrics_snapshot: {
+    error_rate: number;
+    success_rate: number;
+    uptime_hours: number;
+  };
+  ts: number;
+}
+
+export interface DriftAlertEvent {
+  type: 'drift_alert';
+  drift_level: 'normal' | 'warning' | 'critical';
+  baseline_accuracy: number;
+  current_accuracy: number;
+  accuracy_delta: number;
+  sample_count: number;
+  auto_retrain_triggered: boolean;
+  message: string;
+  ts: number;
+}
+
+export interface VersionCommitEvent {
+  type: 'version_commit';
+  version_id: number;
+  parent_version?: number;
+  description: string;
+  metadata: any;
+  ts: number;
+}
+
 export type WebSocketEvent =
   | { type: 'state_changed'; [key: string]: any }
   | { type: 'parsed'; [key: string]: any }
@@ -59,7 +115,12 @@ export type WebSocketEvent =
   | GraphStateEvent
   | SchedEvent
   | LlmTokensEvent
-  | LogLineEvent;
+  | LogLineEvent
+  | OrchestrationDecisionEvent
+  | ConflictResolvedEvent
+  | PhaseTransitionEvent
+  | DriftAlertEvent
+  | VersionCommitEvent;
 
 export function useWebSocket(onEvent?: (event: WebSocketEvent) => void) {
   const [isConnected, setIsConnected] = useState(false);
