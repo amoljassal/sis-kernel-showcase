@@ -114,7 +114,6 @@ pub async fn autonomy_on(
     State(state): State<(Arc<QemuSupervisor>, Arc<crate::qemu::ReplayManager>)>,
 ) -> Response {
     let (supervisor, _) = &state;
-    let (supervisor, _) = &state;
     debug!("Enabling autonomy");
     exec_and_parse::<AutonomyStatus>(supervisor, "autoctl on --json".to_string())
         .await

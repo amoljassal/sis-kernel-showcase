@@ -3,6 +3,8 @@
 //! Parses lines matching: METRIC name=value
 //! Example: "METRIC nn_infer_us=1234"
 
+#![allow(dead_code)]
+
 use regex::Regex;
 
 /// Parsed metric data
