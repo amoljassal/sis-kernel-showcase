@@ -131,6 +131,68 @@ pub enum QemuEvent {
         severity: String,
         ts: i64,
     },
+    /// Phase 2: Orchestration decision
+    OrchestrationDecision {
+        #[serde(rename = "decisionType")]
+        decision_type: String,
+        action: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        confidence: Option<f64>,
+        agents: Vec<String>,
+        #[serde(rename = "latencyUs")]
+        latency_us: u64,
+        description: String,
+        ts: i64,
+    },
+    /// Phase 2: Conflict resolved
+    ConflictResolved {
+        #[serde(rename = "conflictId")]
+        conflict_id: String,
+        agents: serde_json::Value,
+        resolution: serde_json::Value,
+        #[serde(rename = "resolutionTimeUs")]
+        resolution_time_us: u64,
+        ts: i64,
+    },
+    /// Phase 2: Deployment phase transition
+    PhaseTransition {
+        #[serde(rename = "fromPhase")]
+        from_phase: String,
+        #[serde(rename = "toPhase")]
+        to_phase: String,
+        trigger: String,
+        reason: String,
+        #[serde(rename = "metricsSnapshot")]
+        metrics_snapshot: serde_json::Value,
+        ts: i64,
+    },
+    /// Phase 2: Model drift alert
+    DriftAlert {
+        #[serde(rename = "driftLevel")]
+        drift_level: String,
+        #[serde(rename = "baselineAccuracy")]
+        baseline_accuracy: f64,
+        #[serde(rename = "currentAccuracy")]
+        current_accuracy: f64,
+        #[serde(rename = "accuracyDelta")]
+        accuracy_delta: f64,
+        #[serde(rename = "sampleCount")]
+        sample_count: u64,
+        #[serde(rename = "autoRetrainTriggered")]
+        auto_retrain_triggered: bool,
+        message: String,
+        ts: i64,
+    },
+    /// Phase 2: Adapter version commit
+    VersionCommit {
+        #[serde(rename = "versionId")]
+        version_id: u32,
+        #[serde(rename = "parentVersion")]
+        parent_version: u32,
+        description: String,
+        metadata: serde_json::Value,
+        ts: i64,
+    },
 }
 
 /// Graph state data for GraphState event
