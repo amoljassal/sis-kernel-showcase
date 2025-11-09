@@ -84,10 +84,10 @@ echo ""
 echo -e "${YELLOW}[3/5] Starting QEMU kernel...${NC}"
 curl -s -X POST http://localhost:8871/api/v1/qemu/run \
   -H "Content-Type: application/json" \
-  -d '{"features": ["llm", "crypto-real"], "env": {"BRINGUP": "1"}}' \
+  -d '{"features": ["llm", "ai-ops", "crypto-real"], "env": {"BRINGUP": "1"}}' \
   >/dev/null
 
-echo "      Kernel starting with features: llm, crypto-real"
+echo "      Kernel starting with features: llm, ai-ops, crypto-real"
 echo "      Waiting for kernel boot..."
 sleep 3
 
