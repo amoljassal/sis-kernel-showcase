@@ -121,6 +121,10 @@ pub mod ai_benchmark;
 #[cfg(feature = "llm")]
 pub mod llm;
 
+// Phase 2: AI Governance & Multi-Agent Coordination (feature-gated)
+#[cfg(feature = "ai-ops")]
+pub mod ai;
+
 // Optional embedded initramfs for models (integration tests)
 #[cfg(all(feature = "initramfs-models", have_initramfs_models, any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "riscv64")))]
 #[allow(non_upper_case_globals)]
