@@ -13,7 +13,7 @@
 //!  0x13 LlmCancel { infer_id_le_u32 } (feature: `llm`)
 
 use crate::graph::{GraphApi, OperatorSpec, Stage};
-#[cfg(feature = "llm")]
+#[cfg(all(feature = "llm", not(feature = "ai-ops")))]
 use crate::llm;
 use crate::trace::metric_kv;
 use core::sync::atomic::{AtomicU64, Ordering};
@@ -77,7 +77,7 @@ fn write_decimal_u64(buf: &mut HString<192>, mut v: u64) -> Result<(), ()> {
     Ok(())
 }
 
-#[cfg(feature = "llm")]
+#[cfg(all(feature = "llm", not(feature = "ai-ops")))]
 #[inline(always)]
 fn token_split(tok: u64) -> (u8, u64) {
     let rights = (tok >> 56) as u8;
@@ -85,7 +85,7 @@ fn token_split(tok: u64) -> (u8, u64) {
     (rights, secret)
 }
 
-#[cfg(feature = "llm")]
+#[cfg(all(feature = "llm", not(feature = "ai-ops")))]
 #[inline(always)]
 fn check_embedded_rights(tok: u64, need_admin: bool, need_submit: bool) -> Result<(), CtrlError> {
     let (rights, secret) = token_split(tok);
@@ -100,7 +100,7 @@ fn check_embedded_rights(tok: u64, need_admin: bool, need_submit: bool) -> Resul
     Ok(())
 }
 
-#[cfg(feature = "llm")]
+#[cfg(all(feature = "llm", not(feature = "ai-ops")))]
 #[inline(always)]
 fn check_token_admin(tok: u64) -> Result<(), CtrlError> {
     let expect = CONTROL_TOKEN_ADMIN.load(Ordering::Relaxed);
@@ -108,7 +108,7 @@ fn check_token_admin(tok: u64) -> Result<(), CtrlError> {
     Ok(())
 }
 
-#[cfg(feature = "llm")]
+#[cfg(all(feature = "llm", not(feature = "ai-ops")))]
 #[inline(always)]
 fn check_token_submit_or_admin(tok: u64) -> Result<(), CtrlError> {
     let a = CONTROL_TOKEN_ADMIN.load(Ordering::Relaxed);
@@ -286,24 +286,15 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
             }
         }
         0x10 => { // LlmLoad
-            #[cfg(feature = "llm")]
             let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
-            #[cfg(not(feature = "llm"))]
-            let (tok, _p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
-            // Explicit allow/deny with audit
-            #[cfg(feature = "llm")]
+
+            #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
             {
                 // Accept either explicit admin token, or embedded admin rights
                 let mut ok = check_token_admin(tok).is_ok();
                 if !ok { ok = check_embedded_rights(tok, true, false).is_ok(); }
                 if !ok { llm::audit(1, 0, 0, 0, 0, 0b010); return Err(CtrlError::AuthFailed); }
-            }
-            #[cfg(not(feature = "llm"))]
-            {
-                check_token(tok)?;
-            }
-            #[cfg(feature = "llm")]
-            {
+
                 if p.len() >= 8 {
                     let wcet = u64::from_le_bytes([p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7]]);
                     let ok = crate::llm::load_model(Some(wcet));
@@ -321,31 +312,24 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
                     return Ok(());
                 }
             }
-            #[cfg(not(feature = "llm"))]
+            #[cfg(not(all(feature = "llm", not(feature = "ai-ops"))))]
             {
-                ctrl_print(b"CTRL: llm feature not enabled\n");
+                check_token(tok)?;
+                ctrl_print(b"CTRL: old llm API not available (use ai-ops features)\n");
                 Ok(())
             }
         }
         0x11 => { // LlmInferStart
             if payload.len() < (8+2) { return Err(CtrlError::BadFrame); }
-            #[cfg(feature = "llm")]
             let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
-            #[cfg(not(feature = "llm"))]
-            let (tok, _p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
-            #[cfg(feature = "llm")]
+
+            #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
             {
                 // Accept explicit submit/admin tokens, or embedded submit/admin rights
                 let mut ok = check_token_submit_or_admin(tok).is_ok();
                 if !ok { ok = check_embedded_rights(tok, false, true).is_ok(); }
                 if !ok { llm::audit(3, 0, 0, 0, 0, 0b010); return Err(CtrlError::AuthFailed); }
-            }
-            #[cfg(not(feature = "llm"))]
-            {
-                check_token(tok)?;
-            }
-            #[cfg(feature = "llm")]
-            {
+
                 let max_t = u16::from_le_bytes([p[0], p[1]]) as usize;
                 // Remaining bytes are utf8 prompt (bounded by MAX_CTRL_LEN)
                 let prompt_bytes = &p[2..];
@@ -364,26 +348,24 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
                 }
                 return Ok(());
             }
-            #[cfg(not(feature = "llm"))]
+            #[cfg(not(all(feature = "llm", not(feature = "ai-ops"))))]
             {
-                ctrl_print(b"CTRL: llm feature not enabled\n");
+                check_token(tok)?;
+                ctrl_print(b"CTRL: old llm API not available (use ai-ops features)\n");
                 Ok(())
             }
         }
         0x12 => { // LlmInferPoll (id + optional max)
-            #[cfg(feature = "llm")]
             let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
-            #[cfg(not(feature = "llm"))]
-            let (tok, _p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
             check_token(tok)?;
             // Expected: infer_id (u32 LE), optional max (u16 LE)
-            #[cfg(feature = "llm")]
+            #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
             let (infer_id, max) = if p.len() >= 4 {
                 let id = u32::from_le_bytes([p[0],p[1],p[2],p[3]]) as usize;
                 let m = if p.len() >= 6 { u16::from_le_bytes([p[4],p[5]]) as usize } else { 4 };
                 (id, m)
             } else { (0usize, 4usize) };
-            #[cfg(feature = "llm")]
+            #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
             {
                 let (id, n, done, items) = if infer_id != 0 { crate::llm::ctl_poll_id(infer_id, max) } else { crate::llm::ctl_poll(max) };
                 let (plen, model_id) = crate::llm::ctl_peek_meta(id);
@@ -436,15 +418,12 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
             Ok(())
         }
         0x13 => { // LlmCancel (by id)
-            #[cfg(feature = "llm")]
             let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
-            #[cfg(not(feature = "llm"))]
-            let (tok, _p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
             check_token(tok)?;
-            #[cfg(feature = "llm")]
-            let id = if p.len() >= 4 { u32::from_le_bytes([p[0],p[1],p[2],p[3]]) as usize } else { 0 };
-            #[cfg(feature = "llm")]
+
+            #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
             {
+                let id = if p.len() >= 4 { u32::from_le_bytes([p[0],p[1],p[2],p[3]]) as usize } else { 0 };
                 if id != 0 { crate::llm::ctl_cancel_id(id); } else { crate::llm::ctl_cancel(); }
             }
             ctrl_print(b"CTRL: llm cancel\n");

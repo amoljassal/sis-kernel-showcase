@@ -204,10 +204,10 @@ src/arch/aarch64/timer.rs:
 src/arch/aarch64/psci.rs:
 src/aarch64_context.rs:
 
-# env-dep:BUILD_TIMESTAMP=1762644078
+# env-dep:BUILD_TIMESTAMP=1762646376
 # env-dep:FEATURES=ai_ops,bringup,decision_traces,default,graphctl_framed,model_lifecycle,otel,shadow_mode
-# env-dep:GIT_BRANCH=claude/review-ai-native-plan-011CUwBEYyJHZbYvnx5YhvT3
-# env-dep:GIT_COMMIT=7a8ce4217e49d06560be0ee06e39a684822cb3e7
+# env-dep:GIT_BRANCH=main
+# env-dep:GIT_COMMIT=5e80fa88db70039310f7e16c338f099d9245b0ba
 # env-dep:GIT_DIRTY=1
 # env-dep:NODE_ID
 # env-dep:PROFILE=debug

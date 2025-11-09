@@ -26,6 +26,7 @@
 //! - Adapted model improves task-specific accuracy by 20%+
 //! - LoRA adapters stored in <1MB (vs full model ~50MB)
 
+use alloc::vec;
 use alloc::vec::Vec;
 use alloc::string::String;
 use alloc::collections::BTreeMap;
@@ -252,7 +253,7 @@ impl FineTuner {
                 epoch_loss += example.loss;
 
                 // Update progress
-                let progress = ((epoch * num_examples + idx + 1) * 100) /
+                let progress = ((epoch as usize * num_examples + idx + 1) * 100) /
                     (self.config.epochs as usize * num_examples);
                 self.progress.store(progress as u64, Ordering::Relaxed);
             }
@@ -327,9 +328,12 @@ static FINE_TUNER: Mutex<Option<FineTuner>> = Mutex::new(None);
 /// Initialize the fine-tuner
 pub fn init(config: FineTuneConfig) {
     let mut tuner = FINE_TUNER.lock();
+    let rank = config.rank;
+    let lr = config.learning_rate;
+    let alpha = config.alpha;
     *tuner = Some(FineTuner::new(config));
     crate::info!("finetune: initialized with rank={}, lr={}, alpha={}",
-        config.rank, config.learning_rate, config.alpha);
+        rank, lr, alpha);
 }
 
 /// Add a LoRA adapter for a layer
