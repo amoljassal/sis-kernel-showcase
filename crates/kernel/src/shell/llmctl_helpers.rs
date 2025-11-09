@@ -1,6 +1,7 @@
 // Helpers for LLM control commands (feature: llm)
+// NOTE: Incompatible with ai-ops feature which provides Phase 1 LLM module
 
-#[cfg(feature = "llm")]
+#[cfg(all(feature = "llm", not(feature = "ai-ops")))]
 impl super::Shell {
     pub(crate) fn llmctl_cmd(&self, args: &[&str]) {
         if args.is_empty() {
