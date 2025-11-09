@@ -74,6 +74,39 @@ This document describes the modular architecture of the SIS kernel, how subsyste
   - Purpose: SHA‑256 + Ed25519 verification, permissions (LOAD/EXECUTE/INSPECT/EXPORT/ATTEST), and audit logging.
   - Notes: Enabled with `--features crypto-real` and `SIS_ED25519_PUBKEY` at build time.
 
+## Phase 2: AI Governance
+
+Feature set bundled under the meta‑features `ai-ops` and `llm`:
+
+- Multi-Agent Orchestration (`ai-ops`) — `crates/kernel/src/ai/`:
+  - `orchestrator.rs`: Consensus-driven multi-agent decision making (unanimous, majority voting, safety overrides).
+  - `conflict.rs`: Conflict resolution strategies (priority-based, voting, synthesis, human escalation).
+  - Global instance: `crate::ai::ORCHESTRATOR` — tracks total decisions, unanimous/majority/safety override counts, average latency.
+  - Shell: `coordctl status [--json] | conflict-stats [--json] | history [--json] | agents [--json] | priorities [--json]`.
+
+- Deployment Phase Management (`ai-ops`) — `crates/kernel/src/ai/deployment.rs`:
+  - Purpose: Progressive rollout across deployment phases (A: Learning, B: Shadow, C: Canary10, D: Canary100, E: Production).
+  - Features: auto-advance with health gates, auto-rollback on failure, phase transition tracking.
+  - Global instance: `crate::ai::DEPLOYMENT_MANAGER` — tracks current phase, rollout history, health metrics.
+  - Shell: `deployctl status [--json] | history [--json] | advance | rollback | config [--auto-advance on|off] [--auto-rollback on|off]`.
+
+- Model Drift Detection (`llm`) — `crates/kernel/src/llm/drift_detector.rs`:
+  - Purpose: Monitor AI model performance degradation, detect drift, trigger retraining.
+  - Features: ring buffer for predictions, baseline vs current accuracy tracking, warning/critical thresholds, auto-retrain.
+  - Global instance: `crate::llm::DRIFT_DETECTOR` — baseline 90% accuracy, 5% warning threshold, 15% critical threshold.
+  - Shell: `driftctl status [--json] | history [--json] | retrain | reset-baseline`.
+
+- Adapter Version Control (`llm`) — `crates/kernel/src/llm/version.rs`:
+  - Purpose: Git-like versioning for LoRA adapters (commit, rollback, tagging, diffing).
+  - Features: version history with metadata, tag management, weight diff computation, rollback to any version.
+  - Global instance: `crate::llm::VERSION_CONTROL` — manages adapter version lifecycle.
+  - Shell: `versionctl status [--json] | history [--json] | commit <message> | rollback <version_id> | tag <name> <version_id>`.
+
+JSON Output Support:
+- All Phase 2 commands support dual output modes: human-readable (default) and JSON (with `--json` flag).
+- JSON mode enables programmatic access via API endpoints and external tooling.
+- Manual JSON serialization for no_std environment (no serde).
+
 ## Phase 7: AI Operations Platform (AI‑Ops)
 
 Feature set bundled under the meta‑feature `ai-ops`:
@@ -149,7 +182,8 @@ Relevant features:
 
 ## Enabling/Disabling Modules
 
-- Compile-time features: `llm`, `deterministic`, `crypto-real`, `virtio-console`, `arm64-ai`, `perf-verbose`, `graph-demo`, `graph-autostats`.
+- Compile-time features: `llm`, `ai-ops`, `deterministic`, `crypto-real`, `virtio-console`, `arm64-ai`, `perf-verbose`, `graph-demo`, `graph-autostats`.
+  - **Phase 2 AI Governance**: Requires `ai-ops` (orchestration, deployment, conflicts) and/or `llm` (drift detection, version control).
 - Runtime toggles: `metricsctl`, `neuralctl`, `autoctl`, `metaclassctl`, `mlctl`, `actorctl`.
 
 ## Shell Command Map (by module)
@@ -162,7 +196,11 @@ Relevant features:
 | Memory Agent | `neuralctl status|reset|infer|update|teach|retrain N|selftest|learn on|off [limit]|tick|dump|load <in hid out>|demo-metrics N|config --confidence/--boost/--max-boosts|audit`, `nnjson`, `nnact` |
 | Predictive Memory | `memctl status|predict|stress [N]|strategy <status|test>|learn stats` |
 | Meta‑Agent | `metaclassctl status|force|config --interval N --threshold N|on|off`, `metademo` |
-| Coordination/Bus | `coordctl process|stats`, `coorddemo`, `agentctl bus|stats|clear` |
+| **Phase 2: Multi-Agent Orchestration** | `coordctl status [--json]|conflict-stats [--json]|history [--json]|agents [--json]|priorities [--json]` |
+| **Phase 2: Deployment Management** | `deployctl status [--json]|history [--json]|advance|rollback|config [--auto-advance on|off] [--auto-rollback on|off]` |
+| **Phase 2: Model Drift Detection** | `driftctl status [--json]|history [--json]|retrain|reset-baseline` |
+| **Phase 2: Adapter Version Control** | `versionctl status [--json]|history [--json]|commit <message>|rollback <version_id>|tag <name> <version_id>` |
+| Coordination/Bus (Legacy) | `coordctl process|stats`, `coorddemo`, `agentctl bus|stats|clear` |
 | Actor‑Critic | `actorctl status|policy|sample|lambda N|natural on/off|kl N|on|off` |
 | Advanced ML | `mlctl status|replay N|weights P W L|features --replay on/off --td on/off --topology on/off` |
 | Stress Engine | `stresstest memory --duration MS --target-pressure PCT`, `stresstest commands --duration MS --rate RPS`, `stresstest multi|learning|redteam|chaos|compare|report` |
