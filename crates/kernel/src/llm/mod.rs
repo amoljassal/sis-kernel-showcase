@@ -5,9 +5,15 @@
 //! - Real-time inference on system state
 //! - Natural language query processing
 //! - Command suggestion and execution
+//!
+//! ## Phase 2: AI Governance (NEW)
+//! - **Drift Detection**: Monitor model performance degradation
+//! - **Version Control**: Git-like versioning for LoRA adapters
 
 pub mod finetune;
 pub mod state_inference;
+pub mod drift_detector;
+pub mod version;
 
 pub use finetune::{
     LoRAAdapter,
@@ -34,6 +40,25 @@ pub use state_inference::{
     is_auto_execute,
     get_stats as get_inference_stats,
     record_query,
+};
+
+pub use drift_detector::{
+    DriftDetector,
+    DriftStatus,
+    DriftAction,
+    DriftMetrics,
+    Prediction,
+    Trend,
+};
+
+pub use version::{
+    AdapterVersionControl,
+    AdapterVersion,
+    VersionMetadata,
+    VersionDiff,
+    VersionError,
+    VersionStats,
+    VersionId,
 };
 
 /// Initialize all LLM subsystems
