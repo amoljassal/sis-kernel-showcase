@@ -382,14 +382,56 @@ fn chainload_kernel(
         pages.max(1)
     ));
     st.boot_services().stall(100_000);
-    let _ = st
+
+    // Try to allocate at the requested address first
+    let _ = st.stdout().write_str("Attempting AllocateType::Address...\r\n");
+    st.boot_services().stall(50_000);
+
+    let alloc_result = st
         .boot_services()
         .allocate_pages(
             AllocateType::Address(map_base as u64),
             MemoryType::LOADER_CODE,
             pages.max(1),
-        )
-        .map_err(|_| ChainloadError::AllocatePages)?;
+        );
+
+    match alloc_result {
+        Ok(_) => {
+            let _ = st.stdout().write_str("Address allocation succeeded!\r\n");
+            st.boot_services().stall(50_000);
+        }
+        Err(e) => {
+            let _ = st.stdout().write_fmt(format_args!(
+                "Address allocation FAILED: {:?}\r\n",
+                e
+            ));
+            let _ = st.stdout().write_str("Trying AllocateType::AnyPages as fallback...\r\n");
+            st.boot_services().stall(100_000);
+
+            // Fallback: Let UEFI choose any available address
+            let actual_addr = st
+                .boot_services()
+                .allocate_pages(
+                    AllocateType::AnyPages,
+                    MemoryType::LOADER_CODE,
+                    pages.max(1),
+                )
+                .map_err(|_| ChainloadError::AllocatePages)?;
+
+            let _ = st.stdout().write_fmt(format_args!(
+                "FALLBACK: Allocated at 0x{:x} (requested 0x{:x})\r\n",
+                actual_addr, map_base
+            ));
+            st.boot_services().stall(100_000);
+
+            // This is a critical issue: kernel expects to run at map_base but we allocated elsewhere
+            // For now, we'll proceed but the kernel MUST be position-independent or this will crash
+            let _ = st.stdout().write_str("WARNING: Kernel must be position-independent!\r\n");
+            st.boot_services().stall(100_000);
+
+            return Err(ChainloadError::AllocatePages);
+        }
+    }
 
     for i in 0..phnum {
         let off = i * phentsize;

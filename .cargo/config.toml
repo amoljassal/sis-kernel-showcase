@@ -1,5 +1,6 @@
 [target.aarch64-unknown-none]
 rustflags = [
+    "-C", "link-arg=-Tsrc/arch/aarch64/aarch64-qemu.ld",
     "-C", "code-model=small",
     "-C", "relocation-model=static",
 ]
