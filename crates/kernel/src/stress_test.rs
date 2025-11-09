@@ -112,7 +112,8 @@ pub struct StressTestConfig {
     pub episodes: u32,            // For learning tests
 
     // NEW: Enhanced configuration
-    pub fail_rate_percent: u8,   // Failure injection rate (0-100)
+    pub fail_rate_percent: u8,   // Failure injection rate (0-100) for chaos tests
+    pub oom_probability: u8,     // OOM injection probability (0-100) for memory tests
     pub expect_failures: bool,    // Test should handle failures gracefully
     pub noise_level: f32,         // Stochasticity level (0.0-1.0)
 }
@@ -126,6 +127,7 @@ impl StressTestConfig {
             command_rate: 50,
             episodes: 10,
             fail_rate_percent: 0,
+            oom_probability: 0,
             expect_failures: false,
             noise_level: 0.1,
         }
@@ -246,7 +248,13 @@ pub fn run_memory_stress(config: StressTestConfig) -> StressTestMetrics {
         crate::uart_print(b"%\n");
         crate::uart_print(b"Noise Level: ");
         uart_print_num((config.noise_level * 100.0) as u64);
-        crate::uart_print(b"%\n\n");
+        crate::uart_print(b"%\n");
+        if config.oom_probability > 0 {
+            crate::uart_print(b"OOM Injection: ");
+            uart_print_num(config.oom_probability as u64);
+            crate::uart_print(b"%\n");
+        }
+        crate::uart_print(b"\n");
     }
 
     // Reset counters and latency tracking
@@ -278,8 +286,18 @@ pub fn run_memory_stress(config: StressTestConfig) -> StressTestMetrics {
         // Track allocation latency
         let alloc_start = crate::time::get_timestamp_us();
 
+        // OOM injection: force failure based on oom_probability
+        let force_oom = config.oom_probability > 0 &&
+                        prng::rand_range(0, 100) < config.oom_probability as u32;
+
         let mut v = alloc::vec::Vec::new();
-        if v.try_reserve_exact(alloc_size).is_ok() {
+        let allocation_success = if force_oom {
+            false  // Inject OOM failure
+        } else {
+            v.try_reserve_exact(alloc_size).is_ok()
+        };
+
+        if allocation_success {
             v.resize(alloc_size, (iteration % 256) as u8);
             allocations.push(v);
 
@@ -287,7 +305,7 @@ pub fn run_memory_stress(config: StressTestConfig) -> StressTestMetrics {
             let alloc_latency_ns = (crate::time::get_timestamp_us() - alloc_start) * 1000;
             ALLOCATION_LATENCY.record(alloc_latency_ns);
         } else {
-            // OOM event - real failure!
+            // OOM event - either real failure or injected!
             OOM_EVENTS.fetch_add(1, Ordering::Relaxed);
 
             // If autonomy is enabled, record OOM prevention attempt
@@ -933,8 +951,13 @@ pub fn run_chaos_stress(config: StressTestConfig) -> StressTestMetrics {
             3 => {
                 let burst_count = prng::rand_range(10, 50);
                 unsafe { crate::uart_print(b"[CHAOS] Command burst ("); uart_print_num(burst_count as u64); crate::uart_print(b" cmds)\n"); }
-                for _ in 0..burst_count {
-                    let _ = crate::neural::predict_command("chaos_test");
+                if should_fail {
+                    // Simulate command burst failure (e.g., rate limiting)
+                    event_succeeded = false;
+                } else {
+                    for _ in 0..burst_count {
+                        let _ = crate::neural::predict_command("chaos_test");
+                    }
                 }
                 chaos_events += 1;
             }
@@ -967,8 +990,13 @@ pub fn run_chaos_stress(config: StressTestConfig) -> StressTestMetrics {
             7 => {
                 let pred_count = prng::rand_range(10, 40);
                 unsafe { crate::uart_print(b"[CHAOS] Prediction storm ("); uart_print_num(pred_count as u64); crate::uart_print(b"x)\n"); }
-                for _ in 0..pred_count {
-                    let _ = crate::neural::predict_memory_health();
+                if should_fail {
+                    // Simulate prediction storm failure (e.g., model unavailable)
+                    event_succeeded = false;
+                } else {
+                    for _ in 0..pred_count {
+                        let _ = crate::neural::predict_memory_health();
+                    }
                 }
                 chaos_events += 1;
             }
@@ -986,11 +1014,15 @@ pub fn run_chaos_stress(config: StressTestConfig) -> StressTestMetrics {
             10 => {
                 unsafe { crate::uart_print(b"[CHAOS] Memory churn\n"); }
                 let churn_count = prng::rand_range(20, 50);
-                for _ in 0..churn_count {
+                for i in 0..churn_count {
                     let mut v = alloc::vec::Vec::new();
                     if v.try_reserve_exact(2048).is_ok() {
                         v.resize(2048, 0xCC);
                         allocations.push(v);
+                    } else if should_fail && i < churn_count / 2 {
+                        // Fail if allocation fails early in the churn
+                        event_succeeded = false;
+                        break;
                     }
                     if !allocations.is_empty() && prng::rand_bool(0.5) {
                         allocations.remove(0);
