@@ -94,7 +94,7 @@ impl AdapterVersion {
             version_id,
             parent_version,
             metadata: VersionMetadata {
-                timestamp: crate::time::time_ns(),
+                timestamp: crate::time::get_timestamp_us() * 1000, // Convert μs to ns
                 description,
                 ..Default::default()
             },
