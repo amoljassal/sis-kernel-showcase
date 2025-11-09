@@ -213,18 +213,20 @@ fn alloc_error_handler(layout: Layout) -> ! {
 
 // Some toolchains expect this low-level alloc error hook symbol as well.
 // Provide a minimal definition to satisfy the linker in no_std.
-#[no_mangle]
-pub extern "C" fn __rust_alloc_error_handler(_size: usize, _align: usize) -> ! {
-    loop {}
-}
+// NOTE: Disabled when using -Zbuild-std as core/alloc library provides its own handler
+// #[no_mangle]
+// pub extern "C" fn __rust_alloc_error_handler(_size: usize, _align: usize) -> ! {
+//     loop {}
+// }
 
 // Newer nightly toolchains reference an internal OOM hook symbol `__rg_oom`.
 // Export a minimal handler to satisfy the linker in no_std release builds.
-#[allow(improper_ctypes_definitions)]
-#[no_mangle]
-pub extern "C" fn __rg_oom(_layout: core::alloc::Layout) -> ! {
-    loop {}
-}
+// NOTE: Disabled when using -Zbuild-std as core library provides its own handler
+// #[allow(improper_ctypes_definitions)]
+// #[no_mangle]
+// pub extern "C" fn __rg_oom(_layout: core::alloc::Layout) -> ! {
+//     loop {}
+// }
 
 // --------- Large allocation fallback using buddy pages ---------
 
