@@ -61,6 +61,13 @@ pub use version::{
     VersionId,
 };
 
+// Global instances for Phase 2 LLM Governance components
+/// Global drift detector instance (baseline: 90% accuracy)
+pub static DRIFT_DETECTOR: DriftDetector = DriftDetector::new_with_default();
+
+/// Global version control instance
+pub static VERSION_CONTROL: AdapterVersionControl = AdapterVersionControl::new();
+
 /// Initialize all LLM subsystems
 pub fn init() {
     finetune::init(FineTuneConfig::default());

@@ -168,6 +168,20 @@ pub struct DriftDetector {
 }
 
 impl DriftDetector {
+    /// Create a new drift detector with default baseline accuracy (90%)
+    pub const fn new_with_default() -> Self {
+        Self {
+            baseline_accuracy: AtomicU32::new(0x3f666666), // 0.9f32.to_bits()
+            recent_correct: AtomicU32::new(0),
+            recent_total: AtomicU32::new(0),
+            warning_threshold: 0.05,
+            critical_threshold: 0.15,
+            drift_events: AtomicU32::new(0),
+            retraining_triggered: AtomicU32::new(0),
+            checks_performed: AtomicU64::new(0),
+        }
+    }
+
     /// Create a new drift detector with baseline accuracy
     pub fn new(baseline_accuracy: f32) -> Self {
         Self {
