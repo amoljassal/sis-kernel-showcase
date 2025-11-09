@@ -151,7 +151,7 @@ pub async fn crash_ingest(
     State(state): State<(Arc<QemuSupervisor>, Arc<ReplayManager>)>,
     Json(req): Json<IngestCrashRequest>,
 ) -> Response {
-    let (supervisor, _) = &state;
+    let (_supervisor, _) = &state;
     // Validate severity
     if !matches!(req.severity.as_str(), "critical" | "high" | "medium" | "low") {
         return (
@@ -171,7 +171,7 @@ pub async fn crash_ingest(
         .unwrap()
         .as_millis() as u64;
 
-    let crash = CrashLog {
+    let _crash = CrashLog {
         crash_id: crash_id.clone(),
         ts,
         panic_msg: req.panic_msg,
@@ -216,7 +216,7 @@ pub async fn crash_list(
     State(state): State<(Arc<QemuSupervisor>, Arc<ReplayManager>)>,
     Query(query): Query<CrashListQuery>,
 ) -> Response {
-    let (supervisor, _) = &state;
+    let (_supervisor, _) = &state;
     // In production, this would:
     // 1. Query persistent storage with filters
     // 2. Apply pagination
@@ -250,7 +250,7 @@ pub async fn incident_create(
     State(state): State<(Arc<QemuSupervisor>, Arc<ReplayManager>)>,
     Json(req): Json<CreateIncidentRequest>,
 ) -> Response {
-    let (supervisor, _) = &state;
+    let (_supervisor, _) = &state;
     // Validate title and description
     if req.title.trim().is_empty() {
         return (
@@ -298,7 +298,7 @@ pub async fn incident_list(
     State(state): State<(Arc<QemuSupervisor>, Arc<ReplayManager>)>,
     Query(query): Query<IncidentListQuery>,
 ) -> Response {
-    let (supervisor, _) = &state;
+    let (_supervisor, _) = &state;
     // In production, this would:
     // 1. Query persistent storage with filters
     // 2. Apply pagination

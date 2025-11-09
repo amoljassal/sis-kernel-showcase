@@ -3,6 +3,8 @@
 //! Spawns QEMU processes via uefi_run.sh and manages bidirectional communication.
 //! Captures stdout/stderr for event streaming and provides stdin for command input.
 
+#![allow(dead_code)]
+
 use super::shell::ShellCommandResponse;
 use super::supervisor::QemuEvent;
 use super::types::QemuConfig;

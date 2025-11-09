@@ -116,7 +116,7 @@ run_fuzzing() {
         if [ $elapsed -ge $TIMEOUT ]; then
             warn "Timeout reached after $elapsed seconds"
             break
-        }
+        fi
 
         # Progress update every 10000 iterations
         if [ $((i % 10000)) -eq 0 ]; then

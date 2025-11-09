@@ -1,5 +1,7 @@
 //! Metric series storage with ring buffers and statistics
 
+#![allow(dead_code)]
+
 use serde::Serialize;
 use std::collections::VecDeque;
 

@@ -1,5 +1,7 @@
 //! Shell command execution with queue and prompt handling
 
+#![allow(dead_code)]
+
 use crate::parser::ParsedEvent;
 use crate::qemu::shell::{ShellCommandRequest, ShellCommandResponse};
 use anyhow::{Context, Result};
