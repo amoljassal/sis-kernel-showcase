@@ -3,14 +3,18 @@
 impl super::Shell {
     pub(crate) fn stresstest_cmd(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: stresstest <memory|commands|multi|learning|redteam|chaos|compare|report> [options]\n"); }
+            unsafe {
+                crate::uart_print(b"Usage: stresstest <memory|commands|multi|learning|redteam|chaos|compare|report> [options]\n");
+                crate::uart_print(b"  memory: --duration MS --target-pressure PCT --oom-probability PCT\n");
+                crate::uart_print(b"  chaos:  --duration MS --failure-rate PCT\n");
+            }
             return;
         }
         match args[0] {
             "memory" => {
-                let mut duration_ms: u64 = 10_000; let mut target_pressure: u8 = 85;
-                let mut i = 1; while i + 1 < args.len() { match args[i] { "--duration" => { duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms); i+=2; }, "--target-pressure" => { let v = args[i+1].parse::<u16>().unwrap_or(target_pressure as u16); target_pressure = v.min(100) as u8; i+=2; }, _ => { i+=1; } } }
-                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Memory); cfg.duration_ms = duration_ms; cfg.target_pressure = target_pressure; let metrics = crate::stress_test::run_memory_stress(cfg);
+                let mut duration_ms: u64 = 10_000; let mut target_pressure: u8 = 85; let mut oom_probability: u8 = 0;
+                let mut i = 1; while i + 1 < args.len() { match args[i] { "--duration" => { duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms); i+=2; }, "--target-pressure" => { let v = args[i+1].parse::<u16>().unwrap_or(target_pressure as u16); target_pressure = v.min(100) as u8; i+=2; }, "--oom-probability" => { let v = args[i+1].parse::<u16>().unwrap_or(oom_probability as u16); oom_probability = v.min(100) as u8; i+=2; }, _ => { i+=1; } } }
+                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Memory); cfg.duration_ms = duration_ms; cfg.target_pressure = target_pressure; cfg.oom_probability = oom_probability; if oom_probability > 0 { cfg.expect_failures = true; } let metrics = crate::stress_test::run_memory_stress(cfg);
                 unsafe { crate::uart_print(b"\n[STRESSTEST] Memory completed: peak_pressure="); self.print_number_simple(metrics.peak_memory_pressure as u64); crate::uart_print(b"% oom_events="); self.print_number_simple(metrics.oom_events as u64); crate::uart_print(b" compactions="); self.print_number_simple(metrics.compaction_triggers as u64); crate::uart_print(b" duration_ms="); self.print_number_simple(metrics.test_duration_ms); crate::uart_print(b"\n"); }
             }
             "commands" => {
@@ -33,8 +37,28 @@ impl super::Shell {
                 unsafe { crate::uart_print(b"\n[STRESSTEST] Red team completed: attacks_survived="); self.print_number_simple(metrics.actions_taken as u64); crate::uart_print(b" duration_ms="); self.print_number_simple(metrics.test_duration_ms); crate::uart_print(b"\n"); }
             }
             "chaos" => {
-                let mut duration_ms: u64 = 10_000; let mut i = 1; while i + 1 < args.len() { match args[i] { "--duration" => { duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms); i+=2; }, _ => { i+=1; } } }
-                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Chaos); cfg.duration_ms = duration_ms; let _metrics = crate::stress_test::run_chaos_stress(cfg);
+                let mut duration_ms: u64 = 10_000;
+                let mut failure_rate: u8 = 0;
+                let mut i = 1;
+                while i + 1 < args.len() {
+                    match args[i] {
+                        "--duration" => {
+                            duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms);
+                            i+=2;
+                        },
+                        "--failure-rate" => {
+                            let v = args[i+1].parse::<u16>().unwrap_or(failure_rate as u16);
+                            failure_rate = v.min(100) as u8;
+                            i+=2;
+                        },
+                        _ => { i+=1; }
+                    }
+                }
+                let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Chaos);
+                cfg.duration_ms = duration_ms;
+                cfg.fail_rate_percent = failure_rate;
+                if failure_rate > 0 { cfg.expect_failures = true; }
+                let _metrics = crate::stress_test::run_chaos_stress(cfg);
             }
             "compare" => {
                 if args.len() < 2 { unsafe { crate::uart_print(b"Usage: stresstest compare <memory|commands|multi> [--duration MS] [--target-pressure PCT] [--rate RPS]\n"); } return; }
