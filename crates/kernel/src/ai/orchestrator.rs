@@ -186,7 +186,7 @@ impl AgentOrchestrator {
 
     /// Coordinate multiple agent decisions into a single decision
     pub fn coordinate(&self, decisions: &[AgentDecision]) -> Result<CoordinatedDecision, OrchestrationError> {
-        let start = crate::time::time_ns();
+        let start = crate::time::get_timestamp_us() * 1000; // Convert μs to ns
 
         if decisions.is_empty() {
             return Err(OrchestrationError::NoDecisions);
@@ -205,7 +205,7 @@ impl AgentOrchestrator {
             self.resolve_conflicts(decisions, &conflicts)
         };
 
-        let end = crate::time::time_ns();
+        let end = crate::time::get_timestamp_us() * 1000; // Convert μs to ns
         let latency_us = (end - start) / 1000;
         self.total_latency_us.fetch_add(latency_us, Ordering::Relaxed);
 
