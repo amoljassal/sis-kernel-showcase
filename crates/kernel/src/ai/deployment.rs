@@ -327,7 +327,7 @@ impl DeploymentManager {
     /// Set current phase (manual override)
     pub fn set_phase(&self, phase: PhaseId) {
         self.current_phase.store(phase as u32, Ordering::Relaxed);
-        self.phase_start_time.store(crate::time::time_ns(), Ordering::Relaxed);
+        self.phase_start_time.store(crate::time::get_timestamp_us() * 1000, Ordering::Relaxed); // Convert μs to ns
         self.phase_decisions.store(0, Ordering::Relaxed);
         self.phase_successes.store(0, Ordering::Relaxed);
         self.phase_incidents.store(0, Ordering::Relaxed);
@@ -364,7 +364,7 @@ impl DeploymentManager {
         let incidents = self.phase_incidents.load(Ordering::Relaxed);
 
         let start_time = self.phase_start_time.load(Ordering::Relaxed);
-        let current_time = crate::time::time_ns();
+        let current_time = crate::time::get_timestamp_us() * 1000; // Convert μs to ns
         let uptime_hours = if start_time > 0 {
             ((current_time - start_time) / 1_000_000_000 / 3600) as u32
         } else {
