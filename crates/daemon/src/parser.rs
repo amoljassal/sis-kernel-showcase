@@ -6,6 +6,8 @@
 //! - Banner lines: informational output
 //! - Shell lines: interactive shell I/O
 
+#![allow(dead_code)]
+
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};

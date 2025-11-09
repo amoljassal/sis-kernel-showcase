@@ -3,6 +3,8 @@
 //! Reads pre-recorded log files and emits events as if they came from QEMU.
 //! Useful for testing, demos, and development without running actual QEMU.
 
+#![allow(dead_code)]
+
 use super::supervisor::QemuEvent;
 use crate::parser::LineParser;
 use anyhow::{Context, Result};

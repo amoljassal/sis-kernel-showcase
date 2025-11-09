@@ -11,7 +11,6 @@ use axum::{
 };
 use std::sync::Arc;
 use tracing::debug;
-use utoipa::ToSchema;
 
 // Re-export problem+json ErrorResponse from handlers
 pub use super::handlers::ErrorResponse;

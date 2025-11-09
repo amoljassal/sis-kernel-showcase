@@ -33,6 +33,7 @@ pub struct ErrorResponse {
 
     /// Legacy error field for backward compatibility
     #[serde(skip)]
+    #[allow(dead_code)]
     pub error: String,
 }
 
@@ -53,6 +54,7 @@ impl ErrorResponse {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_request_id(mut self, request_id: Option<String>) -> Self {
         self.request_id = request_id;
         self

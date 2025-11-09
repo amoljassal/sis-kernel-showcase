@@ -1,5 +1,7 @@
 //! Metrics store - manages all metric series with cardinality and memory limits
 
+#![allow(dead_code)]
+
 use super::series::{MetricPoint, MetricSeries, SeriesStats};
 use anyhow::{bail, Result};
 use std::collections::HashMap;

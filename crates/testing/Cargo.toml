@@ -64,6 +64,7 @@ correctness-tests = []
 distributed-tests = []
 security-tests = []
 ai-tests = []
+ext4-stress-test = []
 
 # Optional heavy suites (off by default)
 property-based-tests = ["dep:proptest", "dep:quickcheck"]

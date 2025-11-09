@@ -11,6 +11,7 @@ pub use super::handlers::ErrorResponse;
 
 /// Replay request
 #[derive(Debug, serde::Deserialize, ToSchema)]
+#[allow(dead_code)]
 pub struct ReplayRequest {
     /// Log source mode: "sample" for built-in samples or "upload" for custom file
     #[serde(default = "default_mode")]
