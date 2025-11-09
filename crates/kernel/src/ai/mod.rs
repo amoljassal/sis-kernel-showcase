@@ -42,3 +42,10 @@ pub mod deployment;
 pub use orchestrator::{AgentOrchestrator, CoordinatedDecision, OrchestrationStats};
 pub use conflict::{ConflictResolver, Conflict, Resolution};
 pub use deployment::{DeploymentManager, PhaseId, PhaseTransition};
+
+// Global instances for Phase 2 AI Governance components
+/// Global orchestrator instance
+pub static ORCHESTRATOR: AgentOrchestrator = AgentOrchestrator::new();
+
+/// Global deployment manager instance
+pub static DEPLOYMENT_MANAGER: DeploymentManager = DeploymentManager::new();

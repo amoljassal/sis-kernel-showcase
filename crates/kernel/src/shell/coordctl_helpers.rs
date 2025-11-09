@@ -13,13 +13,45 @@ impl super::Shell {
             "status" => {
                 let json_mode = args.contains(&"--json");
 
-                if json_mode {
-                    unsafe { crate::uart_print(b"{\"total_decisions\":1543,\"unanimous\":892,\"majority\":412,\"safety_overrides\":35,\"no_consensus\":204,\"avg_latency_us\":1250}\n"); }
-                } else {
-                    unsafe { crate::uart_print(b"[COORDCTL] Orchestration Stats:\n"); }
-                    unsafe { crate::uart_print(b"  Total Decisions: 1543\n"); }
-                    unsafe { crate::uart_print(b"  Unanimous: 892 (57.8%)\n"); }
-                    unsafe { crate::uart_print(b"  Majority: 412 (26.7%)\n"); }
+                #[cfg(feature = "ai-ops")]
+                {
+                    // Get real stats from orchestrator
+                    let stats = crate::ai::ORCHESTRATOR.get_stats();
+
+                    if json_mode {
+                        // Format stats as JSON manually (no_std environment)
+                        unsafe { crate::uart_print(b"{\"total_decisions\":"); }
+                        self.print_number_simple(stats.total_decisions);
+                        unsafe { crate::uart_print(b",\"unanimous\":"); }
+                        self.print_number_simple(stats.unanimous);
+                        unsafe { crate::uart_print(b",\"majority\":"); }
+                        self.print_number_simple(stats.majority);
+                        unsafe { crate::uart_print(b",\"safety_overrides\":"); }
+                        self.print_number_simple(stats.safety_overrides);
+                        unsafe { crate::uart_print(b",\"no_consensus\":"); }
+                        self.print_number_simple(stats.no_consensus);
+                        unsafe { crate::uart_print(b",\"avg_latency_us\":"); }
+                        self.print_number_simple(stats.avg_latency_us);
+                        unsafe { crate::uart_print(b"}\n"); }
+                    } else {
+                        unsafe { crate::uart_print(b"[COORDCTL] Orchestration Stats:\n"); }
+                        unsafe { crate::uart_print(b"  Total Decisions: "); }
+                        self.print_number_simple(stats.total_decisions);
+                        unsafe { crate::uart_print(b"\n  Unanimous: "); }
+                        self.print_number_simple(stats.unanimous);
+                        unsafe { crate::uart_print(b"\n  Majority: "); }
+                        self.print_number_simple(stats.majority);
+                        unsafe { crate::uart_print(b"\n"); }
+                    }
+                }
+
+                #[cfg(not(feature = "ai-ops"))]
+                {
+                    if json_mode {
+                        unsafe { crate::uart_print(b"{\"total_decisions\":0,\"unanimous\":0,\"majority\":0,\"safety_overrides\":0,\"no_consensus\":0,\"avg_latency_us\":0}\n"); }
+                    } else {
+                        unsafe { crate::uart_print(b"[COORDCTL] AI-ops feature not enabled\n"); }
+                    }
                 }
             }
             "history" => {
@@ -49,13 +81,37 @@ impl super::Shell {
             "conflict-stats" => {
                 let json_mode = args.contains(&"--json");
 
-                if json_mode {
-                    unsafe { crate::uart_print(b"{\"total_conflicts\":87,\"resolved_by_priority\":52,\"resolved_by_voting\":28,\"unresolved\":7,\"avg_resolution_time_us\":850}\n"); }
-                } else {
-                    unsafe { crate::uart_print(b"[COORDCTL] Conflict Stats:\n"); }
-                    unsafe { crate::uart_print(b"  Total: 87\n"); }
-                    unsafe { crate::uart_print(b"  By Priority: 52 (59.8%)\n"); }
-                    unsafe { crate::uart_print(b"  By Voting: 28 (32.2%)\n"); }
+                #[cfg(feature = "ai-ops")]
+                {
+                    // Get real conflict stats from orchestrator
+                    let stats = crate::ai::ORCHESTRATOR.get_conflict_stats();
+
+                    if json_mode {
+                        unsafe { crate::uart_print(b"{\"total_conflicts\":"); }
+                        self.print_number_simple(stats.total_conflicts);
+                        unsafe { crate::uart_print(b",\"resolved_by_priority\":"); }
+                        self.print_number_simple(stats.resolved_by_priority);
+                        unsafe { crate::uart_print(b",\"resolved_by_voting\":"); }
+                        self.print_number_simple(stats.resolved_by_synthesis);
+                        unsafe { crate::uart_print(b",\"unresolved\":"); }
+                        self.print_number_simple(stats.escalated_to_human);
+                        unsafe { crate::uart_print(b",\"avg_resolution_time_us\":0}\n"); }
+                    } else {
+                        unsafe { crate::uart_print(b"[COORDCTL] Conflict Stats:\n  Total: "); }
+                        self.print_number_simple(stats.total_conflicts);
+                        unsafe { crate::uart_print(b"\n  By Priority: "); }
+                        self.print_number_simple(stats.resolved_by_priority);
+                        unsafe { crate::uart_print(b"\n"); }
+                    }
+                }
+
+                #[cfg(not(feature = "ai-ops"))]
+                {
+                    if json_mode {
+                        unsafe { crate::uart_print(b"{\"total_conflicts\":0,\"resolved_by_priority\":0,\"resolved_by_voting\":0,\"unresolved\":0,\"avg_resolution_time_us\":0}\n"); }
+                    } else {
+                        unsafe { crate::uart_print(b"[COORDCTL] AI-ops feature not enabled\n"); }
+                    }
                 }
             }
             "conflict-history" => {

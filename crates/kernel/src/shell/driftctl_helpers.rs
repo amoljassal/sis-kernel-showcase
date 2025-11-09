@@ -12,13 +12,40 @@ impl super::Shell {
             "status" => {
                 let json_mode = args.contains(&"--json");
 
-                if json_mode {
-                    unsafe { crate::uart_print(b"{\"baseline_accuracy\":0.94,\"current_accuracy\":0.92,\"accuracy_delta\":-0.02,\"drift_level\":\"warning\",\"sample_window_size\":100,\"samples_analyzed\":1500,\"last_retrain\":\"2025-01-14T08:00:00Z\",\"auto_retrain_enabled\":true,\"auto_retrain_threshold\":0.05}\n"); }
-                } else {
-                    unsafe { crate::uart_print(b"[DRIFTCTL] Current Accuracy: 92.0%\n"); }
-                    unsafe { crate::uart_print(b"  Baseline: 94.0%\n"); }
-                    unsafe { crate::uart_print(b"  Delta: -2.0%\n"); }
-                    unsafe { crate::uart_print(b"  Level: WARNING\n"); }
+                #[cfg(feature = "llm")]
+                {
+                    // Get real drift metrics
+                    let metrics = crate::llm::DRIFT_DETECTOR.get_metrics();
+
+                    if json_mode {
+                        // Format as JSON (simplified - using available fields)
+                        unsafe { crate::uart_print(b"{\"baseline_accuracy\":"); }
+                        self.print_number_simple((metrics.baseline_accuracy * 100.0) as u64);
+                        unsafe { crate::uart_print(b",\"current_accuracy\":"); }
+                        self.print_number_simple((metrics.current_accuracy * 100.0) as u64);
+                        unsafe { crate::uart_print(b",\"drift_severity\":"); }
+                        self.print_number_simple((metrics.drift_severity * 100.0) as u64);
+                        unsafe { crate::uart_print(b",\"drift_events\":"); }
+                        self.print_number_simple(metrics.drift_events as u64);
+                        unsafe { crate::uart_print(b",\"retraining_triggered\":"); }
+                        self.print_number_simple(metrics.retraining_triggered as u64);
+                        unsafe { crate::uart_print(b"}\n"); }
+                    } else {
+                        unsafe { crate::uart_print(b"[DRIFTCTL] Current Accuracy: "); }
+                        self.print_number_simple((metrics.current_accuracy * 100.0) as u64);
+                        unsafe { crate::uart_print(b"%\n  Baseline: "); }
+                        self.print_number_simple((metrics.baseline_accuracy * 100.0) as u64);
+                        unsafe { crate::uart_print(b"%\n"); }
+                    }
+                }
+
+                #[cfg(not(feature = "llm"))]
+                {
+                    if json_mode {
+                        unsafe { crate::uart_print(b"{\"baseline_accuracy\":0,\"current_accuracy\":0,\"total_samples\":0,\"auto_retrain_enabled\":false}\n"); }
+                    } else {
+                        unsafe { crate::uart_print(b"[DRIFTCTL] LLM feature not enabled\n"); }
+                    }
                 }
             }
             "history" => {
