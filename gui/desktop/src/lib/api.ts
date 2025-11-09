@@ -741,3 +741,370 @@ export const incidentApi = {
     return response.data;
   },
 };
+
+// ============================================================================
+// Phase 2: AI Governance APIs
+// ============================================================================
+
+// ============================================================================
+// Phase 2: Orchestrator Types
+// ============================================================================
+
+export interface OrchestrationStats {
+  total_decisions: number;
+  unanimous: number;
+  majority: number;
+  safety_overrides: number;
+  no_consensus: number;
+  avg_latency_us: number;
+}
+
+export interface CoordinatedDecision {
+  timestamp: string;
+  type: 'unanimous' | 'majority' | 'safety_override' | 'no_consensus';
+  action: string;
+  confidence?: number;
+  agents?: string[];
+  overridden_by?: string;
+  reason?: string;
+  overridden_agents?: string[];
+  latency_us: number;
+}
+
+export interface AgentLastDecision {
+  timestamp: string;
+  action: string;
+  confidence: number;
+}
+
+export interface AgentStats {
+  total_decisions: number;
+  avg_confidence: number;
+}
+
+export interface AgentInfo {
+  name: string;
+  type: string;
+  status: 'active' | 'inactive' | 'error';
+  priority: number;
+  last_decision?: AgentLastDecision;
+  stats?: AgentStats;
+}
+
+// ============================================================================
+// Phase 2: Conflicts Types
+// ============================================================================
+
+export interface ConflictStats {
+  total_conflicts: number;
+  resolved_by_priority: number;
+  resolved_by_voting: number;
+  unresolved: number;
+  avg_resolution_time_us: number;
+}
+
+export interface ConflictAgent {
+  agent: string;
+  action: string;
+  confidence: number;
+  priority: number;
+}
+
+export interface ConflictResolution {
+  strategy: 'priority' | 'voting' | 'unresolved';
+  winner: string;
+  action: string;
+  reason: string;
+}
+
+export interface Conflict {
+  id: string;
+  timestamp: string;
+  agents: ConflictAgent[];
+  resolution: ConflictResolution;
+  resolution_time_us: number;
+}
+
+export interface PriorityEntry {
+  agent: string;
+  priority: number;
+}
+
+// ============================================================================
+// Phase 2: Deployment Types
+// ============================================================================
+
+export interface CurrentPhase {
+  id: string;
+  name: string;
+  description: string;
+  entered_at: string;
+  min_duration_ms: number;
+  elapsed_ms: number;
+  can_advance: boolean;
+  traffic_percentage: number;
+  error_rate: number;
+  success_rate: number;
+}
+
+export interface DeploymentStatus {
+  current_phase: CurrentPhase;
+  auto_advance_enabled: boolean;
+  auto_rollback_enabled: boolean;
+  rollback_count: number;
+  max_rollbacks: number;
+}
+
+export interface MetricsSnapshot {
+  error_rate: number;
+  success_rate: number;
+  uptime_hours: number;
+}
+
+export interface PhaseTransition {
+  timestamp: string;
+  from_phase: string;
+  to_phase: string;
+  trigger: 'auto_advance' | 'auto_rollback' | 'manual_advance' | 'manual_rollback';
+  reason: string;
+  metrics_snapshot: MetricsSnapshot;
+}
+
+export interface DeploymentConfigRequest {
+  auto_advance_enabled?: boolean;
+  auto_rollback_enabled?: boolean;
+  error_rate_threshold?: number;
+}
+
+// ============================================================================
+// Phase 2: Drift Detection Types
+// ============================================================================
+
+export interface DriftStatus {
+  baseline_accuracy: number;
+  current_accuracy: number;
+  accuracy_delta: number;
+  drift_level: 'normal' | 'warning' | 'critical';
+  sample_window_size: number;
+  samples_analyzed: number;
+  last_retrain: string;
+  auto_retrain_enabled: boolean;
+  auto_retrain_threshold: number;
+}
+
+export interface DriftSample {
+  timestamp: string;
+  accuracy: number;
+  drift_level: 'normal' | 'warning' | 'critical';
+  accuracy_delta: number;
+  sample_count: number;
+}
+
+export interface RetrainRequest {
+  training_examples: number;
+  epochs: number;
+}
+
+// ============================================================================
+// Phase 2: Version Control Types
+// ============================================================================
+
+export interface VersionMetadata {
+  training_examples: number;
+  training_duration_ms: number;
+  final_loss: number;
+  accuracy_improvement: number;
+  environment_tag: string;
+}
+
+export interface AdapterVersion {
+  version_id: number;
+  parent_version: number | null;
+  timestamp: string;
+  description: string;
+  metadata: VersionMetadata;
+  hash: string;
+  storage_path: string;
+  tags: string[];
+}
+
+export interface VersionDiff {
+  version_a: number;
+  version_b: number;
+  accuracy_delta: number;
+  param_changes: number;
+  time_delta_hours: number;
+}
+
+export interface CommitVersionRequest {
+  description: string;
+  environment_tag: string;
+  metadata: any;
+}
+
+// ============================================================================
+// Phase 2: Orchestrator API
+// ============================================================================
+
+export const orchestratorApi = {
+  async getStats(): Promise<OrchestrationStats> {
+    const response = await api.get<OrchestrationStats>('/api/v1/orchestrator/stats');
+    return response.data;
+  },
+
+  async getDecisions(params?: {
+    limit?: number;
+    type?: string;
+  }): Promise<{ decisions: CoordinatedDecision[] }> {
+    const response = await api.get<{ decisions: CoordinatedDecision[] }>(
+      '/api/v1/orchestrator/decisions',
+      { params }
+    );
+    return response.data;
+  },
+
+  async getAgents(): Promise<{ agents: AgentInfo[] }> {
+    const response = await api.get<{ agents: AgentInfo[] }>('/api/v1/orchestrator/agents');
+    return response.data;
+  },
+};
+
+// ============================================================================
+// Phase 2: Conflicts API
+// ============================================================================
+
+export const conflictsApi = {
+  async getStats(): Promise<ConflictStats> {
+    const response = await api.get<ConflictStats>('/api/v1/conflicts/stats');
+    return response.data;
+  },
+
+  async getHistory(params?: {
+    limit?: number;
+    resolved?: boolean;
+  }): Promise<{ conflicts: Conflict[] }> {
+    const response = await api.get<{ conflicts: Conflict[] }>(
+      '/api/v1/conflicts/history',
+      { params }
+    );
+    return response.data;
+  },
+
+  async getPriorityTable(): Promise<{ priorities: PriorityEntry[] }> {
+    const response = await api.get<{ priorities: PriorityEntry[] }>(
+      '/api/v1/conflicts/priority-table'
+    );
+    return response.data;
+  },
+};
+
+// ============================================================================
+// Phase 2: Deployment API
+// ============================================================================
+
+export const deploymentApi = {
+  async getStatus(): Promise<DeploymentStatus> {
+    const response = await api.get<DeploymentStatus>('/api/v1/deployment/status');
+    return response.data;
+  },
+
+  async getHistory(params?: {
+    limit?: number;
+  }): Promise<{ transitions: PhaseTransition[] }> {
+    const response = await api.get<{ transitions: PhaseTransition[] }>(
+      '/api/v1/deployment/history',
+      { params }
+    );
+    return response.data;
+  },
+
+  async advance(force: boolean = false): Promise<any> {
+    const response = await api.post('/api/v1/deployment/advance', { force });
+    return response.data;
+  },
+
+  async rollback(reason: string): Promise<any> {
+    const response = await api.post('/api/v1/deployment/rollback', { reason });
+    return response.data;
+  },
+
+  async updateConfig(config: DeploymentConfigRequest): Promise<any> {
+    const response = await api.post('/api/v1/deployment/config', config);
+    return response.data;
+  },
+};
+
+// ============================================================================
+// Phase 2: Drift Detection API
+// ============================================================================
+
+export const driftApi = {
+  async getStatus(): Promise<DriftStatus> {
+    const response = await api.get<DriftStatus>('/api/v1/drift/status');
+    return response.data;
+  },
+
+  async getHistory(params?: {
+    limit?: number;
+    time_range?: number;
+  }): Promise<{ samples: DriftSample[] }> {
+    const response = await api.get<{ samples: DriftSample[] }>(
+      '/api/v1/drift/history',
+      { params }
+    );
+    return response.data;
+  },
+
+  async triggerRetrain(params: RetrainRequest): Promise<any> {
+    const response = await api.post('/api/v1/drift/retrain', params);
+    return response.data;
+  },
+
+  async resetBaseline(): Promise<any> {
+    const response = await api.post('/api/v1/drift/reset-baseline');
+    return response.data;
+  },
+};
+
+// ============================================================================
+// Phase 2: Version Control API
+// ============================================================================
+
+export const versionsApi = {
+  async getList(params?: {
+    limit?: number;
+  }): Promise<{ current_version: number; versions: AdapterVersion[] }> {
+    const response = await api.get<{ current_version: number; versions: AdapterVersion[] }>(
+      '/api/v1/versions/list',
+      { params }
+    );
+    return response.data;
+  },
+
+  async commit(request: CommitVersionRequest): Promise<any> {
+    const response = await api.post('/api/v1/versions/commit', request);
+    return response.data;
+  },
+
+  async rollback(version_id: number): Promise<any> {
+    const response = await api.post('/api/v1/versions/rollback', { version_id });
+    return response.data;
+  },
+
+  async getDiff(v1: number, v2: number): Promise<VersionDiff> {
+    const response = await api.get<VersionDiff>('/api/v1/versions/diff', {
+      params: { v1, v2 },
+    });
+    return response.data;
+  },
+
+  async tag(version_id: number, tag: string): Promise<any> {
+    const response = await api.post('/api/v1/versions/tag', { version_id, tag });
+    return response.data;
+  },
+
+  async garbageCollect(keep_count: number = 10): Promise<any> {
+    const response = await api.post('/api/v1/versions/gc', { keep_count });
+    return response.data;
+  },
+};
