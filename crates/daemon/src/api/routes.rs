@@ -1,9 +1,10 @@
 //! API routing
 
 use super::{
-    autonomy_handlers, crash_handlers, graph_handlers, handlers, llm_handlers, logs_handlers,
-    memory_handlers, metrics_handlers, middleware, replay_handlers, sched_handlers,
-    shell_handlers, ws,
+    autonomy_handlers, conflicts_handlers, crash_handlers, deployment_handlers, drift_handlers,
+    graph_handlers, handlers, llm_handlers, logs_handlers, memory_handlers, metrics_handlers,
+    middleware, orchestrator_handlers, replay_handlers, sched_handlers, shell_handlers,
+    versions_handlers, ws,
 };
 use crate::qemu::{QemuSupervisor, ReplayManager};
 use axum::{
@@ -74,6 +75,32 @@ use utoipa_swagger_ui::SwaggerUi;
         crash_handlers::crash_list,
         crash_handlers::incident_create,
         crash_handlers::incident_list,
+        // Phase 2: Orchestrator
+        orchestrator_handlers::get_orchestrator_stats,
+        orchestrator_handlers::get_orchestrator_decisions,
+        orchestrator_handlers::get_orchestrator_agents,
+        // Phase 2: Conflicts
+        conflicts_handlers::get_conflict_stats,
+        conflicts_handlers::get_conflict_history,
+        conflicts_handlers::get_priority_table,
+        // Phase 2: Deployment
+        deployment_handlers::get_deployment_status,
+        deployment_handlers::get_deployment_history,
+        deployment_handlers::advance_deployment,
+        deployment_handlers::rollback_deployment,
+        deployment_handlers::update_deployment_config,
+        // Phase 2: Drift
+        drift_handlers::get_drift_status,
+        drift_handlers::get_drift_history,
+        drift_handlers::trigger_retrain,
+        drift_handlers::reset_baseline,
+        // Phase 2: Versions
+        versions_handlers::get_version_list,
+        versions_handlers::commit_version,
+        versions_handlers::rollback_version,
+        versions_handlers::get_version_diff,
+        versions_handlers::tag_version,
+        versions_handlers::garbage_collect_versions,
     ),
     components(
         schemas(
@@ -152,6 +179,54 @@ use utoipa_swagger_ui::SwaggerUi;
             crash_handlers::CreateIncidentRequest,
             crash_handlers::CreateIncidentResponse,
             crash_handlers::IncidentListResponse,
+            // Phase 2: Orchestrator
+            orchestrator_handlers::OrchestrationStats,
+            orchestrator_handlers::CoordinatedDecision,
+            orchestrator_handlers::AgentInfo,
+            orchestrator_handlers::AgentLastDecision,
+            orchestrator_handlers::AgentStats,
+            orchestrator_handlers::DecisionsResponse,
+            orchestrator_handlers::AgentsResponse,
+            // Phase 2: Conflicts
+            conflicts_handlers::ConflictStats,
+            conflicts_handlers::ConflictAgent,
+            conflicts_handlers::ConflictResolution,
+            conflicts_handlers::Conflict,
+            conflicts_handlers::ConflictsResponse,
+            conflicts_handlers::PriorityEntry,
+            conflicts_handlers::PriorityTableResponse,
+            // Phase 2: Deployment
+            deployment_handlers::CurrentPhase,
+            deployment_handlers::DeploymentStatus,
+            deployment_handlers::MetricsSnapshot,
+            deployment_handlers::PhaseTransition,
+            deployment_handlers::DeploymentHistoryResponse,
+            deployment_handlers::AdvanceRequest,
+            deployment_handlers::RollbackRequest,
+            deployment_handlers::DeploymentConfigRequest,
+            deployment_handlers::PhaseChangeResponse,
+            deployment_handlers::ConfigUpdateResponse,
+            deployment_handlers::DeploymentConfig,
+            // Phase 2: Drift
+            drift_handlers::DriftStatus,
+            drift_handlers::DriftSample,
+            drift_handlers::DriftHistoryResponse,
+            drift_handlers::RetrainRequest,
+            drift_handlers::RetrainResponse,
+            drift_handlers::ResetBaselineResponse,
+            // Phase 2: Versions
+            versions_handlers::VersionMetadata,
+            versions_handlers::AdapterVersion,
+            versions_handlers::VersionListResponse,
+            versions_handlers::VersionDiff,
+            versions_handlers::CommitRequest,
+            versions_handlers::CommitResponse,
+            versions_handlers::VersionRollbackRequest,
+            versions_handlers::VersionRollbackResponse,
+            versions_handlers::TagRequest,
+            versions_handlers::TagResponse,
+            versions_handlers::GarbageCollectRequest,
+            versions_handlers::GarbageCollectResponse,
         )
     ),
     tags(
@@ -169,7 +244,12 @@ use utoipa_swagger_ui::SwaggerUi;
         (name = "logs", description = "Log tailing and filtering"),
         (name = "runs", description = "Run history and troubleshooting"),
         (name = "crashes", description = "Crash capture and querying"),
-        (name = "incidents", description = "Incident tracking and management")
+        (name = "incidents", description = "Incident tracking and management"),
+        (name = "orchestrator", description = "Phase 2: Multi-agent orchestration"),
+        (name = "conflicts", description = "Phase 2: Conflict resolution"),
+        (name = "deployment", description = "Phase 2: Deployment management"),
+        (name = "drift", description = "Phase 2: Model drift detection"),
+        (name = "versions", description = "Phase 2: Adapter version control")
     ),
     info(
         title = "SIS Kernel Control Daemon (sisctl)",
@@ -262,6 +342,32 @@ pub fn create_router(supervisor: Arc<QemuSupervisor>, replay_manager: Arc<Replay
         // Incident tracking endpoints
         .route("/api/v1/incidents", post(crash_handlers::incident_create))
         .route("/api/v1/incidents", get(crash_handlers::incident_list))
+        // Phase 2: Orchestrator endpoints
+        .route("/api/v1/orchestrator/stats", get(orchestrator_handlers::get_orchestrator_stats))
+        .route("/api/v1/orchestrator/decisions", get(orchestrator_handlers::get_orchestrator_decisions))
+        .route("/api/v1/orchestrator/agents", get(orchestrator_handlers::get_orchestrator_agents))
+        // Phase 2: Conflicts endpoints
+        .route("/api/v1/conflicts/stats", get(conflicts_handlers::get_conflict_stats))
+        .route("/api/v1/conflicts/history", get(conflicts_handlers::get_conflict_history))
+        .route("/api/v1/conflicts/priority-table", get(conflicts_handlers::get_priority_table))
+        // Phase 2: Deployment endpoints
+        .route("/api/v1/deployment/status", get(deployment_handlers::get_deployment_status))
+        .route("/api/v1/deployment/history", get(deployment_handlers::get_deployment_history))
+        .route("/api/v1/deployment/advance", post(deployment_handlers::advance_deployment))
+        .route("/api/v1/deployment/rollback", post(deployment_handlers::rollback_deployment))
+        .route("/api/v1/deployment/config", post(deployment_handlers::update_deployment_config))
+        // Phase 2: Drift endpoints
+        .route("/api/v1/drift/status", get(drift_handlers::get_drift_status))
+        .route("/api/v1/drift/history", get(drift_handlers::get_drift_history))
+        .route("/api/v1/drift/retrain", post(drift_handlers::trigger_retrain))
+        .route("/api/v1/drift/reset-baseline", post(drift_handlers::reset_baseline))
+        // Phase 2: Versions endpoints
+        .route("/api/v1/versions/list", get(versions_handlers::get_version_list))
+        .route("/api/v1/versions/commit", post(versions_handlers::commit_version))
+        .route("/api/v1/versions/rollback", post(versions_handlers::rollback_version))
+        .route("/api/v1/versions/diff", get(versions_handlers::get_version_diff))
+        .route("/api/v1/versions/tag", post(versions_handlers::tag_version))
+        .route("/api/v1/versions/gc", post(versions_handlers::garbage_collect_versions))
         // WebSocket events
         .route("/events", get(ws::events_handler))
         // State

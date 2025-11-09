@@ -78,6 +78,9 @@ mod graphctl_helpers;
 mod agentctl_helpers;
 mod coordctl_helpers;
 mod learnctl_helpers;
+mod deployctl_helpers;
+mod driftctl_helpers;
+mod versionctl_helpers;
 mod pmu_helpers;
 mod stresstest_helpers;
 mod benchmark_helpers;
@@ -223,6 +226,9 @@ impl Shell {
                 "neuralctl" => { self.cmd_neuralctl(&parts[1..]); true },
                 "agentctl" => { self.agentctl_cmd(&parts[1..]); true },
                 "coordctl" => { self.coordctl_cmd(&parts[1..]); true },
+                "deployctl" => { self.deployctl_cmd(&parts[1..]); true },
+                "driftctl" => { self.driftctl_cmd(&parts[1..]); true },
+                "versionctl" => { self.versionctl_cmd(&parts[1..]); true },
                 #[cfg(feature = "demos")]
                 "coorddemo" => { self.cmd_coord_demo(); true },
                 "metaclassctl" => { self.metaclassctl_cmd(&parts[1..]); true },

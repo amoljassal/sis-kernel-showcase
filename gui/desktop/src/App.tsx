@@ -29,7 +29,12 @@ import { ApiExplorerPanel } from './components/ApiExplorerPanel';
 import { BootTimelineView } from './components/BootTimelineView';
 import { MetricsAlertsPanel } from './components/MetricsAlertsPanel';
 import { SettingsPanel } from './components/SettingsPanel';
-import { AlertCircle, Activity, Terminal as TerminalIcon, TrendingUp, Shield, GitCompare, Network, Cpu, Brain, FileText, AlertTriangle, Code, Clock, Bell, Settings } from 'lucide-react';
+import { OrchestrationPanel } from './components/OrchestrationPanel';
+import { ConflictPanel } from './components/ConflictPanel';
+import { DeploymentPanel } from './components/DeploymentPanel';
+import { DriftPanel } from './components/DriftPanel';
+import { VersionsPanel } from './components/VersionsPanel';
+import { AlertCircle, Activity, Terminal as TerminalIcon, TrendingUp, Shield, GitCompare, Network, Cpu, Brain, FileText, AlertTriangle, Code, Clock, Bell, Settings, Users, Rocket, TrendingDown, GitBranch } from 'lucide-react';
 import * as Tabs from '@radix-ui/react-tabs';
 import type { BatchedMetricPoint, CrashEvent } from './lib/api';
 import './App.css';
@@ -130,6 +135,32 @@ function App() {
     // Handle state changes
     if (event.type === 'state_changed') {
       queryClient.invalidateQueries({ queryKey: ['qemu-status'] });
+    }
+
+    // Handle Phase 2 events
+    if (event.type === 'orchestration_decision') {
+      // Invalidate orchestrator queries to refresh UI
+      queryClient.invalidateQueries({ queryKey: ['orchestrator'] });
+    }
+
+    if (event.type === 'conflict_resolved') {
+      // Invalidate conflicts queries to refresh UI
+      queryClient.invalidateQueries({ queryKey: ['conflicts'] });
+    }
+
+    if (event.type === 'phase_transition') {
+      // Invalidate deployment queries to refresh UI
+      queryClient.invalidateQueries({ queryKey: ['deployment'] });
+    }
+
+    if (event.type === 'drift_alert') {
+      // Invalidate drift queries to refresh UI
+      queryClient.invalidateQueries({ queryKey: ['drift'] });
+    }
+
+    if (event.type === 'version_commit') {
+      // Invalidate versions queries to refresh UI
+      queryClient.invalidateQueries({ queryKey: ['versions'] });
     }
   });
 
@@ -326,6 +357,41 @@ function App() {
                   <Settings className="h-4 w-4 inline-block mr-2" />
                   Settings
                 </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="orchestration"
+                  className="px-4 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-muted transition-colors"
+                >
+                  <Users className="h-4 w-4 inline-block mr-2" />
+                  Orchestration
+                </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="conflicts"
+                  className="px-4 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-muted transition-colors"
+                >
+                  <AlertTriangle className="h-4 w-4 inline-block mr-2" />
+                  Conflicts
+                </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="deployment"
+                  className="px-4 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-muted transition-colors"
+                >
+                  <Rocket className="h-4 w-4 inline-block mr-2" />
+                  Deployment
+                </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="drift"
+                  className="px-4 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-muted transition-colors"
+                >
+                  <TrendingDown className="h-4 w-4 inline-block mr-2" />
+                  Drift
+                </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="versions"
+                  className="px-4 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground hover:bg-muted transition-colors"
+                >
+                  <GitBranch className="h-4 w-4 inline-block mr-2" />
+                  Versions
+                </Tabs.Trigger>
               </Tabs.List>
 
               <Tabs.Content value="dashboard" className="flex-1 overflow-y-auto">
@@ -382,6 +448,26 @@ function App() {
 
               <Tabs.Content value="settings" className="flex-1 overflow-hidden">
                 <SettingsPanel />
+              </Tabs.Content>
+
+              <Tabs.Content value="orchestration" className="flex-1 overflow-hidden">
+                <OrchestrationPanel />
+              </Tabs.Content>
+
+              <Tabs.Content value="conflicts" className="flex-1 overflow-hidden">
+                <ConflictPanel />
+              </Tabs.Content>
+
+              <Tabs.Content value="deployment" className="flex-1 overflow-hidden">
+                <DeploymentPanel />
+              </Tabs.Content>
+
+              <Tabs.Content value="drift" className="flex-1 overflow-hidden">
+                <DriftPanel />
+              </Tabs.Content>
+
+              <Tabs.Content value="versions" className="flex-1 overflow-hidden">
+                <VersionsPanel />
               </Tabs.Content>
             </Tabs.Root>
           </div>
