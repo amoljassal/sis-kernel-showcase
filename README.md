@@ -2891,7 +2891,10 @@ sis-kernel/
 │   │       │   ├── benchmark_helpers.rs        # Comparative benchmarks
 │   │       │   ├── cmdctl_helpers.rs           # Command prediction
 │   │       │   ├── compliance_helpers.rs       # EU AI Act compliance
-│   │       │   ├── coordctl_helpers.rs         # Coordinator control
+│   │       │   ├── coordctl_helpers.rs         # Multi-agent coordination control (Phase 2)
+│   │       │   ├── deployctl_helpers.rs        # Deployment phase management (Phase 2)
+│   │       │   ├── driftctl_helpers.rs         # Model drift detection control (Phase 2)
+│   │       │   ├── versionctl_helpers.rs       # Adapter version control (Phase 2)
 │   │       │   ├── ctlhex_helpers.rs           # Hex dump utilities
 │   │       │   ├── fullautodemo_helpers.rs     # 7-phase autonomous demo
 │   │       │   ├── graphctl_helpers.rs         # Dataflow graph control
