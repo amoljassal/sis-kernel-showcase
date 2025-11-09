@@ -1605,6 +1605,7 @@ if let PhaseTransition::Advance { to, .. } = deployment.check_auto_advance() {
 - ✅ **Unit test coverage:** 27 tests across 7 components
 - ✅ **Type safety:** 100% verified by Rust compiler
 - ✅ **Memory safety:** Zero unsafe blocks in Phase 2 code
+- ✅ **QEMU runtime testing:** All Phase 2 shell commands operational
 
 **Test Coverage by Component:**
 
@@ -1627,6 +1628,34 @@ if let PhaseTransition::Advance { to, .. } = deployment.check_auto_advance() {
 - Drift detection (Normal/Warning/Critical)
 - Adapter commit/rollback/diff/tag operations
 - Auto-retraining triggers
+
+**QEMU Runtime Validation (November 9, 2025):**
+
+All Phase 2 shell commands tested and verified operational in QEMU:
+
+```bash
+# Multi-Agent Orchestration
+sis> coordctl status --json
+{"total_decisions":0,"unanimous":0,"majority":0,"safety_overrides":0,"no_consensus":0,"avg_latency_us":0}
+
+sis> coordctl conflict-stats --json
+{"total_conflicts":0,"resolved_by_priority":0,"resolved_by_voting":0,"unresolved":0,"avg_resolution_time_us":0}
+
+# Deployment Phase Management
+sis> deployctl status --json
+{"current_phase":{"id":"A","name":"Phase A: Learning"},"auto_advance_enabled":true,"auto_rollback_enabled":true}
+
+# Model Drift Detection
+sis> driftctl status --json
+{"baseline_accuracy":90,"current_accuracy":90,"drift_severity":0,"drift_events":0,"retraining_triggered":0}
+```
+
+**Verification Status:**
+- ✅ All commands return valid JSON output
+- ✅ All commands support human-readable format (without `--json`)
+- ✅ Module wiring complete (ORCHESTRATOR, DEPLOYMENT_MANAGER, DRIFT_DETECTOR, VERSION_CONTROL)
+- ✅ Kernel git hash: b947f04535f7 (module wiring commit)
+- ✅ Features enabled: ai_ops, llm, crypto_real, bringup
 
 **Note on Unit Tests:** The SIS kernel targets `aarch64-unknown-none` (bare-metal, no OS), which does not support Rust's standard test framework. Unit tests in `#[cfg(test)]` blocks serve as documentation, static verification via compilation, and reference implementations. For runtime validation, use integration testing in QEMU.
 
@@ -1672,13 +1701,35 @@ if let PhaseTransition::Advance { to, .. } = deployment.check_auto_advance() {
 
 | Command | Description | Feature Requirements | Example Usage |
 |---------|-------------|---------------------|---------------|
-| `agentctl bus` | View agent message bus | Always available | `agentctl bus` |
-| `agentctl stats` | Show agent bus statistics | Always available | `agentctl stats` |
-| `agentctl clear` | Clear message history | Always available | `agentctl clear` |
-| | | | |
-| `coordctl process` | Process coordination requests | Always available | `coordctl process` |
-| `coordctl stats` | Show coordination statistics | Always available | `coordctl stats` |
+| `coordctl status [--json]` | Show orchestration statistics | `ai-ops` feature | `coordctl status --json` |
+| `coordctl conflict-stats [--json]` | Show conflict resolution metrics | `ai-ops` feature | `coordctl conflict-stats --json` |
+| `coordctl history [--json]` | View decision history | `ai-ops` feature | `coordctl history --json` |
+| `coordctl agents [--json]` | List active agents | `ai-ops` feature | `coordctl agents --json` |
+| `coordctl priorities [--json]` | Show agent priority table | `ai-ops` feature | `coordctl priorities` |
+| `coordctl process` | Process coordination requests (legacy) | Always available | `coordctl process` |
+| `coordctl stats` | Show coordination statistics (legacy) | Always available | `coordctl stats` |
 | `coorddemo` | Demo cross-agent coordination under stress | Requires `demos` | `coorddemo` |
+| | | | |
+| `deployctl status [--json]` | Show current deployment phase | `ai-ops` feature | `deployctl status --json` |
+| `deployctl history [--json]` | View phase transition history | `ai-ops` feature | `deployctl history --json` |
+| `deployctl advance` | Manually advance to next phase | `ai-ops` feature | `deployctl advance` |
+| `deployctl rollback` | Rollback to previous phase | `ai-ops` feature | `deployctl rollback` |
+| `deployctl config` | Configure phase criteria | `ai-ops` feature | `deployctl config` |
+| | | | |
+| `driftctl status [--json]` | Show model drift metrics | `llm` feature | `driftctl status --json` |
+| `driftctl history [--json]` | View drift detection history | `llm` feature | `driftctl history --json` |
+| `driftctl retrain` | Manually trigger retraining | `llm` feature | `driftctl retrain` |
+| `driftctl reset-baseline` | Reset accuracy baseline | `llm` feature | `driftctl reset-baseline` |
+| | | | |
+| `versionctl status [--json]` | Show adapter version info | `llm` feature | `versionctl status --json` |
+| `versionctl history [--json]` | View version history | `llm` feature | `versionctl history --json` |
+| `versionctl commit` | Commit new adapter version | `llm` feature | `versionctl commit` |
+| `versionctl rollback <id>` | Rollback to version | `llm` feature | `versionctl rollback v3` |
+| `versionctl tag <id> <name>` | Tag a version | `llm` feature | `versionctl tag v5 production` |
+| | | | |
+| `agentctl bus` | View agent message bus (legacy) | Always available | `agentctl bus` |
+| `agentctl stats` | Show agent bus statistics (legacy) | Always available | `agentctl stats` |
+| `agentctl clear` | Clear message history (legacy) | Always available | `agentctl clear` |
 | | | | |
 | `metaclassctl status` | Show meta-agent status | Always available | `metaclassctl status` |
 | `metaclassctl force` | Force immediate meta-agent decision | Always available | `metaclassctl force` |
