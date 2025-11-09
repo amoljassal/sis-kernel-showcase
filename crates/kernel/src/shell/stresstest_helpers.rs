@@ -119,28 +119,28 @@ impl super::Shell {
                     if which == "memory" {
                         let pressure_diff = metrics_off.peak_memory_pressure as i32 - metrics_on.peak_memory_pressure as i32;
                         if pressure_diff > 0 {
-                            crate::uart_print(b"  ✓ Peak pressure reduced by "); self.print_number_simple(pressure_diff as u64); crate::uart_print(b"%\n");
+                            crate::uart_print(b"  [+] Peak pressure reduced by "); self.print_number_simple(pressure_diff as u64); crate::uart_print(b"%\n");
                         } else if pressure_diff < 0 {
-                            crate::uart_print(b"  ✗ Peak pressure increased by "); self.print_number_simple((-pressure_diff) as u64); crate::uart_print(b"%\n");
+                            crate::uart_print(b"  [-] Peak pressure increased by "); self.print_number_simple((-pressure_diff) as u64); crate::uart_print(b"%\n");
                         }
 
                         let oom_diff = metrics_off.oom_events as i32 - metrics_on.oom_events as i32;
                         if oom_diff > 0 {
-                            crate::uart_print(b"  ✓ OOM events reduced by "); self.print_number_simple(oom_diff as u64);
-                            crate::uart_print(b" ("); self.print_number_simple(metrics_off.oom_events as u64); crate::uart_print(b" → ");
+                            crate::uart_print(b"  [+] OOM events reduced by "); self.print_number_simple(oom_diff as u64);
+                            crate::uart_print(b" ("); self.print_number_simple(metrics_off.oom_events as u64); crate::uart_print(b" -> ");
                             self.print_number_simple(metrics_on.oom_events as u64); crate::uart_print(b")\n");
                         } else if oom_diff < 0 {
-                            crate::uart_print(b"  ✗ OOM events increased\n");
+                            crate::uart_print(b"  [-] OOM events increased\n");
                         } else {
                             crate::uart_print(b"  - No change in OOM events\n");
                         }
                     }
 
                     if autonomy_on.total_interventions > 0 {
-                        crate::uart_print(b"  ✓ "); self.print_number_simple(autonomy_on.total_interventions as u64);
+                        crate::uart_print(b"  [+] "); self.print_number_simple(autonomy_on.total_interventions as u64);
                         crate::uart_print(b" AI interventions detected\n");
                     } else {
-                        crate::uart_print(b"  ⚠ No AI interventions (autonomy may not be active)\n");
+                        crate::uart_print(b"  [!] No AI interventions (autonomy may not be active)\n");
                     }
                     crate::uart_print(b"\n");
                 }
