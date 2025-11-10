@@ -165,7 +165,7 @@ impl BenchmarkState {
 
         // Collect current system state
         let heap_stats = crate::heap::get_heap_stats();
-        let heap_size: usize = 100 * 1024;
+        let heap_size = crate::heap::heap_total_size(); // Single source of truth from heap.rs
         let used = heap_stats.current_allocated();
         let pressure = ((used * 100) / heap_size).min(100) as u8;
 

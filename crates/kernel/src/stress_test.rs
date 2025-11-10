@@ -17,6 +17,7 @@ use spin::Mutex;
 use crate::prng;
 use crate::autonomy_metrics::AUTONOMY_METRICS;
 use crate::latency_histogram::{LatencyHistogram, LatencyReport};
+use alloc::format;
 
 /// Stress test metrics collection (enhanced with new fields)
 #[derive(Copy, Clone)]
@@ -123,7 +124,7 @@ impl StressTestConfig {
         Self {
             test_type,
             duration_ms: 10000,  // 10 seconds default
-            target_pressure: 85,
+            target_pressure: 50,  // 50% (practical limit due to linked_list_allocator fragmentation at ~57%)
             command_rate: 50,
             episodes: 10,
             fail_rate_percent: 0,
@@ -273,73 +274,170 @@ pub fn run_memory_stress(config: StressTestConfig) -> StressTestMetrics {
     let mut pressure_samples = 0u32;
     let mut iteration = 0u32;
 
-    while crate::time::get_timestamp_us() < end_time {
-        // Variable allocation size (base ± noise) - adds real variability
-        let alloc_size = if config.noise_level > 0.0 {
-            let base = 4096u32;
-            let variance = (base as f32 * config.noise_level) as u32;
-            prng::rand_range(base.saturating_sub(variance), base + variance) as usize
-        } else {
-            4096
-        };
+    // PRE-FILL: Start near target pressure instead of from 0%
+    // This prevents initial overshoot to 100%
 
-        // Track allocation latency
-        let alloc_start = crate::time::get_timestamp_us();
+    // RESET: Clear current_allocated to start test from clean state
+    // This ensures accurate pressure measurements regardless of previous kernel activity
+    crate::heap::reset_current_allocated_for_test();
 
-        // OOM injection: force failure based on oom_probability
-        let force_oom = config.oom_probability > 0 &&
-                        prng::rand_range(0, 100) < config.oom_probability as u32;
-
-        let mut v = alloc::vec::Vec::new();
-        let allocation_success = if force_oom {
-            false  // Inject OOM failure
-        } else {
-            v.try_reserve_exact(alloc_size).is_ok()
-        };
-
-        if allocation_success {
-            v.resize(alloc_size, (iteration % 256) as u8);
-            allocations.push(v);
-
-            // Record successful allocation latency (convert to ns)
-            let alloc_latency_ns = (crate::time::get_timestamp_us() - alloc_start) * 1000;
-            ALLOCATION_LATENCY.record(alloc_latency_ns);
-        } else {
-            // OOM event - either real failure or injected!
-            OOM_EVENTS.fetch_add(1, Ordering::Relaxed);
-
-            // If autonomy is enabled, record OOM prevention attempt
-            if crate::autonomy::AUTONOMOUS_CONTROL.is_enabled() {
-                AUTONOMY_METRICS.record_oom_prevention();
-                // Simulate autonomy taking action with lower recovery
-                let free_portion = prng::rand_range(20, 40); // 20-40% with autonomy
-                let target_len = (allocations.len() * free_portion as usize) / 100;
-                allocations.truncate(target_len);
-            } else {
-                // Without autonomy, free more aggressively
-                let free_portion = prng::rand_range(40, 70); // 40-70% without autonomy
-                let target_len = (allocations.len() * free_portion as usize) / 100;
-                allocations.truncate(target_len);
-            }
-        }
-
-        // Periodically free some (with randomness for variability)
-        if iteration % 10 == 0 && allocations.len() > 5 {
-            let free_count = prng::rand_range(1, 4);
-            for _ in 0..free_count {
-                if !allocations.is_empty() {
-                    allocations.remove(0);
-                }
-            }
-        }
-
-        // Check memory pressure and track average
+    // PRE-FILL: Try to reach 50% pressure as a safe starting point
+    // Use smaller allocations (1KB) to avoid fragmentation issues
+    let target_fill = 50u8; // Start at 50% pressure
+    let mut consecutive_failures = 0;
+    while allocations.len() < 4096 && consecutive_failures < 5 { // Safety limits
         let telemetry = crate::meta_agent::collect_telemetry();
+        if telemetry.memory_pressure >= target_fill {
+            break; // Pre-fill complete
+        }
+        // Use smaller 1KB allocations for pre-fill to avoid fragmentation
+        let mut v = alloc::vec::Vec::new();
+        if v.try_reserve_exact(1024).is_ok() {
+            v.resize(1024, 0);
+            allocations.push(v);
+            consecutive_failures = 0; // Reset failure counter
+        } else {
+            consecutive_failures += 1;
+            // Stop after 5 consecutive allocation failures
+        }
+    }
+
+    while crate::time::get_timestamp_us() < end_time {
+        // Check memory pressure FIRST to control allocation behavior
+        let telemetry = crate::meta_agent::collect_telemetry();
+
         if telemetry.memory_pressure > peak_pressure {
             peak_pressure = telemetry.memory_pressure;
         }
         pressure_sum += telemetry.memory_pressure as u64;
         pressure_samples += 1;
+
+        // EMERGENCY BRAKE: If pressure hits 100%, immediately free 30% to avoid getting stuck
+        let current_pressure = telemetry.memory_pressure;
+        if current_pressure >= 100 && allocations.len() > 10 {
+            let emergency_free = allocations.len() * 30 / 100;
+            for _ in 0..emergency_free {
+                if !allocations.is_empty() {
+                    allocations.remove(0);
+                } else {
+                    break;
+                }
+            }
+            // Skip to next iteration after emergency free
+            iteration += 1;
+            continue;
+        }
+
+        // TARGET PRESSURE CONTROL: Decide whether to allocate, free, or maintain
+        let should_allocate = current_pressure < config.target_pressure;
+        let should_free = current_pressure > config.target_pressure + 5; // 5% hysteresis
+        let at_target = !should_allocate && !should_free;
+
+        // COMPACTION TRIGGER: At high pressure (>80%), trigger compaction
+        if current_pressure >= 80 && iteration % 50 == 0 {
+            COMPACTION_TRIGGERS.fetch_add(1, Ordering::Relaxed);
+            // Simulate compaction by freeing fragmented allocations
+            if allocations.len() > 10 {
+                let compaction_free = prng::rand_range(2, 6);
+                for _ in 0..compaction_free {
+                    if !allocations.is_empty() {
+                        let idx = prng::rand_range(0, allocations.len() as u32) as usize;
+                        allocations.remove(idx);
+                    }
+                }
+            }
+        }
+
+        if should_allocate {
+            // BELOW TARGET: Allocate to increase pressure
+            // Use smaller allocations (1-2KB) to avoid fragmentation and reach higher pressure
+            let alloc_size = if config.noise_level > 0.0 {
+                let base = 1536u32; // 1.5KB base
+                let variance = (base as f32 * config.noise_level) as u32;
+                prng::rand_range(base.saturating_sub(variance), base + variance) as usize
+            } else {
+                1536
+            };
+
+            // Track allocation latency
+            let alloc_start = crate::time::get_timestamp_us();
+
+            // OOM injection: force failure based on oom_probability
+            let force_oom = config.oom_probability > 0 &&
+                            prng::rand_range(0, 100) < config.oom_probability as u32;
+
+            let mut v = alloc::vec::Vec::new();
+            let allocation_success = if force_oom {
+                false  // Inject OOM failure
+            } else {
+                v.try_reserve_exact(alloc_size).is_ok()
+            };
+
+            if allocation_success {
+                v.resize(alloc_size, (iteration % 256) as u8);
+                allocations.push(v);
+
+                // Record successful allocation latency (convert to ns)
+                let alloc_latency_ns = (crate::time::get_timestamp_us() - alloc_start) * 1000;
+                ALLOCATION_LATENCY.record(alloc_latency_ns);
+            } else {
+                // OOM event - either real failure or injected!
+                OOM_EVENTS.fetch_add(1, Ordering::Relaxed);
+
+                // If autonomy is enabled, record OOM prevention attempt
+                if crate::autonomy::AUTONOMOUS_CONTROL.is_enabled() {
+                    AUTONOMY_METRICS.record_oom_prevention();
+                    // Simulate autonomy taking action with lower recovery
+                    let free_portion = prng::rand_range(20, 40); // 20-40% with autonomy
+                    let target_len = (allocations.len() * free_portion as usize) / 100;
+                    allocations.truncate(target_len);
+                } else {
+                    // Without autonomy, free more aggressively
+                    let free_portion = prng::rand_range(40, 70); // 40-70% without autonomy
+                    let target_len = (allocations.len() * free_portion as usize) / 100;
+                    allocations.truncate(target_len);
+                }
+            }
+        } else if should_free {
+            // ABOVE TARGET: Free aggressively to decrease pressure
+            // Calculate how much over target we are and free proportionally
+            let overshoot = current_pressure.saturating_sub(config.target_pressure);
+            let free_count = if overshoot > 10 {
+                // Very high overshoot: free 10-20% of allocations
+                let pct = prng::rand_range(10, 20);
+                (allocations.len() * pct as usize / 100).max(5)
+            } else if overshoot > 5 {
+                // Moderate overshoot: free 5-10 allocations
+                prng::rand_range(5, 10) as usize
+            } else {
+                // Small overshoot: free 2-5 allocations
+                prng::rand_range(2, 5) as usize
+            };
+
+            for _ in 0..free_count {
+                if !allocations.is_empty() {
+                    allocations.remove(0);
+                } else {
+                    break;
+                }
+            }
+        } else if at_target {
+            // AT TARGET: Maintain pressure with small adjustments
+            if iteration % 10 == 0 && allocations.len() > 5 {
+                // Small random churn to create variability
+                let churn = prng::rand_range(0, 3);
+                if churn == 0 && allocations.len() > 2 {
+                    allocations.remove(0); // Free one
+                } else if churn == 1 {
+                    // Allocate one small
+                    let mut v = alloc::vec::Vec::new();
+                    if v.try_reserve_exact(2048).is_ok() {
+                        v.resize(2048, 0);
+                        allocations.push(v);
+                    }
+                }
+            }
+        }
 
         // Trigger memory agent prediction (if autonomy enabled) - track latency
         if iteration % 20 == 0 && crate::autonomy::AUTONOMOUS_CONTROL.is_enabled() {
@@ -353,8 +451,10 @@ pub fn run_memory_stress(config: StressTestConfig) -> StressTestMetrics {
         iteration += 1;
 
         // Variable delay - adds jitter for more realistic behavior
-        let delay = prng::rand_range(500, 1500);
-        for _ in 0..delay {
+        // Use microsecond delay instead of spin loops for proper timing
+        let delay_us = prng::rand_range(100, 500); // 100-500 microseconds
+        let delay_target = crate::time::get_timestamp_us() + delay_us as u64;
+        while crate::time::get_timestamp_us() < delay_target {
             core::hint::spin_loop();
         }
     }

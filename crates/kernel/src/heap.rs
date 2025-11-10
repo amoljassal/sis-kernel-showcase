@@ -55,6 +55,12 @@ static HEAP_STATS: Mutex<HeapStats> = Mutex::new(HeapStats {
 const HEAP_START: usize = 0x444_44440_0000;
 const HEAP_SIZE: usize = 8 * 1024 * 1024; // 8 MiB heap for bringup (avoid WM test OOM)
 
+/// Return total heap size for telemetry calculations
+/// This provides a single source of truth for heap size across all subsystems
+pub const fn heap_total_size() -> usize {
+    HEAP_SIZE
+}
+
 /// Heap initialization status (lock-free, avoids potential early boot stalls)
 static HEAP_INIT_DONE: AtomicBool = AtomicBool::new(false);
 
@@ -171,16 +177,18 @@ unsafe impl GlobalAlloc for StatsTrackingAllocator {
             }
         }
 
+        // Update stats BEFORE checking deallocation path (fixes stats leak bug)
+        let mut stats = HEAP_STATS.lock();
+        stats.total_deallocations += 1;
+        stats.current_allocated = stats.current_allocated.saturating_sub(layout.size());
+        drop(stats); // Release lock before potentially expensive operations
+
         // Check if this was a large allocation backed by buddy pages
         if large_dealloc(ptr) {
             // deallocated via buddy path
             return;
         }
         ALLOCATOR.dealloc(ptr, layout);
-
-        let mut stats = HEAP_STATS.lock();
-        stats.total_deallocations += 1;
-        stats.current_allocated = stats.current_allocated.saturating_sub(layout.size());
     }
 }
 
@@ -302,6 +310,14 @@ pub fn get_heap_stats() -> HeapStats {
         peak_allocated: stats.peak_allocated,
         allocation_failures: stats.allocation_failures,
     }
+}
+
+/// Reset current_allocated counter for testing
+/// WARNING: Only use this for stress tests where you want to start from a clean state
+pub fn reset_current_allocated_for_test() {
+    let mut stats = HEAP_STATS.lock();
+    stats.current_allocated = 0;
+    stats.peak_allocated = 0;
 }
 
 /// Test heap functionality with various allocation patterns

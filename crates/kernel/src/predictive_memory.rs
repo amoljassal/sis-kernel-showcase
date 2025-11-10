@@ -440,7 +440,7 @@ pub fn predict_fragmentation_future() -> (u8, u16) {
     // Access telemetry through neural module's getter
     // For now, we'll use heap stats directly
     let stats = crate::heap::get_heap_stats();
-    let heap_size: usize = 100 * 1024;
+    let heap_size = crate::heap::heap_total_size(); // Single source of truth from heap.rs
     let used = stats.current_allocated();
     let free = heap_size.saturating_sub(used);
     let _free_percent = (free * 100) / heap_size;

@@ -1296,7 +1296,7 @@ pub fn update_memory_telemetry() {
     let mut telem = MEMORY_TELEMETRY.lock();
 
     // Calculate free memory percentage
-    let heap_size: usize = 100 * 1024; // 100 KiB (from heap.rs HEAP_SIZE)
+    let heap_size = crate::heap::heap_total_size(); // Single source of truth from heap.rs
     let used = stats.current_allocated();
     let free = heap_size.saturating_sub(used);
     telem.free_memory_percent = ((free * 100) / heap_size).min(100) as u32;
