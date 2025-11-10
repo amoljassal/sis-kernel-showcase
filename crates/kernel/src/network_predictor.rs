@@ -264,7 +264,7 @@ pub fn predict_buffer_size(conn: &ConnectionState) -> BufferPrediction {
     // Features: rtt, cwnd, loss_rate, memory_pressure
 
     let heap_stats = crate::heap::get_heap_stats();
-    let heap_size: usize = 100 * 1024; // 100 KiB
+    let heap_size = crate::heap::heap_total_size(); // Single source of truth from heap.rs
     let used = heap_stats.current_allocated();
     let free = heap_size.saturating_sub(used);
     let memory_pressure = (100 - (free * 100 / heap_size)).min(100);
@@ -390,7 +390,7 @@ pub fn extract_flow_features(conn: &ConnectionState) -> [i16; 6] {
 
     // Feature 3: Current memory pressure
     let heap_stats = crate::heap::get_heap_stats();
-    let heap_size: usize = 100 * 1024;
+    let heap_size = crate::heap::heap_total_size(); // Single source of truth from heap.rs
     let used = heap_stats.current_allocated();
     let free = heap_size.saturating_sub(used);
     let pressure = (100 - (free * 100 / heap_size)).min(100);
