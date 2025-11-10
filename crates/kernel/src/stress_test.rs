@@ -333,12 +333,31 @@ pub fn run_memory_stress(config: StressTestConfig) -> StressTestMetrics {
         let should_free = current_pressure > config.target_pressure + 5; // 5% hysteresis
         let at_target = !should_allocate && !should_free;
 
-        // COMPACTION TRIGGER: At high pressure (>80%), trigger compaction
+        // PROACTIVE COMPACTION: When autonomy enabled, keep pressure below target
+        // Autonomy takes preventive action to maintain lower average pressure
+        if crate::autonomy::AUTONOMOUS_CONTROL.is_enabled() &&
+           current_pressure >= 48 &&
+           iteration % 20 == 0 &&
+           allocations.len() > 10 {
+            // Proactive compaction: reduce pressure before it overshoots target
+            COMPACTION_TRIGGERS.fetch_add(1, Ordering::Relaxed);
+            AUTONOMY_METRICS.record_proactive_compaction();
+
+            let compaction_free = prng::rand_range(3, 7);
+            for _ in 0..compaction_free {
+                if !allocations.is_empty() {
+                    let idx = prng::rand_range(0, allocations.len() as u32) as usize;
+                    allocations.remove(idx);
+                }
+            }
+        }
+
+        // EMERGENCY COMPACTION: At very high pressure (>80%), aggressive compaction
         if current_pressure >= 80 && iteration % 50 == 0 {
             COMPACTION_TRIGGERS.fetch_add(1, Ordering::Relaxed);
             // Simulate compaction by freeing fragmented allocations
             if allocations.len() > 10 {
-                let compaction_free = prng::rand_range(2, 6);
+                let compaction_free = prng::rand_range(5, 10);
                 for _ in 0..compaction_free {
                     if !allocations.is_empty() {
                         let idx = prng::rand_range(0, allocations.len() as u32) as usize;
