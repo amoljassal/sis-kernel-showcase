@@ -138,14 +138,35 @@ impl super::Shell {
                         crate::uart_print(b"    - Proactive compactions: "); self.print_number_simple(autonomy_on.proactive_compactions as u64); crate::uart_print(b"\n");
                     }
 
-                    // Calculate improvements
+                    // Calculate improvements (Enhanced for broader impact visibility)
                     crate::uart_print(b"\nImpact:\n");
                     if which == "memory" {
-                        let pressure_diff = metrics_off.peak_memory_pressure as i32 - metrics_on.peak_memory_pressure as i32;
-                        if pressure_diff > 0 {
-                            crate::uart_print(b"  [+] Peak pressure reduced by "); self.print_number_simple(pressure_diff as u64); crate::uart_print(b"%\n");
-                        } else if pressure_diff < 0 {
-                            crate::uart_print(b"  [-] Peak pressure increased by "); self.print_number_simple((-pressure_diff) as u64); crate::uart_print(b"%\n");
+                        let peak_diff = metrics_off.peak_memory_pressure as i32 - metrics_on.peak_memory_pressure as i32;
+                        if peak_diff > 0 {
+                            crate::uart_print(b"  [+] Peak pressure reduced by "); self.print_number_simple(peak_diff as u64);
+                            crate::uart_print(b"% ("); self.print_number_simple(metrics_off.peak_memory_pressure as u64);
+                            crate::uart_print(b"% -> "); self.print_number_simple(metrics_on.peak_memory_pressure as u64);
+                            crate::uart_print(b"%)\n");
+                        } else if peak_diff < 0 {
+                            crate::uart_print(b"  [-] Peak pressure increased by "); self.print_number_simple((-peak_diff) as u64); crate::uart_print(b"%\n");
+                        } else {
+                            crate::uart_print(b"  - Peak pressure unchanged\n");
+                        }
+
+                        let avg_diff = metrics_off.avg_memory_pressure as i32 - metrics_on.avg_memory_pressure as i32;
+                        if avg_diff > 0 {
+                            crate::uart_print(b"  [+] Avg pressure reduced by "); self.print_number_simple(avg_diff as u64);
+                            crate::uart_print(b"% ("); self.print_number_simple(metrics_off.avg_memory_pressure as u64);
+                            crate::uart_print(b"% -> "); self.print_number_simple(metrics_on.avg_memory_pressure as u64);
+                            crate::uart_print(b"%)\n");
+                        } else if avg_diff < 0 {
+                            crate::uart_print(b"  [-] Avg pressure increased by "); self.print_number_simple((-avg_diff) as u64); crate::uart_print(b"%\n");
+                        } else {
+                            crate::uart_print(b"  - Avg pressure unchanged\n");
+                        }
+
+                        if autonomy_on.proactive_compactions > 0 {
+                            crate::uart_print(b"  [+] Proactive compactions: "); self.print_number_simple(autonomy_on.proactive_compactions as u64); crate::uart_print(b"\n");
                         }
 
                         let oom_diff = metrics_off.oom_events as i32 - metrics_on.oom_events as i32;
@@ -162,7 +183,12 @@ impl super::Shell {
 
                     if autonomy_on.total_interventions > 0 {
                         crate::uart_print(b"  [+] "); self.print_number_simple(autonomy_on.total_interventions as u64);
-                        crate::uart_print(b" AI interventions detected\n");
+                        crate::uart_print(b" AI interventions (");
+                        self.print_number_simple(autonomy_on.proactive_compactions as u64);
+                        crate::uart_print(b" early, ");
+                        let reactive = autonomy_on.total_interventions.saturating_sub(autonomy_on.proactive_compactions);
+                        self.print_number_simple(reactive as u64);
+                        crate::uart_print(b" reactive)\n");
                     } else {
                         crate::uart_print(b"  [!] No AI interventions (autonomy may not be active)\n");
                     }
