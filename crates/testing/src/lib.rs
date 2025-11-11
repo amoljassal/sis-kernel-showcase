@@ -22,6 +22,15 @@ pub mod kernel_interface;
 #[cfg(feature = "ext4-stress-test")]
 pub mod ext4_stress;
 
+// Phase testing modules
+pub mod phase1_dataflow;
+pub mod phase2_governance;
+pub mod phase3_temporal;
+pub mod phase5_ux_safety;
+pub mod phase6_web_gui;
+pub mod phase7_ai_ops;
+pub mod phase8_deterministic;
+
 // Core test result types
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,6 +87,13 @@ pub struct ValidationReport {
     pub distributed_results: Option<distributed::DistributedResults>,
     pub security_results: Option<security::SecurityTestResults>,
     pub ai_results: Option<ai::AIResults>,
+    pub phase1_results: Option<phase1_dataflow::Phase1Results>,
+    pub phase2_results: Option<phase2_governance::Phase2Results>,
+    pub phase3_results: Option<phase3_temporal::Phase3Results>,
+    pub phase5_results: Option<phase5_ux_safety::Phase5Results>,
+    pub phase6_results: Option<phase6_web_gui::Phase6Results>,
+    pub phase7_results: Option<phase7_ai_ops::Phase7Results>,
+    pub phase8_results: Option<phase8_deterministic::Phase8Results>,
     pub test_coverage: TestCoverageReport,
     pub generated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -89,6 +105,13 @@ pub struct TestCoverageReport {
     pub security_coverage: f64,
     pub distributed_coverage: f64,
     pub ai_coverage: f64,
+    pub phase1_coverage: f64,
+    pub phase2_coverage: f64,
+    pub phase3_coverage: f64,
+    pub phase5_coverage: f64,
+    pub phase6_coverage: f64,
+    pub phase7_coverage: f64,
+    pub phase8_coverage: f64,
     pub overall_coverage: f64,
 }
 
@@ -392,7 +415,14 @@ impl SISTestSuite {
                         distributed_results: None,
                         security_results: None,
                         ai_results: None,
-                        test_coverage: TestCoverageReport { performance_coverage: 0.0, correctness_coverage: 0.0, security_coverage: 0.0, distributed_coverage: 0.0, ai_coverage: 0.0, overall_coverage: 0.0 },
+                        phase1_results: None,
+                        phase2_results: None,
+                        phase3_results: None,
+                        phase5_results: None,
+                        phase6_results: None,
+                        phase7_results: None,
+                        phase8_results: None,
+                        test_coverage: TestCoverageReport { performance_coverage: 0.0, correctness_coverage: 0.0, security_coverage: 0.0, distributed_coverage: 0.0, ai_coverage: 0.0, phase1_coverage: 0.0, phase2_coverage: 0.0, phase3_coverage: 0.0, phase5_coverage: 0.0, phase6_coverage: 0.0, phase7_coverage: 0.0, phase8_coverage: 0.0, overall_coverage: 0.0 },
                         generated_at: chrono::Utc::now(),
                     });
                 }
@@ -422,6 +452,13 @@ impl SISTestSuite {
                 Some(distributed_results),
                 Some(security_results),
                 Some(ai_results),
+                None, // phase1_results - TODO: implement
+                None, // phase2_results - TODO: implement
+                None, // phase3_results - TODO: implement
+                None, // phase5_results - TODO: implement
+                None, // phase6_results - TODO: implement
+                None, // phase7_results - TODO: implement
+                None, // phase8_results - TODO: implement
             ).await
         } else {
             // Sequential execution for debugging
@@ -439,6 +476,13 @@ impl SISTestSuite {
                 Some(distributed_results),
                 Some(security_results),
                 Some(ai_results),
+                None, // phase1_results - TODO: implement
+                None, // phase2_results - TODO: implement
+                None, // phase3_results - TODO: implement
+                None, // phase5_results - TODO: implement
+                None, // phase6_results - TODO: implement
+                None, // phase7_results - TODO: implement
+                None, // phase8_results - TODO: implement
             ).await
         }
     }
@@ -450,6 +494,13 @@ impl SISTestSuite {
         distributed_results: Option<distributed::DistributedResults>,
         security_results: Option<security::SecurityTestResults>,
         ai_results: Option<ai::AIResults>,
+        phase1_results: Option<phase1_dataflow::Phase1Results>,
+        phase2_results: Option<phase2_governance::Phase2Results>,
+        phase3_results: Option<phase3_temporal::Phase3Results>,
+        phase5_results: Option<phase5_ux_safety::Phase5Results>,
+        phase6_results: Option<phase6_web_gui::Phase6Results>,
+        phase7_results: Option<phase7_ai_ops::Phase7Results>,
+        phase8_results: Option<phase8_deterministic::Phase8Results>,
     ) -> anyhow::Result<ValidationReport> {
         let mut validation_results = Vec::new();
 
@@ -489,6 +540,13 @@ impl SISTestSuite {
             distributed_results,
             security_results,
             ai_results,
+            phase1_results,
+            phase2_results,
+            phase3_results,
+            phase5_results,
+            phase6_results,
+            phase7_results,
+            phase8_results,
             test_coverage,
             generated_at: chrono::Utc::now(),
         };
@@ -641,6 +699,13 @@ impl SISTestSuite {
             security_coverage: self.calculate_category_coverage(results, "security"),
             distributed_coverage: self.calculate_category_coverage(results, "distributed"),
             ai_coverage: self.calculate_category_coverage(results, "ai"),
+            phase1_coverage: self.calculate_category_coverage(results, "phase1"),
+            phase2_coverage: self.calculate_category_coverage(results, "phase2"),
+            phase3_coverage: self.calculate_category_coverage(results, "phase3"),
+            phase5_coverage: self.calculate_category_coverage(results, "phase5"),
+            phase6_coverage: self.calculate_category_coverage(results, "phase6"),
+            phase7_coverage: self.calculate_category_coverage(results, "phase7"),
+            phase8_coverage: self.calculate_category_coverage(results, "phase8"),
             overall_coverage: (passed_tests / total_tests) * 100.0,
         }
     }
@@ -649,13 +714,20 @@ impl SISTestSuite {
         let category_results: Vec<_> = results.iter()
             .filter(|r| {
                 match category {
-                    "performance" => (r.claim.contains("AI Inference") && r.claim.contains("μs")) || 
+                    "performance" => (r.claim.contains("AI Inference") && r.claim.contains("μs")) ||
                                     r.claim.contains("Context Switch"),
                     "correctness" => r.claim.contains("Memory Safety"),
                     "security" => r.claim.contains("Vulnerabilities"),
-                    "distributed" => r.claim.contains("Byzantine") || 
+                    "distributed" => r.claim.contains("Byzantine") ||
                                     r.claim.contains("Consensus"),
                     "ai" => r.claim.contains("Inference Accuracy"),
+                    "phase1" => r.claim.contains("Phase 1") || r.claim.contains("AI-Native Dataflow"),
+                    "phase2" => r.claim.contains("Phase 2") || r.claim.contains("AI Governance") || r.claim.contains("Governance"),
+                    "phase3" => r.claim.contains("Phase 3") || r.claim.contains("Temporal Isolation"),
+                    "phase5" => r.claim.contains("Phase 5") || r.claim.contains("UX Safety") || r.claim.contains("User Experience"),
+                    "phase6" => r.claim.contains("Phase 6") || r.claim.contains("Web GUI"),
+                    "phase7" => r.claim.contains("Phase 7") || r.claim.contains("AI Operations"),
+                    "phase8" => r.claim.contains("Phase 8") || r.claim.contains("Performance Optimization"),
                     _ => false
                 }
             })
