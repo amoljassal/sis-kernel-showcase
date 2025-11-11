@@ -197,6 +197,12 @@ impl Shell {
                 "info" => { self.cmd_info(); true },
                 "test" => { self.cmd_test(); true },
                 "perf" => { self.cmd_perf(); true },
+                #[cfg(feature = "profiling")]
+                "profstart" => { self.cmd_profstart(); true },
+                #[cfg(feature = "profiling")]
+                "profstop" => { self.cmd_profstop(); true },
+                #[cfg(feature = "profiling")]
+                "profreport" => { self.cmd_profreport(); true },
                 "bench" => { self.cmd_bench(); true },
                 "ls" => { self.cmd_ls(&parts[1..]); true },
                 "cat" => { self.cmd_cat(&parts[1..]); true },
@@ -336,6 +342,12 @@ impl Shell {
             crate::uart_print(b"  info     - Show kernel information\n");
             crate::uart_print(b"  test     - Run syscall tests\n");
             crate::uart_print(b"  perf     - Show performance metrics report\n");
+            #[cfg(feature = "profiling")]
+            crate::uart_print(b"  profstart - Start sampling-based profiler\n");
+            #[cfg(feature = "profiling")]
+            crate::uart_print(b"  profstop  - Stop profiler\n");
+            #[cfg(feature = "profiling")]
+            crate::uart_print(b"  profreport- Show profiling report with hotspots\n");
             crate::uart_print(b"  bench    - Run syscall performance benchmarks\n");
             crate::uart_print(b"  stress   - Run syscall stress tests\n");
             crate::uart_print(b"  overhead - Measure syscall overhead\n");
@@ -1916,6 +1928,95 @@ impl Shell {
     /// Syscall overhead measurement command
     fn cmd_overhead(&self) {
         crate::userspace_test::measure_syscall_overhead();
+    }
+
+    /// Start profiler command (Phase 8 Milestone 5)
+    #[cfg(feature = "profiling")]
+    fn cmd_profstart(&self) {
+        crate::profiling::start();
+        unsafe {
+            crate::uart_print(b"\n[PROFILER] Sampling started. Use 'profstop' to stop.\n");
+            crate::uart_print(b"[PROFILER] Samples collected on each timer interrupt (~1ms).\n\n");
+        }
+    }
+
+    /// Stop profiler command (Phase 8 Milestone 5)
+    #[cfg(feature = "profiling")]
+    fn cmd_profstop(&self) {
+        crate::profiling::stop();
+        unsafe {
+            crate::uart_print(b"\n[PROFILER] Sampling stopped. Use 'profreport' to view results.\n\n");
+        }
+    }
+
+    /// Show profiling report command (Phase 8 Milestone 5)
+    #[cfg(feature = "profiling")]
+    fn cmd_profreport(&self) {
+        let report = crate::profiling::report();
+
+        unsafe {
+            crate::uart_print(b"\n");
+            crate::uart_print(b"=== PROFILING REPORT ===\n");
+            crate::uart_print(b"\n");
+            crate::uart_print(b"Status: ");
+            if report.is_running {
+                crate::uart_print(b"RUNNING\n");
+            } else {
+                crate::uart_print(b"STOPPED\n");
+            }
+            crate::uart_print(b"Total samples: ");
+        }
+        self.print_number(report.total_samples);
+        unsafe {
+            crate::uart_print(b"\n");
+            crate::uart_print(b"Dropped samples: ");
+        }
+        self.print_number(report.dropped_samples);
+        unsafe {
+            crate::uart_print(b"\n");
+            crate::uart_print(b"Duration: ");
+        }
+        self.print_number(report.duration_cycles);
+        unsafe {
+            crate::uart_print(b" cycles\n");
+            crate::uart_print(b"\n");
+            crate::uart_print(b"Top 10 hotspots:\n");
+            crate::uart_print(b"----------------\n");
+        }
+
+        for (i, hotspot) in report.hotspots.iter().enumerate() {
+            unsafe {
+                crate::uart_print(b" ");
+            }
+            self.print_number(i as u64 + 1);
+            unsafe {
+                crate::uart_print(b". ");
+            }
+            self.print_hex(hotspot.pc);
+            unsafe {
+                crate::uart_print(b"  ");
+            }
+            self.print_number(hotspot.count);
+            unsafe {
+                crate::uart_print(b" samples (");
+            }
+            self.print_number(hotspot.percentage);
+            unsafe {
+                crate::uart_print(b"%)  ");
+                crate::uart_print(hotspot.symbol.as_bytes());
+                crate::uart_print(b"\n");
+            }
+        }
+
+        unsafe {
+            crate::uart_print(b"\n");
+            if report.is_running {
+                crate::uart_print(b"Profiler is still running. Use 'profstop' to stop.\n");
+            } else if report.total_samples == 0 {
+                crate::uart_print(b"No samples collected. Use 'profstart' to start profiling.\n");
+            }
+            crate::uart_print(b"\n");
+        }
     }
 
     /// Graph demo command

@@ -172,7 +172,21 @@ pub extern "C" fn handle_irq(frame: &mut TrapFrame) {
     }
 
     if irq_num == 30 {
-        // Timer interrupt - call scheduler tick (use SMP scheduler if available)
+        // Timer interrupt
+
+        // Phase 8 Milestone 5: Sample for profiling
+        #[cfg(feature = "profiling")]
+        {
+            let pc = frame.pc;
+            let pid = if crate::smp::num_cpus() > 1 {
+                crate::process::scheduler_smp::current_pid().unwrap_or(0)
+            } else {
+                crate::process::scheduler::current_pid().unwrap_or(0)
+            };
+            crate::profiling::get().sample(pc, pid as u32);
+        }
+
+        // Call scheduler tick (use SMP scheduler if available)
         if crate::smp::num_cpus() > 1 {
             crate::process::scheduler_smp::timer_tick();
         } else {
