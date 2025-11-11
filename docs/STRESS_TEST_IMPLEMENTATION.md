@@ -1,8 +1,8 @@
 # Stress Test Enhancement Implementation Report
 
-**Date:** November 9, 2025
-**Based on:** `docs/plans/STRESS_TEST_PLAN.md`
-**Status:** Implemented (Phases 1-3 Complete, Phase 4 Partial)
+**Date:** November 11, 2025 (Updated)
+**Based on:** `docs/plans/STRESS_TEST_PLAN.md`, `docs/plans/STRESS_TEST_IMPROVEMENTS_PLAN.md`
+**Status:** Implemented (Phases 1-3 Complete, Phase 4 In Progress)
 
 ---
 
@@ -27,6 +27,13 @@ This document describes the implementation of comprehensive stress test enhancem
 - Added configurable failure injection rate (`fail_rate_percent`)
 - Implemented graceful failure handling without kernel panic
 - Added `expect_failures` flag for CI/CD integration
+
+✅ **Phase 3.5: Output Improvements** - COMPLETE (November 11, 2025)
+- Added `verbose` flag to `StressTestConfig` for chaos output control
+- Implemented `--quiet` flag for chaos tests (suppresses per-event spam)
+- Changed report default from all 16 entries to last 5 entries
+- Added `--all` flag to report command to show all 16 entries
+- Enhanced help text with usage examples
 
 ⚠️ **Phase 4: Enhanced Metrics** - PARTIAL
 - Implemented `LatencyHistogram` with percentile tracking (p50, p95, p99)
@@ -233,6 +240,114 @@ if crate::autonomy::AUTONOMOUS_CONTROL.is_enabled() {
 - Autonomy ON: Fewer OOMs, lower free portions, proactive interventions
 - Autonomy OFF: More OOMs, higher free portions, no interventions
 
+### 4. Phase 3.5 Output Improvements (November 11, 2025)
+
+#### 4.1 Chaos Output Control with `--quiet` Flag
+
+**Problem:** Chaos tests generated excessive console output (169+ lines of `[CHAOS]` debug events), making it difficult to see the summary results.
+
+**Solution:** Added `verbose` field to `StressTestConfig` and conditional output.
+
+**Implementation:**
+```rust
+// In StressTestConfig
+pub struct StressTestConfig {
+    // ... existing fields
+    pub verbose: bool,  // Print per-event output (default: true)
+}
+
+// In run_chaos_stress()
+if config.verbose {
+    unsafe { crate::uart_print(b"[CHAOS] Memory spike (...)\n"); }
+}
+```
+
+**Usage:**
+```bash
+# Verbose mode (default) - shows all chaos events
+sis> stresstest chaos --duration 5000
+[CHAOS] Memory spike (91 allocs)
+[CHAOS] Recovery
+[CHAOS] Hot retrain (19 samples)
+... (169 lines of events)
+[STRESS TEST] Chaos engineering complete
+  Chaos Events: 169
+  Success Rate: 100%
+
+# Quiet mode - summary only
+sis> stresstest chaos --duration 5000 --quiet
+[STRESS TEST] Chaos engineering complete
+  Chaos Events: 220
+  Success Rate: 100%
+```
+
+**Benefits:**
+- ✅ Cleaner output for CI/CD pipelines
+- ✅ Easier to parse summary results
+- ✅ Still supports verbose debugging when needed
+- ✅ Reduced UART spam in QEMU
+
+#### 4.2 Report History Pagination with `--all` Flag
+
+**Problem:** Report command always showed all 16 entries, cluttering output for users who only care about recent tests.
+
+**Solution:** Changed default to show last 5 entries, added `--all` flag for full history.
+
+**Implementation:**
+```rust
+"report" => {
+    let show_all = args.len() > 1 && args[1] == "--all";
+    let hist = crate::stress_test::get_history();
+    unsafe {
+        if show_all {
+            crate::uart_print(b"\n=== Stress Test History (all entries) ===\n");
+        } else {
+            crate::uart_print(b"\n=== Stress Test History (last 5) ===\n");
+        }
+    }
+    let entries: alloc::vec::Vec<_> = hist.iter().collect();
+    let start_idx = if show_all { 0 } else { entries.len().saturating_sub(5) };
+    // ... print entries starting from start_idx
+}
+```
+
+**Usage:**
+```bash
+# Default: Last 5 entries
+sis> stresstest report
+=== Stress Test History (last 5) ===
+  Type: chaos | Duration: 5106 ms | Actions: 0 | OOM: 0
+  Type: chaos | Duration: 5035 ms | Actions: 0 | OOM: 0
+  Type: memory | Duration: 3000 ms | Actions: 0 | OOM: 0
+  Type: chaos | Duration: 3059 ms | Actions: 0 | OOM: 0
+
+# Full history: All 16 entries
+sis> stresstest report --all
+=== Stress Test History (all entries) ===
+  Type: chaos | Duration: 5106 ms | Actions: 0 | OOM: 0
+  Type: chaos | Duration: 5035 ms | Actions: 0 | OOM: 0
+  Type: memory | Duration: 3000 ms | Actions: 0 | OOM: 0
+  Type: chaos | Duration: 3059 ms | Actions: 0 | OOM: 0
+```
+
+**Benefits:**
+- ✅ Improved UX: focus on recent test results by default
+- ✅ Full history available when needed
+- ✅ Clear header shows what's being displayed
+- ✅ Consistent with Unix tools (e.g., `tail` vs `cat`)
+
+#### 4.3 Enhanced Help Text
+
+**Updated shell help to document new flags:**
+```
+Usage: stresstest <memory|commands|multi|learning|redteam|chaos|compare|report> [options]
+  memory: --duration MS --target-pressure PCT (default: 50%) --oom-probability PCT
+  chaos:  --duration MS --failure-rate PCT [--quiet]
+  report: [--all] (shows last 5 by default, --all shows all 16)
+```
+
+**Commit:** `be4bbaf3` - feat(stress-tests): add chaos quiet mode and report --all flag (Phase 3)
+
 ---
 
 ## Validation Results
@@ -268,17 +383,29 @@ if crate::autonomy::AUTONOMOUS_CONTROL.is_enabled() {
 ### Basic Stress Tests
 
 ```bash
-# Memory test with default settings
+# Memory test with default settings (50% target pressure)
 sis> stresstest memory
 
 # Memory test with custom duration and target pressure
 sis> stresstest memory --duration 30000 --target-pressure 90
 
-# Chaos test with failure injection
-sis> stresstest chaos --duration 60000 --fail-rate 20
+# Memory test with OOM injection (5% probability)
+sis> stresstest memory --duration 10000 --oom-probability 5
+
+# Chaos test with failure injection (20% failure rate)
+sis> stresstest chaos --duration 60000 --failure-rate 20
+
+# Chaos test in quiet mode (summary only, no per-event spam)
+sis> stresstest chaos --duration 10000 --quiet
 
 # Learning test with more episodes
 sis> stresstest learning --episodes 50
+
+# View recent test history (last 5 entries)
+sis> stresstest report
+
+# View full test history (all 16 entries)
+sis> stresstest report --all
 ```
 
 ### Comparative Testing (Autonomy On/Off)
@@ -308,10 +435,107 @@ Autonomy ON:
 ### Failure Injection Testing
 
 ```bash
-# Run chaos test expecting failures
-sis> stresstest chaos --duration 30000 --fail-rate 30 --expect-failures
+# Test with 10% failure rate (demonstrating resilience)
+sis> stresstest chaos --duration 10000 --failure-rate 10
 
-# Test passes if success rate >= 50%
+# Expected output:
+=== Chaos Engineering Stress Test (Enhanced) ===
+Duration: 10000 ms
+Failure Rate: 10%
+
+[STRESS TEST] Chaos engineering complete
+  Chaos Events: 340
+  Successful Recoveries: 306
+  Failed Recoveries: 34
+  Success Rate: 90%
+  Recovery Latency: p50=500000ns p95=1500000ns p99=3200000ns
+  Status: PASS
+
+# Memory test with OOM injection
+sis> stresstest memory --duration 10000 --oom-probability 10
+
+# Expected output:
+[STRESS TEST] Memory test complete
+  Peak Pressure: 56%
+  Avg Pressure: 52%
+  OOM Events: 1-3 (variable due to 10% injection rate)
+  Compaction Triggers: 0
+  Alloc Latency: p50=28000ns p95=29000ns p99=31000ns
+  Status: PASS
+
+# Chaos test in quiet mode with failures (ideal for CI/CD)
+sis> stresstest chaos --duration 30000 --failure-rate 5 --quiet
+
+# Expected output (clean, parseable):
+[STRESS TEST] Chaos engineering complete
+  Chaos Events: 750
+  Successful Recoveries: 713
+  Failed Recoveries: 37
+  Success Rate: 95%
+  Status: PASS
+```
+
+### Real-World Scenarios
+
+**Scenario 1: Validate Autonomy Reduces Memory Pressure**
+```bash
+# Run comparative test to see autonomy impact
+sis> stresstest compare memory --duration 20000 --target-pressure 50
+
+# Expected output showing autonomy effectiveness:
+=== Comparative Results ===
+Autonomy OFF:
+  Peak pressure: 56%
+  Avg pressure: 53%
+  OOM events: 0
+  Duration: 20001 ms
+  AI interventions: 0
+
+Autonomy ON:
+  Peak pressure: 50%
+  Avg pressure: 48%
+  OOM events: 0
+  Duration: 19998 ms
+  AI interventions: 691
+    - Proactive compactions: 691
+
+Impact:
+  [+] Peak pressure reduced by 6% (56% -> 50%)
+  [+] Avg pressure reduced by 5% (53% -> 48%)
+  [+] 691 proactive compactions (autonomy prevented pressure overshoots)
+```
+
+**Scenario 2: Stress Test with Variability (non-deterministic runs)**
+```bash
+# Run chaos test multiple times, observe variance
+sis> stresstest chaos --duration 5000 --quiet
+# Run 1: 220 chaos events, 100% success
+
+sis> stresstest chaos --duration 5000 --quiet
+# Run 2: 195 chaos events, 100% success
+
+sis> stresstest chaos --duration 5000 --quiet
+# Run 3: 238 chaos events, 100% success
+
+# Note: Event counts vary due to PRNG randomization
+# Each run has different chaos event types, durations, and intensities
+```
+
+**Scenario 3: Production Readiness Validation**
+```bash
+# Simulate production load with realistic failure rate
+sis> stresstest chaos --duration 60000 --failure-rate 15 --quiet
+
+# Expected: 85%+ success rate (tolerates 15% failures gracefully)
+# This validates system resilience under real-world conditions
+
+# Review test history to track trends
+sis> stresstest report --all
+=== Stress Test History (all entries) ===
+  Type: chaos | Duration: 60023 ms | Actions: 0 | OOM: 0
+  Type: memory | Duration: 20001 ms | Actions: 0 | OOM: 0
+  Type: chaos | Duration: 5035 ms | Actions: 0 | OOM: 0
+  ... (showing gradual improvement or regressions over time)
 ```
 
 ---
