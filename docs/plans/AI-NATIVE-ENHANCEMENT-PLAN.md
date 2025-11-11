@@ -2994,7 +2994,7 @@ Raw data: `benchmarks/results/raw_data.json`
 - New features have basic tests
 
 **Questions/Blockers:**
-- Document in `IMPLEMENTATION_NOTES.md` in branch
+- Document in `docs/implementation/AI_NATIVE_ENHANCEMENTS.md` in branch
 - Flag critical blockers that need human decision
 
 ---
