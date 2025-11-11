@@ -21,6 +21,7 @@ pub struct WebSocketTestResults {
 /// WebSocket test suite
 pub struct WebSocketTests {
     kernel_interface: KernelCommandInterface,
+    #[allow(dead_code)]
     ws_url: String,
 }
 

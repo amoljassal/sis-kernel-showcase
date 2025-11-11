@@ -4,6 +4,26 @@
 use sis_testing::{SISTestSuite, TestSuiteConfig, setup_logging};
 use std::env;
 
+/// Create a visual progress bar for percentage values
+fn create_bar(percentage: f64, width: usize) -> String {
+    let filled = ((percentage / 100.0) * width as f64) as usize;
+    let empty = width.saturating_sub(filled);
+
+    let color = if percentage >= 80.0 {
+        "\x1b[32m" // Green
+    } else if percentage >= 60.0 {
+        "\x1b[33m" // Yellow
+    } else {
+        "\x1b[31m" // Red
+    };
+
+    format!("{}{}{}{}",
+        color,
+        "█".repeat(filled),
+        "\x1b[90m░\x1b[0m".repeat(empty),
+        "\x1b[0m")
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     setup_logging();
@@ -173,31 +193,127 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     match validation_result {
         Ok(report) => {
+            // Calculate summary statistics
+            let total_tests = report.results.len();
+            let passed_tests = report.results.iter().filter(|r| r.passed).count();
+            let failed_tests = total_tests - passed_tests;
+
+            // Print executive summary header
             log::info!("");
-            log::info!("=== VALIDATION COMPLETE ===");
-            log::info!("Overall Score: {:.1}%", report.overall_score);
-            log::info!("Performance Coverage: {:.1}%", report.test_coverage.performance_coverage * 100.0);
-            log::info!("Correctness Coverage: {:.1}%", report.test_coverage.correctness_coverage * 100.0);
-            log::info!("Security Coverage: {:.1}%", report.test_coverage.security_coverage * 100.0);
-            log::info!("Distributed Coverage: {:.1}%", report.test_coverage.distributed_coverage * 100.0);
-            log::info!("AI Coverage: {:.1}%", report.test_coverage.ai_coverage * 100.0);
+            log::info!("╔═══════════════════════════════════════════════════════════════════╗");
+            log::info!("║          SIS KERNEL COMPREHENSIVE TEST VALIDATION REPORT          ║");
+            log::info!("╚═══════════════════════════════════════════════════════════════════╝");
             log::info!("");
-            
-            log::info!("Validation Results:");
+
+            // Overall status badge
+            let status_badge = if report.overall_score >= 80.0 {
+                "\x1b[32m█ PRODUCTION READY\x1b[0m"
+            } else if report.overall_score >= 70.0 {
+                "\x1b[33m█ ACCEPTABLE\x1b[0m"
+            } else {
+                "\x1b[31m█ NEEDS IMPROVEMENT\x1b[0m"
+            };
+
+            log::info!("  Status: {}", status_badge);
+            log::info!("  Overall Score: \x1b[1m{:.1}%\x1b[0m", report.overall_score);
+            log::info!("  Test Results: \x1b[32m{} PASS\x1b[0m / \x1b[31m{} FAIL\x1b[0m / {} TOTAL", passed_tests, failed_tests, total_tests);
+            log::info!("");
+
+            // Core System Coverage
+            log::info!("┌─────────────────────────────────────────────────────────────────┐");
+            log::info!("│ CORE SYSTEM COVERAGE                                            │");
+            log::info!("├─────────────────────────────────────────────────────────────────┤");
+
+            let perf_cov = report.test_coverage.performance_coverage * 100.0;
+            let corr_cov = report.test_coverage.correctness_coverage * 100.0;
+            let sec_cov = report.test_coverage.security_coverage * 100.0;
+            let dist_cov = report.test_coverage.distributed_coverage * 100.0;
+            let ai_cov = report.test_coverage.ai_coverage * 100.0;
+
+            log::info!("│  Performance:     {:>6.1}%  {}", perf_cov, create_bar(perf_cov, 35));
+            log::info!("│  Correctness:     {:>6.1}%  {}", corr_cov, create_bar(corr_cov, 35));
+            log::info!("│  Security:        {:>6.1}%  {}", sec_cov, create_bar(sec_cov, 35));
+            log::info!("│  Distributed:     {:>6.1}%  {}", dist_cov, create_bar(dist_cov, 35));
+            log::info!("│  AI Validation:   {:>6.1}%  {}", ai_cov, create_bar(ai_cov, 35));
+            log::info!("└─────────────────────────────────────────────────────────────────┘");
+            log::info!("");
+
+            // Phase Implementation Progress
+            log::info!("┌─────────────────────────────────────────────────────────────────┐");
+            log::info!("│ PHASE IMPLEMENTATION PROGRESS                                   │");
+            log::info!("├─────────────────────────────────────────────────────────────────┤");
+
+            let phase1 = report.test_coverage.phase1_coverage * 100.0;
+            let phase2 = report.test_coverage.phase2_coverage * 100.0;
+            let phase3 = report.test_coverage.phase3_coverage * 100.0;
+            let phase5 = report.test_coverage.phase5_coverage * 100.0;
+            let phase6 = report.test_coverage.phase6_coverage * 100.0;
+            let phase7 = report.test_coverage.phase7_coverage * 100.0;
+            let phase8 = report.test_coverage.phase8_coverage * 100.0;
+
+            log::info!("│  Phase 1 - AI-Native Dataflow:        {:>6.1}%  {}", phase1, create_bar(phase1, 23));
+            log::info!("│  Phase 2 - AI Governance:             {:>6.1}%  {}", phase2, create_bar(phase2, 23));
+            log::info!("│  Phase 3 - Temporal Isolation:        {:>6.1}%  {}", phase3, create_bar(phase3, 23));
+            log::info!("│  Phase 5 - UX Safety:                 {:>6.1}%  {}", phase5, create_bar(phase5, 23));
+            log::info!("│  Phase 6 - Web GUI Management:        {:>6.1}%  {}", phase6, create_bar(phase6, 23));
+            log::info!("│  Phase 7 - AI Operations:             {:>6.1}%  {}", phase7, create_bar(phase7, 23));
+            log::info!("│  Phase 8 - Performance Optimization:  {:>6.1}%  {}", phase8, create_bar(phase8, 23));
+            log::info!("└─────────────────────────────────────────────────────────────────┘");
+            log::info!("");
+
+            // Detailed validation results
+            log::info!("┌─────────────────────────────────────────────────────────────────┐");
+            log::info!("│ DETAILED VALIDATION RESULTS                                     │");
+            log::info!("├─────────────────────────────────────────────────────────────────┤");
+
             for result in &report.results {
-                let status = if result.passed { "PASS" } else { "FAIL" };
-                log::info!("  [{}] {} ({})", status, result.claim, result.measured);
+                let status = if result.passed {
+                    "\x1b[32m✓ PASS\x1b[0m"
+                } else {
+                    "\x1b[31m✗ FAIL\x1b[0m"
+                };
+
+                log::info!("│ {}", status);
+                log::info!("│   Test: {}", result.claim);
+                log::info!("│   Target: {} | Measured: {}", result.target, result.measured);
+
+                if let Some(ref comparison) = result.industry_comparison {
+                    log::info!("│   Industry Benchmark: {}", comparison);
+                }
+
+                log::info!("│");
             }
-            
+
+            log::info!("└─────────────────────────────────────────────────────────────────┘");
             log::info!("");
-            log::info!("Reports generated in: target/testing/");
-            log::info!("View dashboard: target/testing/dashboard.html");
-            
-            if report.overall_score >= 90.0 {
-                log::info!("SUCCESS: SIS Kernel meets industry standards for production deployment!");
+
+            // Report artifacts
+            log::info!("📊 Reports generated in: target/testing/");
+            log::info!("🌐 View dashboard: target/testing/dashboard.html");
+            log::info!("");
+
+            // Final verdict
+            log::info!("╔═══════════════════════════════════════════════════════════════════╗");
+            if report.overall_score >= 80.0 {
+                log::info!("║                                                                   ║");
+                log::info!("║  \x1b[32m✓ SUCCESS: SIS Kernel meets industry standards for production\x1b[0m   ║");
+                log::info!("║  \x1b[32m  deployment and is ready for production use.\x1b[0m                   ║");
+                log::info!("║                                                                   ║");
+                log::info!("╚═══════════════════════════════════════════════════════════════════╝");
+                std::process::exit(0);
+            } else if report.overall_score >= 70.0 {
+                log::info!("║                                                                   ║");
+                log::info!("║  \x1b[33m⚠ ACCEPTABLE: SIS Kernel shows good progress ({:.1}%)\x1b[0m           ║", report.overall_score);
+                log::info!("║  \x1b[33m  Recommended improvements before full production deployment.\x1b[0m   ║");
+                log::info!("║                                                                   ║");
+                log::info!("╚═══════════════════════════════════════════════════════════════════╝");
                 std::process::exit(0);
             } else {
-                log::warn!("WARNING: SIS Kernel requires improvements before production readiness");
+                log::info!("║                                                                   ║");
+                log::info!("║  \x1b[31m✗ WARNING: SIS Kernel requires improvements before production\x1b[0m  ║");
+                log::info!("║  \x1b[31m  readiness ({:.1}%). Review failed tests above.\x1b[0m                ║", report.overall_score);
+                log::info!("║                                                                   ║");
+                log::info!("╚═══════════════════════════════════════════════════════════════════╝");
                 std::process::exit(1);
             }
         }

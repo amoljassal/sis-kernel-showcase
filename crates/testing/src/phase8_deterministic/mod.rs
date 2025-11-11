@@ -75,6 +75,7 @@ impl Default for Phase8Results {
 
 /// Phase 8 Performance Optimization test suite
 pub struct Phase8DeterministicSuite {
+    #[allow(dead_code)]
     kernel_interface: KernelCommandInterface,
     cbs_edf: cbs_edf_scheduler::CBSEDFSchedulerTests,
     slab_allocator: slab_allocator::SlabAllocatorTests,

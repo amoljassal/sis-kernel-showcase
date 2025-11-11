@@ -20,6 +20,7 @@ pub struct APIEndpointTestResults {
 /// API endpoint test suite
 pub struct APIEndpointTests {
     kernel_interface: KernelCommandInterface,
+    #[allow(dead_code)]
     base_url: String,
 }
 

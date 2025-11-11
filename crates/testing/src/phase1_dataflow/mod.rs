@@ -28,6 +28,7 @@ pub struct Phase1Results {
 
 /// Phase 1 dataflow test suite
 pub struct Phase1DataflowSuite {
+    #[allow(dead_code)]
     kernel_interface: KernelCommandInterface,
     graph_execution: graph_execution::GraphExecutionTests,
     operator_validation: operator_validation::OperatorValidationTests,
