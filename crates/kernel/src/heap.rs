@@ -9,6 +9,7 @@
 //! - Integration with SIS kernel memory safety framework
 
 use core::alloc::{GlobalAlloc, Layout};
+use core::ptr::NonNull;
 use linked_list_allocator::LockedHeap;
 use spin::Mutex;
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -195,14 +196,17 @@ unsafe impl GlobalAlloc for StatsTrackingAllocator {
         stats.current_allocated = stats.current_allocated.saturating_sub(layout.size());
         drop(stats); // Release lock before potentially expensive operations
 
-        // Phase 8: Check slab first for small deallocations
+        // Phase 8: Try slab first for small deallocations
         const SLAB_THRESHOLD: usize = 256;
 
         if layout.size() <= SLAB_THRESHOLD {
-            // Try slab deallocation
             if let Some(nn_ptr) = NonNull::new(ptr) {
-                crate::mm::slab::deallocate(nn_ptr, layout);
-                return;
+                // Try slab deallocation - if it returns true, the pointer was
+                // owned by slab and has been freed. Otherwise, fall through
+                // to heap/buddy deallocation.
+                if crate::mm::slab::deallocate(nn_ptr, layout) {
+                    return;
+                }
             }
         }
 

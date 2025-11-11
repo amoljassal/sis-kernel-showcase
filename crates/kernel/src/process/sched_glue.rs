@@ -45,11 +45,14 @@ use super::{Pid, Task};
 use crate::deterministic::{TaskSpec, AdmissionController, DeterministicScheduler, ProcessSpec};
 use spin::Mutex;
 
+/// Maximum number of processes in scheduler
+const MAX_PROCESSES: usize = 64;
+
 /// Scheduler instance (singleton)
 ///
 /// Protected by Mutex for thread-safe access. Initialized during kernel boot
 /// via `init()` function.
-static UNIFIED_SCHEDULER: Mutex<Option<DeterministicScheduler>> = Mutex::new(None);
+static UNIFIED_SCHEDULER: Mutex<Option<DeterministicScheduler<MAX_PROCESSES>>> = Mutex::new(None);
 
 /// Admission controller instance
 ///
@@ -86,7 +89,7 @@ static METRICS: Mutex<SchedulerMetrics> = Mutex::new(SchedulerMetrics {
 /// Creates a new DeterministicScheduler instance and initializes admission control.
 pub fn init() {
     let mut sched = UNIFIED_SCHEDULER.lock();
-    *sched = Some(DeterministicScheduler::new());
+    *sched = Some(DeterministicScheduler::<MAX_PROCESSES>::new(850_000));
     crate::info!("✓ Unified scheduler initialized with CBS+EDF");
     crate::info!("  - Admission bound: 85% utilization");
     crate::info!("  - Default WCET: 10ms");
@@ -196,7 +199,7 @@ pub fn schedule() -> Option<Pid> {
 /// * `pid` - Process ID to remove
 pub fn complete_process(pid: Pid) {
     let mut sched = UNIFIED_SCHEDULER.lock();
-    if let Some(ref mut s) = *sched {
+    if let Some(ref mut s) = sched.as_mut() {
         s.remove_process(pid as u32);
 
         // Update metrics

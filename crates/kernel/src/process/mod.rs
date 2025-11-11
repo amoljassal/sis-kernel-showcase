@@ -3,6 +3,7 @@
 
 pub mod scheduler;
 pub mod scheduler_smp; // Phase E: SMP scheduler
+#[cfg(feature = "deterministic")]
 pub mod sched_glue;   // Phase 8: CBS+EDF unified scheduler glue
 pub mod task;
 pub mod pid;
