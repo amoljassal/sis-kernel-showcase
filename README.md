@@ -6724,7 +6724,8 @@ rustflags = [
 
 ### Documentation
 
-- Implementation guide: `docs/STRESS_TEST_IMPLEMENTATION.md` (460 lines)
+- Implementation guide: `docs/stress-tests/IMPLEMENTATION.md` (460 lines)
+- Lessons learned: `docs/stress-tests/LESSONS_LEARNED.md` (480 lines)
 - Summary: `docs/plans/STRESS_TEST_IMPLEMENTATION_SUMMARY.md` (256 lines)
 - This README section
 
@@ -6858,7 +6859,7 @@ Usage: stresstest <memory|commands|multi|learning|redteam|chaos|compare|report> 
 
 ### Documentation Updates
 
-- `docs/STRESS_TEST_IMPLEMENTATION.md` - Added Phase 3.5 section with implementation details and usage examples
+- `docs/stress-tests/IMPLEMENTATION.md` - Added Phase 3.5 section with implementation details and usage examples
 - `docs/plans/STRESS_TEST_IMPROVEMENTS_PLAN.md` - Marked Phase 3 as complete with test results
 - This README section
 

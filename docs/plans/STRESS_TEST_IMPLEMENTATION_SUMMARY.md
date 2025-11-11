@@ -2,7 +2,7 @@
 
 **Date:** November 9, 2025
 **Plan Reference:** `docs/plans/STRESS_TEST_PLAN.md`
-**Implementation Report:** `docs/STRESS_TEST_IMPLEMENTATION.md`
+**Implementation Report:** `docs/stress-tests/IMPLEMENTATION.md`
 
 ---
 
@@ -108,7 +108,7 @@ crates/kernel/src/prng.rs                   (196 lines) - PRNG implementation
 crates/kernel/src/autonomy_metrics.rs       (186 lines) - Autonomy metrics tracking
 crates/kernel/src/latency_histogram.rs      (189 lines) - Latency percentile tracking
 scripts/validate_stress_results.py          (329 lines) - CI validation script
-docs/STRESS_TEST_IMPLEMENTATION.md          (652 lines) - Detailed implementation report
+docs/stress-tests/IMPLEMENTATION.md         (652 lines) - Detailed implementation report
 docs/plans/STRESS_TEST_IMPLEMENTATION_SUMMARY.md (this file)
 ```
 
@@ -229,7 +229,7 @@ cargo test --package sis-kernel
 ## Documentation
 
 - **Plan:** `docs/plans/STRESS_TEST_PLAN.md` - Original enhancement roadmap
-- **Implementation:** `docs/STRESS_TEST_IMPLEMENTATION.md` - Detailed technical report
+- **Implementation:** `docs/stress-tests/IMPLEMENTATION.md` - Detailed technical report
 - **Summary:** `docs/plans/STRESS_TEST_IMPLEMENTATION_SUMMARY.md` - This document
 
 ## Conclusion
