@@ -100,6 +100,12 @@ struct DmaBuffer {
     in_use: bool,
 }
 
+// SAFETY: DmaBuffer contains raw pointers but is only accessed while holding the
+// buffer pool's mutex lock. The pointers are valid kernel memory addresses that
+// remain valid for the lifetime of the DMA buffer.
+unsafe impl Send for DmaBuffer {}
+unsafe impl Sync for DmaBuffer {}
+
 /// DMA buffer pool for zero-copy I/O (Phase 8)
 struct BufferPool {
     /// Pre-allocated DMA buffers

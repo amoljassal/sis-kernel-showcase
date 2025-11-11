@@ -100,9 +100,15 @@ pub fn do_fork(parent_pid: Pid) -> Result<Pid, Errno> {
         exit_code: 0,
         mm: child_mm,
         files: child_files,
-        cred: parent.cred, // Copy credentials
-        // TODO Phase 9: Copy signal handlers, set up CPU context
-        ..Default::default()
+        cred: parent.cred,
+        // TODO Phase 9: Set up child to return 0, parent to return child_pid
+        trap_frame: parent.trap_frame.clone(),
+        cpu_context: parent.cpu_context.clone(),
+        kstack: parent.kstack, // TODO Phase 9: Allocate separate kernel stack
+        name: parent.name.clone(),
+        children: alloc::vec::Vec::new(),
+        signals: crate::process::signal::SignalQueue::new(),
+        cwd: parent.cwd.clone(),
     };
 
     // Insert child into process table

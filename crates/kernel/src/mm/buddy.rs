@@ -179,7 +179,8 @@ impl BuddyAllocator {
                 self.stats.free_pages -= 1 << order;
 
                 let pa = pfn_to_pa(pfn);
-                crate::debug!("Buddy: allocated {} pages at PFN {} (PA {:#x})", 1 << order, pfn, pa);
+                // NOTE: debug!() disabled to prevent deadlock with slab allocator
+                // crate::debug!("Buddy: allocated {} pages at PFN {} (PA {:#x})", 1 << order, pfn, pa);
 
                 // Zero the allocated pages
                 self.zero_pages(pa, order);
@@ -190,7 +191,8 @@ impl BuddyAllocator {
         }
 
         // Out of memory
-        crate::warn!("Buddy: allocation failed for order {}", order);
+        // NOTE: warn!() disabled to prevent deadlock with slab allocator
+        // crate::warn!("Buddy: allocation failed for order {}", order);
         self.stats.allocation_failures += 1;
 
         // Update crash predictor with failure
@@ -209,7 +211,8 @@ impl BuddyAllocator {
     pub fn free_pages(&mut self, pa: PhysAddr, order: u8) {
         let pfn = pa_to_pfn(pa);
 
-        crate::debug!("Buddy: freeing {} pages at PFN {} (PA {:#x})", 1 << order, pfn, pa);
+        // NOTE: debug!() disabled to prevent deadlock with slab allocator
+        // crate::debug!("Buddy: freeing {} pages at PFN {} (PA {:#x})", 1 << order, pfn, pa);
 
         // Decrement refcount
         if let Some(page) = self.get_page_mut(pfn) {

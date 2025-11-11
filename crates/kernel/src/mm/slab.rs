@@ -46,11 +46,15 @@
 
 use core::alloc::Layout;
 use core::ptr::{self, NonNull};
+use core::sync::atomic::{AtomicBool, Ordering};
 use spin::Mutex;
 use crate::mm;
 
 /// Slab size classes (powers of 2 from 16 to 256 bytes)
 const SLAB_SIZES: [usize; 5] = [16, 32, 64, 128, 256];
+
+/// Flag to enable slab allocator (starts disabled until buddy init completes)
+static SLAB_ENABLED: AtomicBool = AtomicBool::new(false);
 
 /// Page size for slab allocation (4KB)
 const SLAB_PAGE_SIZE: usize = 4096;
@@ -150,6 +154,12 @@ impl SlabPage {
     }
 }
 
+// SAFETY: SlabPage contains raw pointers but is only accessed while holding the
+// slab allocator's mutex lock. The pointers are valid kernel memory addresses
+// that remain valid for the lifetime of the slab page.
+unsafe impl Send for SlabPage {}
+unsafe impl Sync for SlabPage {}
+
 /// Slab cache for a specific object size
 ///
 /// Manages all slabs for a particular size class (e.g., all 64-byte objects).
@@ -192,6 +202,11 @@ impl SlabCache {
     /// 2. Try empty slabs (reuse existing pages)
     /// 3. Allocate new slab from buddy allocator
     fn allocate(&mut self) -> Option<NonNull<u8>> {
+        // CRITICAL: Temporarily disable slab to prevent deadlock.
+        // When we call buddy allocator below, Vec operations might trigger
+        // heap allocations which would recursively try to lock this same cache.
+        let was_enabled = SLAB_ENABLED.swap(false, core::sync::atomic::Ordering::SeqCst);
+
         // Try partial slabs first (locality - hot objects)
         if let Some(slab) = self.partial_slabs.last_mut() {
             if let Some(obj) = slab.pop_free() {
@@ -203,6 +218,8 @@ impl SlabCache {
                     self.full_slabs.push(full);
                 }
 
+                // Restore slab state before returning
+                SLAB_ENABLED.store(was_enabled, core::sync::atomic::Ordering::SeqCst);
                 return Some(obj);
             }
         }
@@ -213,12 +230,21 @@ impl SlabCache {
             let obj = slab.pop_free().unwrap();
             self.partial_slabs.push(slab);
             self.allocated_objects += 1;
+
+            // Restore slab state before returning
+            SLAB_ENABLED.store(was_enabled, core::sync::atomic::Ordering::SeqCst);
             return Some(obj);
         }
 
         // Allocate new slab from buddy allocator
         let phys = mm::alloc_page()?;
-        let virt = mm::phys_to_virt(phys);
+
+        // CRITICAL: Use identity mapping during early boot.
+        // The kernel runs at low physical addresses (0x4xxxxxxx) with identity mapping.
+        // mm::phys_to_virt() adds KERNEL_BASE (0xFFFF_0000_0000_0000), creating an
+        // unmapped high address that causes translation faults.
+        // TODO Phase 9: Detect if we've switched to high kernel and use phys_to_virt().
+        let virt = phys as usize; // Identity mapped: VA == PA
         let base = unsafe { NonNull::new_unchecked(virt as *mut u8) };
 
         let mut slab = SlabPage::new(base, self.objects_per_slab);
@@ -229,16 +255,25 @@ impl SlabCache {
         self.total_slabs += 1;
         self.allocated_objects += 1;
 
+        // Restore slab state before returning
+        SLAB_ENABLED.store(was_enabled, core::sync::atomic::Ordering::SeqCst);
         Some(obj)
     }
 
     /// Free object back to cache
     ///
+    /// Returns true if the pointer was found and freed, false otherwise.
+    ///
     /// Algorithm:
     /// 1. Find which slab owns this pointer (slab-aligned address)
     /// 2. Return object to slab's free list
     /// 3. Move slab between lists if state changed
-    fn deallocate(&mut self, ptr: NonNull<u8>) {
+    fn deallocate(&mut self, ptr: NonNull<u8>) -> bool {
+        // CRITICAL: Temporarily disable slab to prevent deadlock.
+        // Vec operations below (swap_remove, push) might trigger heap allocations
+        // which would recursively try to lock this same cache.
+        let was_enabled = SLAB_ENABLED.swap(false, core::sync::atomic::Ordering::SeqCst);
+
         // Find which slab owns this pointer (page-aligned)
         let slab_base = (ptr.as_ptr() as usize) & !(SLAB_PAGE_SIZE - 1);
 
@@ -250,7 +285,10 @@ impl SlabCache {
             slab.push_free(ptr);
             self.partial_slabs.push(slab);
             self.allocated_objects -= 1;
-            return;
+
+            // Restore slab state before returning
+            SLAB_ENABLED.store(was_enabled, core::sync::atomic::Ordering::SeqCst);
+            return true;
         }
 
         // Search partial slabs
@@ -268,7 +306,16 @@ impl SlabCache {
                 let empty = self.partial_slabs.swap_remove(idx);
                 self.empty_slabs.push(empty);
             }
+
+            // Restore slab state before returning
+            SLAB_ENABLED.store(was_enabled, core::sync::atomic::Ordering::SeqCst);
+            return true;
         }
+
+        // Pointer not owned by this cache
+        // Restore slab state before returning false
+        SLAB_ENABLED.store(was_enabled, core::sync::atomic::Ordering::SeqCst);
+        false
     }
 
     /// Get cache statistics
@@ -369,17 +416,18 @@ impl SlabAllocator {
 
     /// Deallocate to appropriate slab cache
     ///
+    /// Returns true if successfully deallocated, false if pointer not owned by slab.
+    ///
     /// # Safety
     ///
     /// Caller must ensure:
-    /// - `ptr` was allocated from this allocator
     /// - `layout` matches the layout used for allocation
     /// - `ptr` is not used after deallocation
-    pub unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+    pub unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) -> bool {
         let size = layout.size();
 
         if size > 256 {
-            return;
+            return false;
         }
 
         let cache_idx = match size {
@@ -391,7 +439,7 @@ impl SlabAllocator {
             _ => unreachable!(),
         };
 
-        self.caches[cache_idx].lock().deallocate(ptr);
+        self.caches[cache_idx].lock().deallocate(ptr)
     }
 
     /// Get statistics for all caches
@@ -424,7 +472,11 @@ static SLAB_ALLOCATOR: SlabAllocator = SlabAllocator::new();
 /// Initialize slab allocator
 ///
 /// Must be called after buddy allocator initialization.
+/// This enables the slab allocator for use.
 pub fn init() {
+    // Enable slab allocator (safe to use now that buddy is initialized)
+    SLAB_ENABLED.store(true, Ordering::Release);
+
     crate::info!("Slab allocator initialized");
     crate::info!("  - Size classes: {:?}", SLAB_SIZES);
     crate::info!("  - Objects per page: 16B={}, 32B={}, 64B={}, 128B={}, 256B={}",
@@ -436,19 +488,37 @@ pub fn get() -> &'static SlabAllocator {
     &SLAB_ALLOCATOR
 }
 
+/// Check if slab allocator is enabled
+///
+/// Returns false during early boot (before buddy allocator is initialized).
+/// This prevents circular dependency between heap, slab, and buddy allocators.
+pub fn is_enabled() -> bool {
+    SLAB_ENABLED.load(Ordering::Acquire)
+}
+
 /// Allocate from slab
 ///
-/// Public API for slab allocation. Falls back to None if size > 256 bytes.
+/// Public API for slab allocation. Falls back to None if size > 256 bytes
+/// or if slab is not yet enabled (during early boot).
 pub fn allocate(layout: Layout) -> Option<NonNull<u8>> {
+    if !is_enabled() {
+        return None;
+    }
     SLAB_ALLOCATOR.allocate(layout)
 }
 
 /// Deallocate from slab
 ///
+/// Returns true if the pointer was owned by slab and deallocated,
+/// false if the pointer is not from slab (caller should use alternate path).
+///
 /// # Safety
 ///
 /// See `SlabAllocator::deallocate`
-pub unsafe fn deallocate(ptr: NonNull<u8>, layout: Layout) {
+pub unsafe fn deallocate(ptr: NonNull<u8>, layout: Layout) -> bool {
+    if !is_enabled() {
+        return false;
+    }
     SLAB_ALLOCATOR.deallocate(ptr, layout)
 }
 
