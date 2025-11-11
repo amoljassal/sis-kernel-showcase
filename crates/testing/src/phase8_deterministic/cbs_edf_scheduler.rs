@@ -71,7 +71,7 @@ impl CBSEDFSchedulerTests {
             log::info!("    ✅ Admission control: PASSED");
         } else {
             log::warn!("    ❌ Admission control: FAILED");
-            log::debug!("       Output: {}", output1);
+            log::debug!("       Output: {}", output.raw_output);
         }
 
         Ok(passed)
@@ -98,9 +98,9 @@ impl CBSEDFSchedulerTests {
             .execute_command("det status")
             .await?;
 
-        let status_ok = output.contains("DET") ||
-                       output.contains("misses") ||
-                       output.contains("deadline");
+        let status_ok = output.raw_output.contains("DET") ||
+                       output.raw_output.contains("misses") ||
+                       output.raw_output.contains("deadline");
 
         let passed = status_ok;
 
@@ -128,7 +128,7 @@ impl CBSEDFSchedulerTests {
             .execute_command("det status")
             .await?;
 
-        let passed = output.contains("DET") || output.contains("budget");
+        let passed = output.raw_output.contains("DET") || output.raw_output.contains("budget");
 
         if passed {
             log::info!("    ✅ Budget replenishment: PASSED");
@@ -151,7 +151,7 @@ impl CBSEDFSchedulerTests {
             .execute_command("det on 5000000 50000000 50000000")
             .await?;
 
-        let passed = output.contains("DET") || output.contains("enabled");
+        let passed = output.raw_output.contains("DET") || output.raw_output.contains("enabled");
 
         if passed {
             log::info!("    ✅ EDF priority: PASSED");

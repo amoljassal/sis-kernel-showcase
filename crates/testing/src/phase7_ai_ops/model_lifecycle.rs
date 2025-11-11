@@ -67,9 +67,9 @@ impl ModelLifecycleTests {
         let registration_time = start.elapsed();
 
         // Validate output
-        let registration_ok = output.contains("Model registered") ||
-                             output.contains("test-model-v1") ||
-                             output.contains("registered");
+        let registration_ok = output.raw_output.contains("Model registered") ||
+                             output.raw_output.contains("test-model-v1") ||
+                             output.raw_output.contains("registered");
 
         // Check registration time
         let timing_ok = registration_time < Duration::from_millis(100);
@@ -86,9 +86,9 @@ impl ModelLifecycleTests {
             .await?;
         let list_time = list_start.elapsed();
 
-        let list_ok = list_output.contains("test-model-v1") ||
-                     list_output.contains("Registry") ||
-                     list_output.contains("model");
+        let list_ok = list_output.raw_output.contains("test-model-v1") ||
+                     list_output.raw_output.contains("Registry") ||
+                     list_output.raw_output.contains("model");
 
         let list_timing_ok = list_time < Duration::from_millis(10);
 
@@ -103,8 +103,8 @@ impl ModelLifecycleTests {
             log::info!("    ✅ Model registration: PASSED");
         } else {
             log::warn!("    ❌ Model registration: FAILED");
-            log::debug!("       Registration output: {}", output);
-            log::debug!("       List output: {}", list_output);
+            log::debug!("       Registration output: {}", output.raw_output);
+            log::debug!("       List output: {}", list_output.raw_output);
         }
 
         Ok(passed)
@@ -148,14 +148,14 @@ impl ModelLifecycleTests {
         let swap_time = start.elapsed();
 
         // Check for hot-swap indicators
-        let swap_ok = output.contains("swap") ||
-                     output.contains("Hot-swap") ||
-                     output.contains("model-v2") ||
-                     output.contains("Swap complete");
+        let swap_ok = output.raw_output.contains("swap") ||
+                     output.raw_output.contains("Hot-swap") ||
+                     output.raw_output.contains("model-v2") ||
+                     output.raw_output.contains("Swap complete");
 
         // Verify zero downtime claim if present
-        let downtime_ok = !output.contains("Downtime:") ||
-                         output.contains("Downtime: 0");
+        let downtime_ok = !output.raw_output.contains("Downtime:") ||
+                         output.raw_output.contains("Downtime: 0");
 
         // Check swap time
         let timing_ok = swap_time < Duration::from_millis(500);
@@ -171,7 +171,7 @@ impl ModelLifecycleTests {
             log::info!("    ✅ Model hot-swap: PASSED");
         } else {
             log::warn!("    ❌ Model hot-swap: FAILED");
-            log::debug!("       Output: {}", output);
+            log::debug!("       Output: {}", output.raw_output);
         }
 
         Ok(passed)
@@ -210,10 +210,10 @@ impl ModelLifecycleTests {
         let rollback_time = start.elapsed();
 
         // Check for rollback indicators
-        let rollback_ok = output.contains("rollback") ||
-                         output.contains("Rollback") ||
-                         output.contains("model-v1") ||
-                         output.contains("Active model");
+        let rollback_ok = output.raw_output.contains("rollback") ||
+                         output.raw_output.contains("Rollback") ||
+                         output.raw_output.contains("model-v1") ||
+                         output.raw_output.contains("Active model");
 
         // Check rollback time
         let timing_ok = rollback_time < Duration::from_millis(200);
@@ -229,7 +229,7 @@ impl ModelLifecycleTests {
             log::info!("    ✅ Model rollback: PASSED");
         } else {
             log::warn!("    ❌ Model rollback: FAILED");
-            log::debug!("       Output: {}", output);
+            log::debug!("       Output: {}", output.raw_output);
         }
 
         Ok(passed)
@@ -266,7 +266,7 @@ impl ModelLifecycleTests {
             .await?;
         let list_time = start.elapsed();
 
-        let list_ok = list_output.contains("model") || list_output.contains("Registry");
+        let list_ok = list_output.raw_output.contains("model") || list_output.raw_output.contains("Registry");
         let list_timing_ok = list_time < Duration::from_millis(50);
 
         if !list_timing_ok {

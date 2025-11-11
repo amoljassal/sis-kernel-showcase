@@ -44,10 +44,10 @@ impl MetaAgentTests {
             .execute_command("autoctl audit last 10")
             .await?;
 
-        let passed = output.contains("Decision") ||
-                    output.contains("conf") ||
-                    output.contains("directive") ||
-                    output.contains("reward");
+        let passed = output.raw_output.contains("Decision") ||
+                    output.raw_output.contains("conf") ||
+                    output.raw_output.contains("directive") ||
+                    output.raw_output.contains("reward");
 
         if passed {
             log::info!("    ✅ Meta-agent inference: PASSED");
@@ -63,12 +63,14 @@ impl MetaAgentTests {
 
         let output = self.kernel_interface
             .execute_command("autoctl audit last 50")
-            .await
-            .unwrap_or_else(|_| "confidence".to_string());
+            .await;
 
-        let passed = output.contains("conf") ||
-                    output.contains("Decision") ||
-                    output.contains("confidence");
+        let passed = match output {
+            Ok(ref o) => o.raw_output.contains("conf") ||
+                        o.raw_output.contains("Decision") ||
+                        o.raw_output.contains("confidence"),
+            Err(_) => false,
+        };
 
         if passed {
             log::info!("    ✅ Confidence thresholds: PASSED");
@@ -84,11 +86,15 @@ impl MetaAgentTests {
 
         let output = self.kernel_interface
             .execute_command("autoctl audit last 10")
-            .await
-            .unwrap_or_else(|_| "directive".to_string());
+            .await;
 
-        let has_memory = output.contains("memory") || output.contains("Memory");
-        let has_directive = output.contains("directive") || output.contains("Decision");
+        let (has_memory, has_directive) = match output {
+            Ok(ref o) => (
+                o.raw_output.contains("memory") || o.raw_output.contains("Memory"),
+                o.raw_output.contains("directive") || o.raw_output.contains("Decision")
+            ),
+            Err(_) => (false, false),
+        };
 
         let passed = has_memory || has_directive;
 
@@ -106,12 +112,14 @@ impl MetaAgentTests {
 
         let output = self.kernel_interface
             .execute_command("autoctl audit last 50")
-            .await
-            .unwrap_or_else(|_| "reward".to_string());
+            .await;
 
-        let passed = output.contains("reward") ||
-                    output.contains("Outcome") ||
-                    output.contains("outcome");
+        let passed = match output {
+            Ok(ref o) => o.raw_output.contains("reward") ||
+                        o.raw_output.contains("Outcome") ||
+                        o.raw_output.contains("outcome"),
+            Err(_) => false,
+        };
 
         if passed {
             log::info!("    ✅ Reward feedback: PASSED");

@@ -53,20 +53,20 @@ impl ShadowModeTests {
             .await?;
 
         // Check deployment success
-        let deploy_ok = output.contains("Shadow") ||
-                       output.contains("shadow") ||
-                       output.contains("deployed") ||
-                       output.contains("agent-v2");
+        let deploy_ok = output.raw_output.contains("Shadow") ||
+                       output.raw_output.contains("shadow") ||
+                       output.raw_output.contains("deployed") ||
+                       output.raw_output.contains("agent-v2");
 
         // Verify status
         let status_output = self.kernel_interface
             .execute_command("llmctl shadow-status")
             .await?;
 
-        let status_ok = status_output.contains("shadow") ||
-                       status_output.contains("READY") ||
-                       status_output.contains("0%") ||
-                       status_output.contains("traffic");
+        let status_ok = status_output.raw_output.contains("shadow") ||
+                       status_output.raw_output.contains("READY") ||
+                       status_output.raw_output.contains("0%") ||
+                       status_output.raw_output.contains("traffic");
 
         let passed = deploy_ok && status_ok;
 
@@ -74,8 +74,8 @@ impl ShadowModeTests {
             log::info!("    ✅ Shadow deployment: PASSED");
         } else {
             log::warn!("    ❌ Shadow deployment: FAILED");
-            log::debug!("       Deploy output: {}", output);
-            log::debug!("       Status output: {}", status_output);
+            log::debug!("       Deploy output: {}", output.raw_output);
+            log::debug!("       Status output: {}", output.raw_output);
         }
 
         Ok(passed)
@@ -107,9 +107,9 @@ impl ShadowModeTests {
             .execute_command("llmctl shadow-traffic --percent 10")
             .await?;
 
-        let routing_ok = output.contains("10") ||
-                        output.contains("traffic") ||
-                        output.contains("shadow");
+        let routing_ok = output.raw_output.contains("10") ||
+                        output.raw_output.contains("traffic") ||
+                        output.raw_output.contains("shadow");
 
         // Note: In a real implementation, we would send test requests
         // and verify the distribution. For now, we check the command succeeded.
@@ -120,7 +120,7 @@ impl ShadowModeTests {
             log::info!("    ✅ Canary routing (10%): PASSED");
         } else {
             log::warn!("    ❌ Canary routing (10%): FAILED");
-            log::debug!("       Output: {}", output);
+            log::debug!("       Output: {}", output.raw_output);
         }
 
         Ok(passed)
@@ -159,12 +159,12 @@ impl ShadowModeTests {
             .await?;
 
         // Check for comparison metrics
-        let comparison_ok = output.contains("comparison") ||
-                           output.contains("Comparison") ||
-                           output.contains("Primary") ||
-                           output.contains("Shadow") ||
-                           output.contains("latency") ||
-                           output.contains("throughput");
+        let comparison_ok = output.raw_output.contains("comparison") ||
+                           output.raw_output.contains("Comparison") ||
+                           output.raw_output.contains("Primary") ||
+                           output.raw_output.contains("Shadow") ||
+                           output.raw_output.contains("latency") ||
+                           output.raw_output.contains("throughput");
 
         let passed = comparison_ok;
 
@@ -172,7 +172,7 @@ impl ShadowModeTests {
             log::info!("    ✅ A/B comparison: PASSED");
         } else {
             log::warn!("    ❌ A/B comparison: FAILED");
-            log::debug!("       Output: {}", output);
+            log::debug!("       Output: {}", output.raw_output);
         }
 
         Ok(passed)
@@ -200,11 +200,11 @@ impl ShadowModeTests {
             .await?;
 
         // Check for promotion indicators
-        let promotion_ok = output.contains("promot") ||
-                          output.contains("Promot") ||
-                          output.contains("shadow") ||
-                          output.contains("primary") ||
-                          output.contains("retired");
+        let promotion_ok = output.raw_output.contains("promot") ||
+                          output.raw_output.contains("Promot") ||
+                          output.raw_output.contains("shadow") ||
+                          output.raw_output.contains("primary") ||
+                          output.raw_output.contains("retired");
 
         let passed = promotion_ok;
 
@@ -212,7 +212,7 @@ impl ShadowModeTests {
             log::info!("    ✅ Shadow promotion: PASSED");
         } else {
             log::warn!("    ❌ Shadow promotion: FAILED");
-            log::debug!("       Output: {}", output);
+            log::debug!("       Output: {}", output.raw_output);
         }
 
         Ok(passed)
