@@ -23,6 +23,7 @@ pub mod kernel_interface;
 pub mod ext4_stress;
 
 // Phase testing modules
+pub mod phase1_dataflow;
 pub mod phase3_temporal;
 pub mod phase6_web_gui;
 pub mod phase7_ai_ops;
@@ -84,6 +85,7 @@ pub struct ValidationReport {
     pub distributed_results: Option<distributed::DistributedResults>,
     pub security_results: Option<security::SecurityTestResults>,
     pub ai_results: Option<ai::AIResults>,
+    pub phase1_results: Option<phase1_dataflow::Phase1Results>,
     pub phase3_results: Option<phase3_temporal::Phase3Results>,
     pub phase6_results: Option<phase6_web_gui::Phase6Results>,
     pub phase7_results: Option<phase7_ai_ops::Phase7Results>,
@@ -99,6 +101,7 @@ pub struct TestCoverageReport {
     pub security_coverage: f64,
     pub distributed_coverage: f64,
     pub ai_coverage: f64,
+    pub phase1_coverage: f64,
     pub phase3_coverage: f64,
     pub phase6_coverage: f64,
     pub phase7_coverage: f64,
@@ -406,11 +409,12 @@ impl SISTestSuite {
                         distributed_results: None,
                         security_results: None,
                         ai_results: None,
+                        phase1_results: None,
                         phase3_results: None,
                         phase6_results: None,
                         phase7_results: None,
                         phase8_results: None,
-                        test_coverage: TestCoverageReport { performance_coverage: 0.0, correctness_coverage: 0.0, security_coverage: 0.0, distributed_coverage: 0.0, ai_coverage: 0.0, phase3_coverage: 0.0, phase6_coverage: 0.0, phase7_coverage: 0.0, phase8_coverage: 0.0, overall_coverage: 0.0 },
+                        test_coverage: TestCoverageReport { performance_coverage: 0.0, correctness_coverage: 0.0, security_coverage: 0.0, distributed_coverage: 0.0, ai_coverage: 0.0, phase1_coverage: 0.0, phase3_coverage: 0.0, phase6_coverage: 0.0, phase7_coverage: 0.0, phase8_coverage: 0.0, overall_coverage: 0.0 },
                         generated_at: chrono::Utc::now(),
                     });
                 }
@@ -440,6 +444,7 @@ impl SISTestSuite {
                 Some(distributed_results),
                 Some(security_results),
                 Some(ai_results),
+                None, // phase1_results - TODO: implement
                 None, // phase3_results - TODO: implement
                 None, // phase6_results - TODO: implement
                 None, // phase7_results - TODO: implement
@@ -461,6 +466,7 @@ impl SISTestSuite {
                 Some(distributed_results),
                 Some(security_results),
                 Some(ai_results),
+                None, // phase1_results - TODO: implement
                 None, // phase3_results - TODO: implement
                 None, // phase6_results - TODO: implement
                 None, // phase7_results - TODO: implement
@@ -476,6 +482,7 @@ impl SISTestSuite {
         distributed_results: Option<distributed::DistributedResults>,
         security_results: Option<security::SecurityTestResults>,
         ai_results: Option<ai::AIResults>,
+        phase1_results: Option<phase1_dataflow::Phase1Results>,
         phase3_results: Option<phase3_temporal::Phase3Results>,
         phase6_results: Option<phase6_web_gui::Phase6Results>,
         phase7_results: Option<phase7_ai_ops::Phase7Results>,
@@ -519,6 +526,7 @@ impl SISTestSuite {
             distributed_results,
             security_results,
             ai_results,
+            phase1_results,
             phase3_results,
             phase6_results,
             phase7_results,
@@ -675,6 +683,7 @@ impl SISTestSuite {
             security_coverage: self.calculate_category_coverage(results, "security"),
             distributed_coverage: self.calculate_category_coverage(results, "distributed"),
             ai_coverage: self.calculate_category_coverage(results, "ai"),
+            phase1_coverage: self.calculate_category_coverage(results, "phase1"),
             phase3_coverage: self.calculate_category_coverage(results, "phase3"),
             phase6_coverage: self.calculate_category_coverage(results, "phase6"),
             phase7_coverage: self.calculate_category_coverage(results, "phase7"),
@@ -694,6 +703,7 @@ impl SISTestSuite {
                     "distributed" => r.claim.contains("Byzantine") ||
                                     r.claim.contains("Consensus"),
                     "ai" => r.claim.contains("Inference Accuracy"),
+                    "phase1" => r.claim.contains("Phase 1") || r.claim.contains("AI-Native Dataflow"),
                     "phase3" => r.claim.contains("Phase 3") || r.claim.contains("Temporal Isolation"),
                     "phase6" => r.claim.contains("Phase 6") || r.claim.contains("Web GUI"),
                     "phase7" => r.claim.contains("Phase 7") || r.claim.contains("AI Operations"),
