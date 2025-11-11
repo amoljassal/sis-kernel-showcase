@@ -117,6 +117,7 @@ pub struct StressTestConfig {
     pub oom_probability: u8,     // OOM injection probability (0-100) for memory tests
     pub expect_failures: bool,    // Test should handle failures gracefully
     pub noise_level: f32,         // Stochasticity level (0.0-1.0)
+    pub verbose: bool,            // Print per-event output (chaos/learning tests)
 }
 
 impl StressTestConfig {
@@ -131,6 +132,7 @@ impl StressTestConfig {
             oom_probability: 0,
             expect_failures: false,
             noise_level: 0.1,
+            verbose: true,        // Print per-event output by default
         }
     }
 }
@@ -1031,7 +1033,9 @@ pub fn run_chaos_stress(config: StressTestConfig) -> StressTestMetrics {
             // Chaos 1: Sudden memory spike (RANDOMIZED size)
             0 => {
                 let spike_count = prng::rand_range(20, 100);
-                unsafe { crate::uart_print(b"[CHAOS] Memory spike ("); uart_print_num(spike_count as u64); crate::uart_print(b" allocs)\n"); }
+                if config.verbose {
+                    unsafe { crate::uart_print(b"[CHAOS] Memory spike ("); uart_print_num(spike_count as u64); crate::uart_print(b" allocs)\n"); }
+                }
                 for _ in 0..spike_count {
                     let mut v = alloc::vec::Vec::new();
                     if v.try_reserve_exact(8192).is_ok() {
@@ -1048,7 +1052,9 @@ pub fn run_chaos_stress(config: StressTestConfig) -> StressTestMetrics {
             1 => {
                 if !allocations.is_empty() {
                     let release_pct = prng::rand_range(20, 80);
-                    unsafe { crate::uart_print(b"[CHAOS] Memory release ("); uart_print_num(release_pct as u64); crate::uart_print(b"%)\n"); }
+                    if config.verbose {
+                        unsafe { crate::uart_print(b"[CHAOS] Memory release ("); uart_print_num(release_pct as u64); crate::uart_print(b"%)\n"); }
+                    }
                     let target_len = (allocations.len() * release_pct as usize) / 100;
                     allocations.truncate(allocations.len().saturating_sub(target_len));
                 }
@@ -1057,7 +1063,9 @@ pub fn run_chaos_stress(config: StressTestConfig) -> StressTestMetrics {
             // Chaos 3: Random autonomy flip (RANDOMIZED duration)
             2 => {
                 let flip_duration_us = prng::rand_range_u64(100, 2000);
-                unsafe { crate::uart_print(b"[CHAOS] Autonomy flip ("); uart_print_num(flip_duration_us); crate::uart_print(b"us)\n"); }
+                if config.verbose {
+                    unsafe { crate::uart_print(b"[CHAOS] Autonomy flip ("); uart_print_num(flip_duration_us); crate::uart_print(b"us)\n"); }
+                }
                 crate::autonomy::AUTONOMOUS_CONTROL.enable();
                 let flip_end = crate::time::get_timestamp_us() + flip_duration_us;
                 while crate::time::get_timestamp_us() < flip_end {
@@ -1069,7 +1077,9 @@ pub fn run_chaos_stress(config: StressTestConfig) -> StressTestMetrics {
             // Chaos 4: Command burst (RANDOMIZED rate and count)
             3 => {
                 let burst_count = prng::rand_range(10, 50);
-                unsafe { crate::uart_print(b"[CHAOS] Command burst ("); uart_print_num(burst_count as u64); crate::uart_print(b" cmds)\n"); }
+                if config.verbose {
+                    unsafe { crate::uart_print(b"[CHAOS] Command burst ("); uart_print_num(burst_count as u64); crate::uart_print(b" cmds)\n"); }
+                }
                 if should_fail {
                     // Simulate command burst failure (e.g., rate limiting)
                     event_succeeded = false;
@@ -1083,7 +1093,9 @@ pub fn run_chaos_stress(config: StressTestConfig) -> StressTestMetrics {
             // Chaos 5: Telemetry storm (RANDOMIZED intensity)
             4 => {
                 let storm_intensity = prng::rand_range(5, 30);
-                unsafe { crate::uart_print(b"[CHAOS] Telemetry storm ("); uart_print_num(storm_intensity as u64); crate::uart_print(b"x)\n"); }
+                if config.verbose {
+                    unsafe { crate::uart_print(b"[CHAOS] Telemetry storm ("); uart_print_num(storm_intensity as u64); crate::uart_print(b"x)\n"); }
+                }
                 for _ in 0..storm_intensity {
                     let _ = crate::meta_agent::collect_telemetry();
                 }
@@ -1092,14 +1104,18 @@ pub fn run_chaos_stress(config: StressTestConfig) -> StressTestMetrics {
             // Chaos 6: Hot retrain (RANDOMIZED samples)
             5 => {
                 let sample_count = prng::rand_range(4, 20);
-                unsafe { crate::uart_print(b"[CHAOS] Hot retrain ("); uart_print_num(sample_count as u64); crate::uart_print(b" samples)\n"); }
+                if config.verbose {
+                    unsafe { crate::uart_print(b"[CHAOS] Hot retrain ("); uart_print_num(sample_count as u64); crate::uart_print(b" samples)\n"); }
+                }
                 let _ = crate::neural::retrain_from_feedback(sample_count as usize);
                 chaos_events += 1;
             }
             // Chaos 7: Deadline pressure (RANDOMIZED intensity)
             6 => {
+                if config.verbose {
+                    unsafe { crate::uart_print(b"[CHAOS] Deadline pressure\n"); }
+                }
                 let pressure_cycles = prng::rand_range(5000, 20000);
-                unsafe { crate::uart_print(b"[CHAOS] Deadline pressure\n"); }
                 for _ in 0..pressure_cycles {
                     core::hint::spin_loop();
                 }
@@ -1108,7 +1124,9 @@ pub fn run_chaos_stress(config: StressTestConfig) -> StressTestMetrics {
             // Chaos 8: Prediction storm
             7 => {
                 let pred_count = prng::rand_range(10, 40);
-                unsafe { crate::uart_print(b"[CHAOS] Prediction storm ("); uart_print_num(pred_count as u64); crate::uart_print(b"x)\n"); }
+                if config.verbose {
+                    unsafe { crate::uart_print(b"[CHAOS] Prediction storm ("); uart_print_num(pred_count as u64); crate::uart_print(b"x)\n"); }
+                }
                 if should_fail {
                     // Simulate prediction storm failure (e.g., model unavailable)
                     event_succeeded = false;
@@ -1121,7 +1139,9 @@ pub fn run_chaos_stress(config: StressTestConfig) -> StressTestMetrics {
             }
             // Chaos 9: Workload spike
             8 => {
-                unsafe { crate::uart_print(b"[CHAOS] Workload spike\n"); }
+                if config.verbose {
+                    unsafe { crate::uart_print(b"[CHAOS] Workload spike\n"); }
+                }
                 for _ in 0..prng::rand_range(5, 15) {
                     let _ = crate::meta_agent::collect_telemetry();
                     let _ = crate::neural::predict_command("workload");
@@ -1131,7 +1151,9 @@ pub fn run_chaos_stress(config: StressTestConfig) -> StressTestMetrics {
             }
             // Chaos 10: Rapid memory churn
             10 => {
-                unsafe { crate::uart_print(b"[CHAOS] Memory churn\n"); }
+                if config.verbose {
+                    unsafe { crate::uart_print(b"[CHAOS] Memory churn\n"); }
+                }
                 let churn_count = prng::rand_range(20, 50);
                 for i in 0..churn_count {
                     let mut v = alloc::vec::Vec::new();
@@ -1151,7 +1173,9 @@ pub fn run_chaos_stress(config: StressTestConfig) -> StressTestMetrics {
             }
             // Chaos 11: Recovery phase (normal operation)
             _ => {
-                unsafe { crate::uart_print(b"[CHAOS] Recovery\n"); }
+                if config.verbose {
+                    unsafe { crate::uart_print(b"[CHAOS] Recovery\n"); }
+                }
                 let _ = crate::neural::predict_memory_health();
                 for _ in 0..500 {
                     core::hint::spin_loop();
@@ -1167,7 +1191,7 @@ pub fn run_chaos_stress(config: StressTestConfig) -> StressTestMetrics {
             successful_recoveries += 1;
         } else {
             failed_recoveries += 1;
-            if !config.expect_failures {
+            if !config.expect_failures && config.verbose {
                 unsafe { crate::uart_print(b"  [FAILED]\n"); }
             }
         }
