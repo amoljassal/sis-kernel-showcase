@@ -553,30 +553,20 @@ pub fn sys_getpid() -> Result<isize> {
     Ok(pid as isize)
 }
 
-/// sys_fork - Create a child process
+/// sys_fork - Create a child process (Phase 8 scaffolding)
+///
+/// Creates a copy of the current process with copy-on-write memory.
+/// Returns child PID to parent. In Phase 9, child will receive 0.
 pub fn sys_fork() -> Result<isize> {
     let parent_pid = crate::process::current_pid();
 
-    // Allocate new PID for child
-    let child_pid = crate::process::alloc_pid()
-        .map_err(|_| Errno::EAGAIN)?;
+    // Phase 8: Use new do_fork() implementation
+    let child_pid = crate::process::do_fork(parent_pid)?;
 
-    crate::info!("fork: parent={}, child={}", parent_pid, child_pid);
-
-    // Get parent task and create child (COW is set up in fork_from)
-    let mut table = crate::process::get_process_table();
-    let table = table.as_mut().ok_or(Errno::ESRCH)?;
-
-    let parent = table.get(parent_pid).ok_or(Errno::ESRCH)?;
-    let child = crate::process::Task::fork_from(parent, child_pid);
-
-    // Insert child into process table
-    let _ = table; // Release lock before inserting
-    crate::process::insert_task(child)
-        .map_err(|_| Errno::ENOMEM)?;
-
-    // TODO: Copy trap frame and set child's return value to 0
-    // TODO: Mark child as runnable in scheduler
+    // Phase 8: Only parent returns (child context not yet implemented)
+    // TODO Phase 9: Copy trap frame and set child's return value to 0
+    // TODO Phase 9: Mark child as runnable in scheduler
+    // TODO Phase 9: Properly differentiate parent/child return values
 
     // Parent returns child PID
     Ok(child_pid as isize)
