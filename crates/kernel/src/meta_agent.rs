@@ -835,37 +835,54 @@ impl MetaAgent {
         let scheduling_action = decision.scheduling_directive.abs() > 300;
         let command_action = decision.command_directive.abs() > 300;
 
+        // Rate limit output: only print once per second to avoid flooding during stress tests
+        static LAST_DIRECTIVE_PRINT_US: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+        let now = crate::time::get_timestamp_us();
+        let last_print = LAST_DIRECTIVE_PRINT_US.load(core::sync::atomic::Ordering::Relaxed);
+        let should_print = now.saturating_sub(last_print) >= 1_000_000; // 1 second
+
         if memory_action {
             self.stats.memory_adjustments += 1;
-            unsafe {
-                crate::uart_print(b"[META] Memory directive: ");
-                print_signed_milli(decision.memory_directive);
-                crate::uart_print(b" (conf=");
-                print_number(decision.confidence as usize);
-                crate::uart_print(b")\n");
+            if should_print {
+                unsafe {
+                    crate::uart_print(b"[META] Memory directive: ");
+                    print_signed_milli(decision.memory_directive);
+                    crate::uart_print(b" (conf=");
+                    print_number(decision.confidence as usize);
+                    crate::uart_print(b")\n");
+                }
             }
         }
 
         if scheduling_action {
             self.stats.scheduling_adjustments += 1;
-            unsafe {
-                crate::uart_print(b"[META] Scheduling directive: ");
-                print_signed_milli(decision.scheduling_directive);
-                crate::uart_print(b" (conf=");
-                print_number(decision.confidence as usize);
-                crate::uart_print(b")\n");
+            if should_print {
+                unsafe {
+                    crate::uart_print(b"[META] Scheduling directive: ");
+                    print_signed_milli(decision.scheduling_directive);
+                    crate::uart_print(b" (conf=");
+                    print_number(decision.confidence as usize);
+                    crate::uart_print(b")\n");
+                }
             }
         }
 
         if command_action {
             self.stats.command_adjustments += 1;
-            unsafe {
-                crate::uart_print(b"[META] Command directive: ");
-                print_signed_milli(decision.command_directive);
-                crate::uart_print(b" (conf=");
-                print_number(decision.confidence as usize);
-                crate::uart_print(b")\n");
+            if should_print {
+                unsafe {
+                    crate::uart_print(b"[META] Command directive: ");
+                    print_signed_milli(decision.command_directive);
+                    crate::uart_print(b" (conf=");
+                    print_number(decision.confidence as usize);
+                    crate::uart_print(b")\n");
+                }
             }
+        }
+
+        // Update last print timestamp if we printed anything
+        if should_print && (memory_action || scheduling_action || command_action) {
+            LAST_DIRECTIVE_PRINT_US.store(now, core::sync::atomic::Ordering::Relaxed);
         }
 
         memory_action || scheduling_action || command_action

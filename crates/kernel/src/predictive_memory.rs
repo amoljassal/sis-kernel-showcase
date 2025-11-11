@@ -621,14 +621,22 @@ pub fn update_allocation_strategy(memory_directive: i16) -> bool {
         state.current_strategy = new_strategy;
         state.strategy_since_us = timestamp;
 
-        unsafe {
-            crate::uart_print(b"[PRED_MEM] Strategy change: ");
-            crate::uart_print(old_strategy.as_str().as_bytes());
-            crate::uart_print(b" -> ");
-            crate::uart_print(new_strategy.as_str().as_bytes());
-            crate::uart_print(b"\n  Directive: ");
-            crate::shell::print_number_simple(memory_directive as i64 as u64);
-            crate::uart_print(b"\n");
+        // Rate limit output: only print once per second to avoid flooding during stress tests
+        static LAST_PRINT_US: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+        let last_print = LAST_PRINT_US.load(core::sync::atomic::Ordering::Relaxed);
+        let should_print = timestamp.saturating_sub(last_print) >= 1_000_000; // 1 second
+
+        if should_print {
+            LAST_PRINT_US.store(timestamp, core::sync::atomic::Ordering::Relaxed);
+            unsafe {
+                crate::uart_print(b"[PRED_MEM] Strategy change: ");
+                crate::uart_print(old_strategy.as_str().as_bytes());
+                crate::uart_print(b" -> ");
+                crate::uart_print(new_strategy.as_str().as_bytes());
+                crate::uart_print(b"\n  Directive: ");
+                crate::shell::print_number_simple(memory_directive as i64 as u64);
+                crate::uart_print(b"\n");
+            }
         }
 
         true
