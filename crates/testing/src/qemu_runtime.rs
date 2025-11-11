@@ -85,47 +85,23 @@ impl QEMURuntimeManager {
 
     pub async fn build_kernel(&self) -> Result<(), TestError> {
         log::info!("Building SIS kernel for QEMU testing");
-        
-        // Build the kernel in release mode for accurate performance testing
+
         let root = Self::workspace_root();
-        // Build features: allow override via SIS_TEST_FEATURES; default to bringup+llm for smoke, neon-optimized
-        let mut features = std::env::var("SIS_TEST_FEATURES").unwrap_or_else(|_| "bringup,llm,neon-optimized".to_string());
-        if std::env::var("SIS_GRAPH_STATS").unwrap_or_default() == "1" {
-            features.push_str(",graph-autostats");
-        }
-        let output = Command::new("cargo")
-            .args([
-                "+nightly",
-                "build",
-                "-p", "sis_kernel",
-                "-Z", "build-std=core,alloc",
-                "--target", "aarch64-unknown-none",
-                "--features", &features
-            ])
-            .current_dir(&root)
-            .env("RUSTFLAGS", format!(
-                "-C link-arg=-T{}",
-                root.join("crates/kernel/src/arch/aarch64/aarch64-qemu.ld").display()
-            ))
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .await
-            .map_err(|e| TestError::QEMUError { 
-                message: format!("Failed to run kernel build: {}", e) 
-            })?;
 
-        if !output.status.success() {
-            return Err(TestError::QEMUError {
-                message: format!("Kernel build failed: {}", String::from_utf8_lossy(&output.stderr))
-            });
-        }
+        // Build features: allow override via SIS_TEST_FEATURES; default includes Phase 7/8 features
+        let features_str = if let Ok(extra) = std::env::var("SIS_TEST_FEATURES") {
+            format!("bringup,graphctl-framed,deterministic,ai-ops,crypto-real,{}", extra)
+        } else {
+            // Default: Phase 8 features (deterministic scheduler) + Phase 7 (ai-ops) + crypto
+            "bringup,graphctl-framed,deterministic,ai-ops,crypto-real".to_string()
+        };
 
-        // Build the UEFI bootloader - run from workspace root
+        // Build UEFI bootloader first
+        log::info!("Building UEFI bootloader...");
         let output = Command::new("cargo")
             .args([
                 "build",
-                "-p", "uefi-boot",
+                "--manifest-path", "crates/uefi-boot/Cargo.toml",
                 "--release",
                 "--target", "aarch64-unknown-uefi"
             ])
@@ -134,13 +110,39 @@ impl QEMURuntimeManager {
             .stderr(Stdio::piped())
             .output()
             .await
-            .map_err(|e| TestError::QEMUError { 
-                message: format!("Failed to run UEFI build: {}", e) 
+            .map_err(|e| TestError::QEMUError {
+                message: format!("Failed to run UEFI build: {}", e)
             })?;
 
         if !output.status.success() {
             return Err(TestError::QEMUError {
                 message: format!("UEFI build failed: {}", String::from_utf8_lossy(&output.stderr))
+            });
+        }
+
+        // Build kernel using --manifest-path (not -p) to avoid workspace feature errors
+        log::info!("Building kernel with features: {}", features_str);
+        let output = Command::new("cargo")
+            .args([
+                "+nightly",
+                "build",
+                "--manifest-path", "crates/kernel/Cargo.toml",
+                "-Z", "build-std=core,alloc",
+                "--target", "aarch64-unknown-none",
+                "--features", &features_str
+            ])
+            .current_dir(&root)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .map_err(|e| TestError::QEMUError {
+                message: format!("Failed to run kernel build: {}", e)
+            })?;
+
+        if !output.status.success() {
+            return Err(TestError::QEMUError {
+                message: format!("Kernel build failed: {}", String::from_utf8_lossy(&output.stderr))
             });
         }
 
@@ -228,13 +230,11 @@ impl QEMURuntimeManager {
             "-name".to_string(), format!("sis-node{}", instance.node_id),
             "-M".to_string(), "virt,gic-version=3,highmem=on,secure=off".to_string(),  // Enable highmem for M-series simulation
             "-cpu".to_string(), cpu_type.to_string(),
-            "-smp".to_string(), "4".to_string(),  // Multi-core for realistic M-series behavior
-            "-m".to_string(), "1G".to_string(),  // Increased memory for better performance
+            "-smp".to_string(), "2".to_string(),  // 2 cores for testing
+            "-m".to_string(), "512M".to_string(),  // Match manual test setup
             "-nographic".to_string(),
-            // Use chardev with socket for bidirectional serial communication + file logging
-            "-chardev".to_string(), format!("socket,id=serial0,port={},host=localhost,server,nowait,logfile={}", 
-                                           instance.serial_port, instance.serial_log_path),
-            "-serial".to_string(), "chardev:serial0".to_string(),
+            // Use stdio with tee for both interaction and logging
+            "-serial".to_string(), "stdio".to_string(),
             "-monitor".to_string(), format!("tcp:localhost:{},server,nowait", instance.monitor_port),
             "-bios".to_string(), firmware_path.to_string(),
             "-drive".to_string(), format!("if=none,id=esp,format=raw,file=fat:rw:{}", instance.esp_directory),
@@ -247,19 +247,22 @@ impl QEMURuntimeManager {
         
         // Note: HVF is intentionally disabled for stability in bare‑metal bring‑up tests
         
-        // Add cycle-accurate simulation for performance measurement
+        // Add network device for distributed testing (use device variant for ARM virt)
         qemu_args.extend([
-            "-icount".to_string(), "shift=0".to_string(),  // Cycle-accurate for benchmarking
-            "-object".to_string(), "memory-backend-ram,id=ram,size=1G,prealloc=on".to_string(),  // Preallocate memory
-            "-numa".to_string(), "node,memdev=ram".to_string(),  // NUMA awareness for M-series simulation
+            "-netdev".to_string(), "user,id=n0".to_string(),
+            "-device".to_string(), "virtio-net-device,netdev=n0".to_string(),
         ]);
-        
-        // Add network device for distributed testing
+
+        // Add GPU device (needed for full boot)
         qemu_args.extend([
-            "-netdev".to_string(), format!("user,id=net0,hostfwd=tcp::{}-:22", instance.network_port),
-            "-device".to_string(), "virtio-net-pci,netdev=net0".to_string(),
+            "-device".to_string(), "virtio-gpu-device".to_string(),
         ]);
-        
+
+        // Add RTC and other options from manual script
+        qemu_args.extend([
+            "-rtc".to_string(), "base=utc".to_string(),
+        ]);
+
         log::debug!("QEMU command: qemu-system-aarch64 {}", qemu_args.join(" "));
         
         let qemu_process = Command::new("qemu-system-aarch64")

@@ -17,6 +17,18 @@ fn print_u64_simple(v: usize) {
     crate::shell::print_number_simple(v as u64);
 }
 
+/// Get current time in microseconds from cycle counter
+///
+/// Uses ARM timer frequency (62.5MHz) to convert cycles to microseconds.
+/// This provides a consistent timestamp for deterministic scheduling.
+#[inline(always)]
+pub fn get_cycles_microseconds() -> u64 {
+    const ARM_TIMER_FREQ_HZ: u64 = 62_500_000;
+    let cycles = read_cycle_counter();
+    // Convert cycles to microseconds: (cycles * 1_000_000) / frequency
+    (cycles * 1_000_000) / ARM_TIMER_FREQ_HZ
+}
+
 #[derive(Copy, Clone)]
 pub struct TaskSpec {
     pub id: u32,
