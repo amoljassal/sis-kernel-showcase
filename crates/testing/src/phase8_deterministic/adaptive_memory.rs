@@ -64,8 +64,10 @@ impl AdaptiveMemoryTests {
 
         let passed = match output {
             Ok(ref o) => o.raw_output.contains("directive") ||
-                    output.raw_output.contains("Decision") ||
-                    o.raw_output.contains("memory");
+                    o.raw_output.contains("Decision") ||
+                    o.raw_output.contains("memory"),
+            Err(_) => false,
+        };
 
         if passed {
             log::info!("    ✅ Directive thresholds: PASSED");
@@ -121,7 +123,7 @@ impl AdaptiveMemoryTests {
 
         let passed = log_output.raw_output.contains("Strategy") ||
                     log_output.raw_output.contains("memory") ||
-                    log_o.raw_output.contains("pressure");
+                    log_output.raw_output.contains("pressure");
 
         if passed {
             log::info!("    ✅ Rate-limited output: PASSED");
@@ -165,5 +167,4 @@ impl AdaptiveMemoryTests {
             passed_tests,
         })
     }
-}
 }

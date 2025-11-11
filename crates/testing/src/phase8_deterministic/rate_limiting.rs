@@ -43,7 +43,7 @@ impl RateLimitingTests {
         // Check for strategy change messages
         let has_strategy_changes = log_output.raw_output.contains("Strategy change") ||
                                    log_output.raw_output.contains("PRED_MEM") ||
-                                   log_o.raw_output.contains("strategy");
+                                   log_output.raw_output.contains("strategy");
 
         let passed = has_strategy_changes || true; // Pass if we see evidence or not (rate limit working)
 
@@ -77,7 +77,7 @@ impl RateLimitingTests {
 
         let has_directives = log_output.raw_output.contains("directive") ||
                             log_output.raw_output.contains("META") ||
-                            log_o.raw_output.contains("Memory");
+                            log_output.raw_output.contains("Memory");
 
         let passed = has_directives || true; // Pass if we see evidence or not
 

@@ -48,7 +48,7 @@ impl StressComparisonTests {
         let passed = output.raw_output.contains("stress") ||
                     output.raw_output.contains("memory") ||
                     output.raw_output.contains("pressure") ||
-                    o.raw_output.contains("complete");
+                    output.raw_output.contains("complete");
 
         if passed {
             log::info!("    ✅ Autonomy OFF baseline: PASSED");
@@ -73,7 +73,7 @@ impl StressComparisonTests {
         let passed = output.raw_output.contains("stress") ||
                     output.raw_output.contains("memory") ||
                     output.raw_output.contains("pressure") ||
-                    o.raw_output.contains("complete");
+                    output.raw_output.contains("complete");
 
         if passed {
             log::info!("    ✅ Autonomy ON comparison: PASSED");
@@ -101,7 +101,7 @@ impl StressComparisonTests {
         let has_metrics = log_output.raw_output.contains("pressure") ||
                          log_output.raw_output.contains("Peak") ||
                          log_output.raw_output.contains("stress") ||
-                         log_o.raw_output.contains("AI intervention");
+                         log_output.raw_output.contains("AI intervention");
 
         let passed = has_metrics;
 
