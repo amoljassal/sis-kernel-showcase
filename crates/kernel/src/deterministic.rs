@@ -38,11 +38,59 @@ pub struct AiTaskSpec {
     pub output_size: usize,        // Expected output tensor size
 }
 
+/// Process task specification for CBS+EDF scheduling
+///
+/// This specification extends the scheduler to support general-purpose processes,
+/// not just dataflow graphs and AI tasks. Each process gets a CBS server with
+/// budget replenishment based on its period.
+#[derive(Clone)]
+pub struct ProcessSpec {
+    pub pid: u32,
+    pub wcet_cycles: u64,      // Worst-case execution time (estimated)
+    pub period_ns: u64,        // Scheduling period (timeslice * N)
+    pub deadline_ns: u64,      // Relative deadline (= period for now)
+    pub priority: u8,          // User priority (nice value equivalent)
+}
+
+impl ProcessSpec {
+    /// Create ProcessSpec from Task
+    ///
+    /// Provides default conservative parameters for processes without
+    /// specified timing requirements.
+    pub fn from_task(task: &crate::process::Task) -> Result<Self, &'static str> {
+        // Default WCET: 10ms timeslice equivalent
+        const DEFAULT_WCET_NS: u64 = 10_000_000; // 10ms
+        const DEFAULT_PERIOD_NS: u64 = 100_000_000; // 100ms
+        const ARM_TIMER_FREQ_HZ: u64 = 62_500_000; // 62.5MHz
+
+        Ok(ProcessSpec {
+            pid: task.pid,
+            wcet_cycles: (DEFAULT_WCET_NS * ARM_TIMER_FREQ_HZ) / 1_000_000_000,
+            period_ns: DEFAULT_PERIOD_NS,
+            deadline_ns: DEFAULT_PERIOD_NS,
+            priority: 0, // TODO: Extract from task.priority or nice value
+        })
+    }
+
+    /// Convert to TaskSpec for admission control
+    pub fn to_task_spec(&self) -> TaskSpec {
+        const ARM_TIMER_FREQ_HZ: u64 = 62_500_000;
+        let wcet_ns = (self.wcet_cycles * 1_000_000_000) / ARM_TIMER_FREQ_HZ;
+        TaskSpec {
+            id: self.pid,
+            wcet_ns,
+            period_ns: self.period_ns,
+            deadline_ns: self.deadline_ns,
+        }
+    }
+}
+
 /// Job types supported by the scheduler
 #[derive(Clone)]
 pub enum JobType {
     Regular(TaskSpec),
     AiInference(AiTaskSpec),
+    Process(ProcessSpec),
 }
 
 /// Active job in the scheduler
@@ -518,6 +566,7 @@ pub fn edf_tick_demo() {
 pub enum ServerType {
     Graph,       // Traditional deterministic graph server
     AiInference, // AI inference server with cycle-based budgets
+    Process,     // General-purpose process server (Phase 8)
 }
 
 /// CBS (Constant Bandwidth Server) for deterministic graph isolation and AI inference
@@ -1041,6 +1090,177 @@ impl<const MAX_SERVERS: usize> DeterministicScheduler<MAX_SERVERS> {
             metric_kv("cbs_ai_total_inferences", total_ai_inferences as usize);
             metric_kv("cbs_ai_avg_utilization_percent", (total_budget_utilization / ai_server_count as u64) as usize);
         }
+    }
+
+    // ==================== Process Scheduling Support (Phase 8) ====================
+
+    /// Admit a process to the scheduler
+    ///
+    /// Creates a CBS server for the process and adds it to the scheduler.
+    /// The process will be scheduled using EDF ordering among all CBS servers.
+    ///
+    /// # Arguments
+    ///
+    /// * `pid` - Process ID
+    /// * `spec` - Process specification with timing parameters
+    ///
+    /// # Returns
+    ///
+    /// * `true` - Process admitted successfully
+    /// * `false` - Admission failed (server limit reached)
+    pub fn admit_process(&mut self, pid: u32, spec: ProcessSpec) -> bool {
+        if self.server_count >= MAX_SERVERS {
+            return false;
+        }
+
+        // Convert cycles to nanoseconds for CBS server
+        const ARM_TIMER_FREQ_HZ: u64 = 62_500_000;
+        let budget_ns = (spec.wcet_cycles * 1_000_000_000) / ARM_TIMER_FREQ_HZ;
+
+        // Create CBS server for this process
+        let server = CbsServer {
+            server_id: pid,
+            graph_id: 0, // Processes don't have graph IDs
+            server_type: ServerType::Process,
+            budget_ns,
+            period_ns: spec.period_ns,
+            deadline_ns: spec.deadline_ns,
+            remaining_budget_ns: budget_ns,
+            next_replenish_ns: spec.period_ns,
+            active: true,
+            // AI-specific fields (unused for processes)
+            ai_budget_cycles: 0,
+            ai_remaining_cycles: 0,
+            ai_inference_count: 0,
+            ai_max_inferences: 0,
+            npu_job_ids: Vec::new(),
+        };
+
+        self.servers[self.server_count] = Some(server);
+        self.server_count += 1;
+
+        true
+    }
+
+    /// Schedule next process (EDF ordering)
+    ///
+    /// Picks the process with the earliest deadline that has remaining budget.
+    /// This is the core EDF scheduling algorithm.
+    ///
+    /// # Returns
+    ///
+    /// * `Some(pid)` - PID of next process to run
+    /// * `None` - No runnable processes
+    pub fn schedule_next_process(&mut self) -> Option<u32> {
+        // Update current time
+        let current_time_ns = unsafe { crate::syscall::read_cycle_counter() };
+
+        // Replenish CBS servers
+        for i in 0..self.server_count {
+            if let Some(ref mut server) = self.servers[i] {
+                if server.server_type == ServerType::Process {
+                    // Check if period has elapsed
+                    if current_time_ns >= server.next_replenish_ns {
+                        server.remaining_budget_ns = server.budget_ns;
+                        server.next_replenish_ns = current_time_ns + server.period_ns;
+
+                        // Update deadline (EDF)
+                        server.deadline_ns = current_time_ns + server.period_ns;
+                    }
+                }
+            }
+        }
+
+        // EDF: Pick server with earliest deadline that has budget
+        let mut earliest_deadline = u64::MAX;
+        let mut selected_pid = None;
+
+        for i in 0..self.server_count {
+            if let Some(ref server) = self.servers[i] {
+                if server.server_type == ServerType::Process &&
+                   server.active &&
+                   server.remaining_budget_ns > 0 {
+                    if server.deadline_ns < earliest_deadline {
+                        earliest_deadline = server.deadline_ns;
+                        selected_pid = Some(server.server_id);
+                    }
+                }
+            }
+        }
+
+        selected_pid
+    }
+
+    /// Remove process from scheduler
+    ///
+    /// Called when a process exits or is terminated. Removes the CBS server
+    /// associated with the process.
+    ///
+    /// # Arguments
+    ///
+    /// * `pid` - Process ID to remove
+    pub fn remove_process(&mut self, pid: u32) {
+        // Find and remove the server
+        for i in 0..self.server_count {
+            if let Some(ref server) = self.servers[i] {
+                if server.server_type == ServerType::Process && server.server_id == pid {
+                    // Remove by shifting remaining servers
+                    for j in i..self.server_count - 1 {
+                        self.servers[j] = self.servers[j + 1].take();
+                    }
+                    self.servers[self.server_count - 1] = None;
+                    self.server_count -= 1;
+                    return;
+                }
+            }
+        }
+    }
+
+    /// Consume budget for current process
+    ///
+    /// Called from timer interrupt to track how much CPU time a process has used.
+    /// When budget is exhausted, the process is de-scheduled until next replenishment.
+    ///
+    /// # Arguments
+    ///
+    /// * `pid` - Process ID consuming budget
+    /// * `consumed_ns` - Nanoseconds of CPU time used
+    pub fn consume_process_budget(&mut self, pid: u32, consumed_ns: u64) {
+        for i in 0..self.server_count {
+            if let Some(ref mut server) = self.servers[i] {
+                if server.server_type == ServerType::Process && server.server_id == pid {
+                    server.remaining_budget_ns = server.remaining_budget_ns.saturating_sub(consumed_ns);
+                    return;
+                }
+            }
+        }
+    }
+
+    /// Get process scheduling statistics
+    ///
+    /// Returns information about a specific process's CBS server.
+    ///
+    /// # Arguments
+    ///
+    /// * `pid` - Process ID to query
+    ///
+    /// # Returns
+    ///
+    /// * `Some((budget_ns, remaining_ns, deadline_ns))` - Server statistics
+    /// * `None` - Process not found
+    pub fn get_process_stats(&self, pid: u32) -> Option<(u64, u64, u64)> {
+        for i in 0..self.server_count {
+            if let Some(ref server) = self.servers[i] {
+                if server.server_type == ServerType::Process && server.server_id == pid {
+                    return Some((
+                        server.budget_ns,
+                        server.remaining_budget_ns,
+                        server.deadline_ns,
+                    ));
+                }
+            }
+        }
+        None
     }
 }
 
