@@ -6,7 +6,8 @@ impl super::Shell {
             unsafe {
                 crate::uart_print(b"Usage: stresstest <memory|commands|multi|learning|redteam|chaos|compare|report> [options]\n");
                 crate::uart_print(b"  memory: --duration MS --target-pressure PCT (default: 50%) --oom-probability PCT\n");
-                crate::uart_print(b"  chaos:  --duration MS --failure-rate PCT\n");
+                crate::uart_print(b"  chaos:  --duration MS --failure-rate PCT [--quiet]\n");
+                crate::uart_print(b"  report: [--all] (shows last 5 by default, --all shows all 16)\n");
             }
             return;
         }
@@ -39,17 +40,26 @@ impl super::Shell {
             "chaos" => {
                 let mut duration_ms: u64 = 10_000;
                 let mut failure_rate: u8 = 0;
+                let mut verbose: bool = true;
                 let mut i = 1;
-                while i + 1 < args.len() {
+                while i < args.len() {
                     match args[i] {
                         "--duration" => {
-                            duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms);
-                            i+=2;
+                            if i + 1 < args.len() {
+                                duration_ms = args[i+1].parse::<u64>().unwrap_or(duration_ms);
+                                i+=2;
+                            } else { i+=1; }
                         },
                         "--failure-rate" => {
-                            let v = args[i+1].parse::<u16>().unwrap_or(failure_rate as u16);
-                            failure_rate = v.min(100) as u8;
-                            i+=2;
+                            if i + 1 < args.len() {
+                                let v = args[i+1].parse::<u16>().unwrap_or(failure_rate as u16);
+                                failure_rate = v.min(100) as u8;
+                                i+=2;
+                            } else { i+=1; }
+                        },
+                        "--quiet" => {
+                            verbose = false;
+                            i+=1;
                         },
                         _ => { i+=1; }
                     }
@@ -57,6 +67,7 @@ impl super::Shell {
                 let mut cfg = crate::stress_test::StressTestConfig::new(crate::stress_test::StressTestType::Chaos);
                 cfg.duration_ms = duration_ms;
                 cfg.fail_rate_percent = failure_rate;
+                cfg.verbose = verbose;
                 if failure_rate > 0 { cfg.expect_failures = true; }
                 let _metrics = crate::stress_test::run_chaos_stress(cfg);
             }
@@ -196,8 +207,41 @@ impl super::Shell {
                 }
             }
             "report" => {
-                let hist = crate::stress_test::get_history(); unsafe { crate::uart_print(b"\n=== Stress Test History (last 16) ===\n"); }
-                let mut any = false; for rec in hist.iter() { any = true; unsafe { crate::uart_print(b"  Type: "); match rec.test_type { crate::stress_test::StressTestType::Memory => crate::uart_print(b"memory"), crate::stress_test::StressTestType::Commands => crate::uart_print(b"commands"), crate::stress_test::StressTestType::MultiSubsystem => crate::uart_print(b"multi"), crate::stress_test::StressTestType::Learning => crate::uart_print(b"learning"), crate::stress_test::StressTestType::RedTeam => crate::uart_print(b"redteam"), crate::stress_test::StressTestType::Chaos => crate::uart_print(b"chaos"), } crate::uart_print(b" | Duration: "); self.print_number_simple(rec.metrics.test_duration_ms as u64); crate::uart_print(b" ms | Actions: "); self.print_number_simple(rec.metrics.actions_taken as u64); crate::uart_print(b" | OOM: "); self.print_number_simple(rec.metrics.oom_events as u64); crate::uart_print(b"\n"); } }
+                let show_all = args.len() > 1 && args[1] == "--all";
+                let hist = crate::stress_test::get_history();
+                unsafe {
+                    if show_all {
+                        crate::uart_print(b"\n=== Stress Test History (all entries) ===\n");
+                    } else {
+                        crate::uart_print(b"\n=== Stress Test History (last 5) ===\n");
+                    }
+                }
+                let mut any = false;
+                let mut count = 0usize;
+                let entries: alloc::vec::Vec<_> = hist.iter().collect();
+                let start_idx = if show_all { 0 } else { entries.len().saturating_sub(5) };
+                for rec in entries.iter().skip(start_idx) {
+                    any = true;
+                    count += 1;
+                    unsafe {
+                        crate::uart_print(b"  Type: ");
+                        match rec.test_type {
+                            crate::stress_test::StressTestType::Memory => crate::uart_print(b"memory"),
+                            crate::stress_test::StressTestType::Commands => crate::uart_print(b"commands"),
+                            crate::stress_test::StressTestType::MultiSubsystem => crate::uart_print(b"multi"),
+                            crate::stress_test::StressTestType::Learning => crate::uart_print(b"learning"),
+                            crate::stress_test::StressTestType::RedTeam => crate::uart_print(b"redteam"),
+                            crate::stress_test::StressTestType::Chaos => crate::uart_print(b"chaos"),
+                        }
+                        crate::uart_print(b" | Duration: ");
+                        self.print_number_simple(rec.metrics.test_duration_ms as u64);
+                        crate::uart_print(b" ms | Actions: ");
+                        self.print_number_simple(rec.metrics.actions_taken as u64);
+                        crate::uart_print(b" | OOM: ");
+                        self.print_number_simple(rec.metrics.oom_events as u64);
+                        crate::uart_print(b"\n");
+                    }
+                }
                 if !any { unsafe { crate::uart_print(b"  (no history)\n"); } }
             }
             _ => unsafe { crate::uart_print(b"Usage: stresstest <memory|commands|multi|learning|redteam|chaos|compare|report> [options]\n"); }
