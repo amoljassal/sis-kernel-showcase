@@ -55,12 +55,12 @@ impl CBSEDFSchedulerTests {
             .execute_command("det on 10000000 100000000 100000000")
             .await?;
 
-        let admitted = output1.contains("admitted") ||
-                      output1.contains("DET") ||
-                      output1.contains("enabled");
+        let admitted = output1.raw_output.contains("admitted") ||
+                      output1.raw_output.contains("DET") ||
+                      output1.raw_output.contains("enabled");
 
         // Try to exceed utilization bound (should be rejected)
-        let output2 = self.kernel_interface
+        let _output2 = self.kernel_interface
             .execute_command("det on 90000000 100000000 100000000")
             .await?;
 
@@ -71,7 +71,7 @@ impl CBSEDFSchedulerTests {
             log::info!("    ✅ Admission control: PASSED");
         } else {
             log::warn!("    ❌ Admission control: FAILED");
-            log::debug!("       Output: {}", output.raw_output);
+            log::debug!("       Output: {}", output1.raw_output);
         }
 
         Ok(passed)
