@@ -275,6 +275,7 @@ pub fn run_memory_stress(config: StressTestConfig) -> StressTestMetrics {
     let mut pressure_sum = 0u64;
     let mut pressure_samples = 0u32;
     let mut iteration = 0u32;
+    let mut last_compaction_time = 0u64;  // Track last compaction for cooldown
 
     // PRE-FILL: Start near target pressure instead of from 0%
     // This prevents initial overshoot to 100%
@@ -337,19 +338,32 @@ pub fn run_memory_stress(config: StressTestConfig) -> StressTestMetrics {
 
         // PROACTIVE COMPACTION: When autonomy enabled, keep pressure below target
         // Autonomy takes preventive action to maintain lower average pressure
+        //
+        // TUNING HISTORY (linked_list_allocator fragmentation limits):
+        // v1: Every 20 iterations at 48% → 417 compactions/10s → OOM (too frequent)
+        // v2: Cooldown 1s at 40% → 8 compactions/10s → no OOM but zero impact (too low threshold)
+        // v3: Cooldown 1s at 46% + 5-10% → good pressure reduction but still 1 OOM (too aggressive)
+        // v4: Cooldown 1.5s at 46% + 3-5% → gentle enough to avoid fragmentation OOM
+        let now_us = crate::time::get_timestamp_us();
+        let time_since_last_compact_ms = (now_us - last_compaction_time) / 1000;
+
         if crate::autonomy::AUTONOMOUS_CONTROL.is_enabled() &&
-           current_pressure >= 48 &&
-           iteration % 20 == 0 &&
-           allocations.len() > 10 {
+           current_pressure >= 46 &&  // Sweet spot: close to target (50%) but still proactive
+           time_since_last_compact_ms >= 1500 &&  // Cooldown: max 1 per 1.5s (gentler than 1/sec)
+           allocations.len() > 15 {  // Need sufficient allocations to compact
             // Proactive compaction: reduce pressure before it overshoots target
             COMPACTION_TRIGGERS.fetch_add(1, Ordering::Relaxed);
             AUTONOMY_METRICS.record_proactive_compaction();
+            last_compaction_time = now_us;
 
-            let compaction_free = prng::rand_range(3, 7);
-            for _ in 0..compaction_free {
+            // Gentle compaction: free 3-5% of allocations (was 5-10%, caused fragmentation OOM)
+            // Balances pressure reduction vs fragmentation risk with linked_list_allocator
+            let compaction_pct = prng::rand_range(3, 5);
+            let free_count = (allocations.len() * compaction_pct as usize) / 100;
+            for _ in 0..free_count.max(5) {  // Minimum 5 frees per compaction
                 if !allocations.is_empty() {
-                    let idx = prng::rand_range(0, allocations.len() as u32) as usize;
-                    allocations.remove(idx);
+                    // Remove from end to reduce fragmentation (sequential freeing)
+                    allocations.pop();
                 }
             }
         }
