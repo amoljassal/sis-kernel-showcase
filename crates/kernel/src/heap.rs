@@ -115,11 +115,23 @@ unsafe impl GlobalAlloc for StatsTrackingAllocator {
             crate::verify_lightweight!(CriticalOperation::MemoryAllocation, "heap_alloc");
         }
 
-        // Large-allocation fast path: back big blocks with contiguous pages from buddy
+        // Phase 8: Use slab for small allocations (<= 256 bytes)
+        const SLAB_THRESHOLD: usize = 256;
         const LARGE_ALLOC_THRESHOLD: usize = 1 * 1024 * 1024; // 1 MiB
-        let ptr = if layout.size() >= LARGE_ALLOC_THRESHOLD {
+
+        let ptr = if layout.size() <= SLAB_THRESHOLD {
+            // Try slab allocator first (fast path for small objects)
+            crate::mm::slab::allocate(layout)
+                .map(|p| p.as_ptr())
+                .unwrap_or_else(|| {
+                    // Fallback to linked-list allocator if slab fails
+                    ALLOCATOR.alloc(layout)
+                })
+        } else if layout.size() >= LARGE_ALLOC_THRESHOLD {
+            // Large allocations use buddy allocator
             large_alloc(layout)
         } else {
+            // Medium allocations use linked-list allocator
             ALLOCATOR.alloc(layout)
         };
 
@@ -182,6 +194,17 @@ unsafe impl GlobalAlloc for StatsTrackingAllocator {
         stats.total_deallocations += 1;
         stats.current_allocated = stats.current_allocated.saturating_sub(layout.size());
         drop(stats); // Release lock before potentially expensive operations
+
+        // Phase 8: Check slab first for small deallocations
+        const SLAB_THRESHOLD: usize = 256;
+
+        if layout.size() <= SLAB_THRESHOLD {
+            // Try slab deallocation
+            if let Some(nn_ptr) = NonNull::new(ptr) {
+                crate::mm::slab::deallocate(nn_ptr, layout);
+                return;
+            }
+        }
 
         // Check if this was a large allocation backed by buddy pages
         if large_dealloc(ptr) {

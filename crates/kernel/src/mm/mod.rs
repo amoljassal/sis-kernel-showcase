@@ -9,6 +9,7 @@
 
 pub mod page;
 pub mod buddy;
+pub mod slab;  // Phase 8: Slab allocator for small objects
 pub mod paging;
 pub mod address_space;
 pub mod fault;

@@ -110,6 +110,8 @@ pub mod build_info;
 // Test utilities (only compiled for testing)
 #[cfg(test)]
 pub mod test_utils;
+// Phase 8: Performance tests and benchmarks
+pub mod tests;
 // PMU helpers (feature-gated usage)
 pub mod pmu;
 // Platform layer abstraction (UART/GIC/Timer/MMU descriptors)
@@ -332,6 +334,11 @@ mod bringup {
         super::uart_print(b"MM: BUDDY READY (");
         print_number(stats.total_pages);
         super::uart_print(b" pages)\n");
+
+        // Phase 8: Initialize slab allocator
+        super::uart_print(b"MM: SLAB ALLOCATOR\n");
+        crate::mm::slab::init();
+        super::uart_print(b"MM: SLAB READY (5 caches: 16-256 bytes)\n");
 
         // Initialize process table before VFS (needed for syscalls)
         super::uart_print(b"PROCESS: INIT TABLE\n");
