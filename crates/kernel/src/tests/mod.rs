@@ -5,3 +5,6 @@
 
 #[cfg(feature = "benchmarks")]
 pub mod slab_bench;
+
+#[cfg(feature = "benchmarks")]
+pub mod virtio_bench;

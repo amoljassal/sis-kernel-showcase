@@ -2,16 +2,20 @@
 ///
 /// Implements virtio-blk device (Device ID 2) for block storage
 /// Supports read/write operations through virtqueues
+///
+/// Phase 8 Milestone 3: Enhanced with zero-copy DMA and pipelined I/O
+/// for improved throughput (target: >100 MB/s sequential reads).
 
 use crate::lib::error::{Result, Errno};
 use crate::virtio::{VirtIOMMIOTransport, VirtIOMMIOOffset};
-use crate::virtio::virtqueue::VirtQueue;
+use crate::virtio::virtqueue::{VirtQueue, PREFERRED_QUEUE_SIZE};
 use crate::block::{BlockDevice, BlockDeviceOps, register_block_device};
 use alloc::sync::Arc;
 use alloc::vec;
-// use alloc::vec::Vec; // not needed: we use vec! macro and to_vec()
+use alloc::vec::Vec;
 use alloc::string::String;
 use spin::Mutex;
+use core::ptr::NonNull;
 
 /// VirtIO Block Device feature bits
 const VIRTIO_BLK_F_SIZE_MAX: u32 = 1 << 1;    // Maximum segment size
@@ -33,6 +37,10 @@ const VIRTIO_BLK_T_WRITE_ZEROES: u32 = 13; // Write zeroes
 const VIRTIO_BLK_S_OK: u8 = 0;
 const VIRTIO_BLK_S_IOERR: u8 = 1;
 const VIRTIO_BLK_S_UNSUPP: u8 = 2;
+
+/// DMA buffer pool configuration (Phase 8)
+const DMA_BUFFER_COUNT: usize = 64;
+const DMA_BUFFER_SIZE: usize = 4096;
 
 /// VirtIO Block device configuration
 #[repr(C)]
@@ -81,6 +89,87 @@ struct VirtioBlkReq {
     sector: u64,
 }
 
+/// DMA buffer for zero-copy operations (Phase 8)
+#[derive(Debug)]
+struct DmaBuffer {
+    /// Physical address
+    physical_addr: u64,
+    /// Virtual address
+    virtual_addr: NonNull<u8>,
+    /// In use flag
+    in_use: bool,
+}
+
+/// DMA buffer pool for zero-copy I/O (Phase 8)
+struct BufferPool {
+    /// Pre-allocated DMA buffers
+    buffers: Vec<DmaBuffer>,
+    /// Free list (indices of available buffers)
+    free_list: Vec<usize>,
+}
+
+impl BufferPool {
+    /// Create new buffer pool with pre-allocated DMA buffers
+    fn new() -> Result<Self> {
+        let mut buffers = Vec::with_capacity(DMA_BUFFER_COUNT);
+        let mut free_list = Vec::with_capacity(DMA_BUFFER_COUNT);
+
+        for i in 0..DMA_BUFFER_COUNT {
+            // Allocate physically contiguous page (4KB)
+            let page_phys = crate::mm::alloc_page()
+                .ok_or(Errno::ENOMEM)?;
+
+            // Get virtual address (direct mapping assumed)
+            let page_virt = crate::mm::phys_to_virt(page_phys);
+            let virtual_addr = NonNull::new(page_virt as *mut u8)
+                .ok_or(Errno::ENOMEM)?;
+
+            buffers.push(DmaBuffer {
+                physical_addr: page_phys,
+                virtual_addr,
+                in_use: false,
+            });
+
+            free_list.push(i);
+        }
+
+        Ok(BufferPool { buffers, free_list })
+    }
+
+    /// Allocate a DMA buffer from the pool
+    fn allocate(&mut self) -> Option<usize> {
+        let idx = self.free_list.pop()?;
+        self.buffers[idx].in_use = true;
+        Some(idx)
+    }
+
+    /// Free a DMA buffer back to the pool
+    fn free(&mut self, idx: usize) {
+        if idx < self.buffers.len() && self.buffers[idx].in_use {
+            self.buffers[idx].in_use = false;
+            self.free_list.push(idx);
+        }
+    }
+
+    /// Find buffer index by virtual address
+    fn find_buffer(&self, addr: usize) -> Option<usize> {
+        self.buffers.iter().position(|buf| {
+            let buf_addr = buf.virtual_addr.as_ptr() as usize;
+            addr >= buf_addr && addr < buf_addr + DMA_BUFFER_SIZE
+        })
+    }
+
+    /// Get buffer by index
+    fn get(&self, idx: usize) -> Option<&DmaBuffer> {
+        self.buffers.get(idx)
+    }
+
+    /// Get statistics
+    fn stats(&self) -> (usize, usize) {
+        (self.buffers.len(), self.free_list.len())
+    }
+}
+
 /// VirtIO Block device driver
 pub struct VirtioBlkDevice {
     /// MMIO transport
@@ -93,6 +182,8 @@ pub struct VirtioBlkDevice {
     block_size: u32,
     /// Device name
     name: String,
+    /// DMA buffer pool (Phase 8: zero-copy support)
+    dma_pool: Mutex<BufferPool>,
 }
 
 impl VirtioBlkDevice {
@@ -114,13 +205,16 @@ impl VirtioBlkDevice {
         let version = transport.lock().version();
         let queue = if version >= 2 {
             // Modern path: use split virtqueues with explicit addresses
+            // Phase 8: Prefer larger queue size (256) for better throughput
             let queue_size = {
                 let t = transport.lock();
                 t.write_reg(VirtIOMMIOOffset::QueueSel, 0);
-                let size = t.read_reg(VirtIOMMIOOffset::QueueNumMax);
-                if size == 0 || size > 32768 { return Err(Errno::EINVAL); }
-                size as u16
+                let max_size = t.read_reg(VirtIOMMIOOffset::QueueNumMax);
+                if max_size == 0 || max_size > 32768 { return Err(Errno::EINVAL); }
+                // Use preferred size (256) if device supports it, otherwise use max
+                core::cmp::min(PREFERRED_QUEUE_SIZE, max_size as u16)
             };
+            crate::info!("virtio-blk: using queue size {}", queue_size);
             let q = VirtQueue::new(0, queue_size)?;
             {
                 let t = transport.lock();
@@ -138,13 +232,15 @@ impl VirtioBlkDevice {
             q
         } else {
             // Legacy path: contiguous region + QueuePFN/QueueAlign/GuestPageSize
+            // Phase 8: Prefer larger queue size (256) for better throughput
             let queue_size = {
                 let t = transport.lock();
                 t.write_reg(VirtIOMMIOOffset::QueueSel, 0);
-                let size = t.read_reg(VirtIOMMIOOffset::QueueNumMax);
-                if size == 0 || size > 32768 { return Err(Errno::EINVAL); }
-                size as u16
+                let max_size = t.read_reg(VirtIOMMIOOffset::QueueNumMax);
+                if max_size == 0 || max_size > 32768 { return Err(Errno::EINVAL); }
+                core::cmp::min(PREFERRED_QUEUE_SIZE, max_size as u16)
             };
+            crate::info!("virtio-blk: using queue size {} (legacy)", queue_size);
             let q = VirtQueue::new_contiguous(0, queue_size)?;
             {
                 let t = transport.lock();
@@ -164,12 +260,17 @@ impl VirtioBlkDevice {
 
         let queue = Arc::new(Mutex::new(queue));
 
+        // Phase 8: Initialize DMA buffer pool for zero-copy I/O
+        let dma_pool = BufferPool::new()?;
+        crate::info!("virtio-blk: initialized DMA buffer pool ({} buffers)", DMA_BUFFER_COUNT);
+
         Ok(Self {
             transport,
             queue,
             capacity_sectors: config.capacity,
             block_size: config.blk_size,
             name,
+            dma_pool: Mutex::new(dma_pool),
         })
     }
 
@@ -268,6 +369,111 @@ impl VirtioBlkDevice {
                 return Err(Errno::ETIMEDOUT);
             }
         }
+    }
+
+    /// Read block using zero-copy DMA (Phase 8)
+    ///
+    /// Returns a slice pointing directly to the DMA buffer (no copy).
+    /// Caller must call `release_buffer()` when done with the data.
+    ///
+    /// # Arguments
+    /// * `sector` - Starting sector number
+    ///
+    /// # Returns
+    /// * `(buffer_index, data_slice)` - Buffer index and data slice
+    pub fn read_block_zerocopy(&self, sector: u64) -> Result<(usize, &'static [u8])> {
+        // Allocate DMA buffer
+        let buf_idx = {
+            let mut pool = self.dma_pool.lock();
+            pool.allocate().ok_or(Errno::ENOSPC)?
+        };
+
+        let (physical_addr, virtual_addr) = {
+            let pool = self.dma_pool.lock();
+            let buf = pool.get(buf_idx).ok_or(Errno::EINVAL)?;
+            (buf.physical_addr, buf.virtual_addr.as_ptr() as u64)
+        };
+
+        // Allocate request header
+        let mut req_header = VirtioBlkReq {
+            req_type: VIRTIO_BLK_T_IN,
+            reserved: 0,
+            sector,
+        };
+        let req_header_addr = &mut req_header as *mut VirtioBlkReq as u64;
+
+        // Allocate status byte
+        let mut status: u8 = 0xFF;
+        let status_addr = &mut status as *mut u8 as u64;
+
+        // Build descriptor chain: header (read) -> DMA buffer (write) -> status (write)
+        let buffers = vec![
+            (req_header_addr, core::mem::size_of::<VirtioBlkReq>() as u32, false),
+            (physical_addr, DMA_BUFFER_SIZE as u32, true),
+            (status_addr, 1, true),
+        ];
+
+        // Submit request
+        {
+            let mut queue = self.queue.lock();
+            queue.add_buf(&buffers)?;
+
+            // Notify device
+            if queue.notify_needed() {
+                self.transport.lock().write_reg(VirtIOMMIOOffset::QueueNotify, 0);
+            }
+        }
+
+        // Wait for completion
+        let mut spins: usize = 0;
+        loop {
+            let mut queue = self.queue.lock();
+            if let Some((_desc_id, _len)) = queue.get_used_buf() {
+                // Check status
+                if status != VIRTIO_BLK_S_OK {
+                    // Free buffer on error
+                    let mut pool = self.dma_pool.lock();
+                    pool.free(buf_idx);
+                    crate::warn!("virtio-blk: zero-copy read error (status={})", status);
+                    return Err(Errno::EIO);
+                }
+
+                // Return zero-copy slice (points directly to DMA buffer)
+                let slice = unsafe {
+                    core::slice::from_raw_parts(virtual_addr as *const u8, DMA_BUFFER_SIZE)
+                };
+                return Ok((buf_idx, slice));
+            }
+
+            core::hint::spin_loop();
+            spins = spins.wrapping_add(1);
+            if spins > 50_000_000 {
+                // Free buffer on timeout
+                let mut pool = self.dma_pool.lock();
+                pool.free(buf_idx);
+                crate::warn!("virtio-blk: zero-copy read timeout (sector={})", sector);
+                return Err(Errno::ETIMEDOUT);
+            }
+        }
+    }
+
+    /// Release DMA buffer back to pool (Phase 8)
+    ///
+    /// Must be called after finishing with zero-copy data.
+    ///
+    /// # Arguments
+    /// * `buf_idx` - Buffer index returned by `read_block_zerocopy()`
+    pub fn release_buffer(&self, buf_idx: usize) {
+        let mut pool = self.dma_pool.lock();
+        pool.free(buf_idx);
+    }
+
+    /// Get DMA buffer pool statistics (Phase 8)
+    ///
+    /// Returns (total_buffers, free_buffers)
+    pub fn get_dma_stats(&self) -> (usize, usize) {
+        let pool = self.dma_pool.lock();
+        pool.stats()
     }
 }
 

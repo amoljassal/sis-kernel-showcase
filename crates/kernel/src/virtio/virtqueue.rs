@@ -2,11 +2,21 @@
 ///
 /// Implements split virtqueues (descriptor table, available ring, used ring)
 /// for VirtIO 1.0+ specification.
+///
+/// Phase 8 Milestone 3: Enhanced with queue depth optimization and pipelining
+/// for improved throughput (target: >100 MB/s sequential reads).
 
 use crate::lib::error::{Result, Errno};
 use crate::mm;
 use core::ptr;
 use core::sync::atomic::{compiler_fence, Ordering};
+use alloc::collections::VecDeque;
+
+/// Preferred queue size (Phase 8: increased from 128 to 256 for better throughput)
+pub const PREFERRED_QUEUE_SIZE: u16 = 256;
+
+/// Maximum in-flight requests for pipelining
+pub const MAX_IN_FLIGHT: usize = 32;
 
 /// Virtqueue descriptor flags
 pub const VIRTQ_DESC_F_NEXT: u16 = 1;     // Descriptor continues via next field
@@ -25,6 +35,15 @@ pub struct VirtqDesc {
     pub flags: u16,
     /// Next descriptor index (if flags & VIRTQ_DESC_F_NEXT)
     pub next: u16,
+}
+
+/// Completion token for tracking in-flight requests
+#[derive(Debug, Clone, Copy)]
+pub struct CompletionToken {
+    /// Descriptor ID
+    pub desc_id: u16,
+    /// Length written by device
+    pub len: u32,
 }
 
 /// VirtQueue implementation
@@ -49,6 +68,10 @@ pub struct VirtQueue {
     avail_idx_shadow: u16,
     /// Free descriptor list
     free_list: alloc::vec::Vec<u16>,
+    /// Number of in-flight requests (Phase 8: pipelining support)
+    in_flight_count: usize,
+    /// Completion queue for pipelined operations
+    completion_queue: VecDeque<CompletionToken>,
 }
 
 impl VirtQueue {
@@ -109,6 +132,8 @@ impl VirtQueue {
             last_used_idx: 0,
             avail_idx_shadow: 0,
             free_list,
+            in_flight_count: 0,
+            completion_queue: VecDeque::with_capacity(MAX_IN_FLIGHT),
         })
     }
 
@@ -160,6 +185,8 @@ impl VirtQueue {
             last_used_idx: 0,
             avail_idx_shadow: 0,
             free_list,
+            in_flight_count: 0,
+            completion_queue: VecDeque::with_capacity(MAX_IN_FLIGHT),
         })
     }
 
@@ -345,6 +372,93 @@ impl VirtQueue {
             }
         }
         Ok(())
+    }
+
+    /// Submit request without waiting (for pipelining)
+    ///
+    /// # Arguments
+    /// * `buffers` - List of (addr, len, writeable) tuples
+    ///
+    /// Phase 8 Milestone 3: Added for request pipelining
+    pub fn submit_nowait(&mut self, buffers: &[(u64, u32, bool)]) -> Result<u16> {
+        let desc_id = self.add_buf(buffers)?;
+        self.in_flight_count += 1;
+        Ok(desc_id)
+    }
+
+    /// Submit multiple requests without waiting (batch pipelining)
+    ///
+    /// # Arguments
+    /// * `requests` - List of buffer lists
+    ///
+    /// Returns number of requests successfully submitted.
+    /// Phase 8 Milestone 3: Enables submission of up to 32 requests in parallel.
+    pub fn submit_batch(&mut self, requests: &[&[(u64, u32, bool)]]) -> Result<usize> {
+        let mut submitted = 0;
+
+        for req_buffers in requests {
+            // Check if we've hit the in-flight limit
+            if self.in_flight_count >= MAX_IN_FLIGHT {
+                // Poll for some completions first
+                self.poll_completions()?;
+
+                // If still at limit, stop submitting
+                if self.in_flight_count >= MAX_IN_FLIGHT {
+                    break;
+                }
+            }
+
+            // Submit request
+            self.submit_nowait(req_buffers)?;
+            submitted += 1;
+        }
+
+        Ok(submitted)
+    }
+
+    /// Poll for completed requests (non-blocking)
+    ///
+    /// Returns the number of completions found.
+    /// Phase 8 Milestone 3: Non-blocking completion polling for pipelined I/O.
+    pub fn poll_completions(&mut self) -> Result<usize> {
+        let mut completed = 0;
+
+        // Check for used buffers
+        while self.has_used_buf() {
+            if let Some((desc_id, len)) = self.get_used_buf() {
+                self.completion_queue.push_back(CompletionToken { desc_id, len });
+                if self.in_flight_count > 0 {
+                    self.in_flight_count -= 1;
+                }
+                completed += 1;
+            } else {
+                break;
+            }
+        }
+
+        Ok(completed)
+    }
+
+    /// Get next completion from queue (after polling)
+    ///
+    /// Returns None if no completions are queued.
+    /// Phase 8 Milestone 3: Retrieve completion token for pipelined requests.
+    pub fn get_completion(&mut self) -> Option<CompletionToken> {
+        self.completion_queue.pop_front()
+    }
+
+    /// Get number of in-flight requests
+    ///
+    /// Phase 8 Milestone 3: Monitor pipeline depth.
+    pub fn in_flight_count(&self) -> usize {
+        self.in_flight_count
+    }
+
+    /// Check if pipeline has capacity for more requests
+    ///
+    /// Phase 8 Milestone 3: Check if we can submit more requests without blocking.
+    pub fn can_submit(&self) -> bool {
+        self.in_flight_count < MAX_IN_FLIGHT && !self.free_list.is_empty()
     }
 }
 
