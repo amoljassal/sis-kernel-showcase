@@ -114,6 +114,9 @@ pub mod test_utils;
 pub mod tests;
 // PMU helpers (feature-gated usage)
 pub mod pmu;
+// Profiling framework (Phase 8 Milestone 5 - feature-gated)
+#[cfg(feature = "profiling")]
+pub mod profiling;
 // Platform layer abstraction (UART/GIC/Timer/MMU descriptors)
 pub mod platform;
 // Deterministic scheduler scaffolding (feature-gated)
