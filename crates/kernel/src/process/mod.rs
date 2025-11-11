@@ -10,12 +10,14 @@ pub mod wait;
 pub mod current;
 pub mod exec;
 pub mod signal;
+pub mod fork;  // Phase 8: Fork scaffolding
 
 // Re-export commonly used types and functions
 pub use task::{Pid, Task, ProcessState, Credentials, MemoryManager, Vma, VmaFlags};
 pub use pid::{init_process_table, alloc_pid, insert_task, get_process_table};
 pub use wait::{do_wait4, do_exit, WNOHANG, WUNTRACED, WCONTINUED};
 pub use signal::{Signal, SignalQueue, SignalAction, send_signal, deliver_signals};
+pub use fork::{do_fork, do_exec, get_fork_stats, ForkStats};
 
 // Use SMP scheduler if multiple CPUs are online, otherwise use simple scheduler
 pub fn current_pid() -> Pid {

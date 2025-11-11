@@ -11,6 +11,7 @@ pub mod page;
 pub mod buddy;
 pub mod slab;  // Phase 8: Slab allocator for small objects
 pub mod paging;
+pub mod pagetable;  // Phase 8: Page table duplication for fork
 pub mod address_space;
 pub mod fault;
 pub mod page_cache;
@@ -57,6 +58,11 @@ pub use page_cache::{
 pub use aslr::{
     randomize_address_space, is_aslr_enabled,
     AslrConfig,
+};
+
+pub use pagetable::{
+    duplicate_user_page_table, clone_page_table_with_cow,
+    free_page_table, get_page_table_stats,
 };
 
 /// Allocate physically contiguous pages and return physical address
