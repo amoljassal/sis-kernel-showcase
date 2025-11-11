@@ -69,13 +69,13 @@ impl DecisionTracesTests {
             .await?;
 
         // Check for decision trace indicators
-        let collection_ok = output.contains("Decision") ||
-                           output.contains("decision") ||
-                           output.contains("Input:") ||
-                           output.contains("Output:") ||
-                           output.contains("Outcome:") ||
-                           output.contains("reward") ||
-                           output.contains("conf");
+        let collection_ok = output.raw_output.contains("Decision") ||
+                           output.raw_output.contains("decision") ||
+                           output.raw_output.contains("Input:") ||
+                           output.raw_output.contains("Output:") ||
+                           output.raw_output.contains("Outcome:") ||
+                           output.raw_output.contains("reward") ||
+                           output.raw_output.contains("conf");
 
         let passed = collection_ok;
 
@@ -83,7 +83,7 @@ impl DecisionTracesTests {
             log::info!("    ✅ Decision trace collection: PASSED");
         } else {
             log::warn!("    ❌ Decision trace collection: FAILED");
-            log::debug!("       Output: {}", output);
+            log::debug!("       Output: {}", output.raw_output);
         }
 
         Ok(passed)
@@ -121,11 +121,11 @@ impl DecisionTracesTests {
             .await?;
 
         // Look for buffer statistics
-        let buffer_ok = output.contains("buffer") ||
-                       output.contains("Buffer") ||
-                       output.contains("decision") ||
-                       output.contains("count") ||
-                       output.contains("capacity");
+        let buffer_ok = output.raw_output.contains("buffer") ||
+                       output.raw_output.contains("Buffer") ||
+                       output.raw_output.contains("decision") ||
+                       output.raw_output.contains("count") ||
+                       output.raw_output.contains("capacity");
 
         let passed = buffer_ok;
 
@@ -133,7 +133,7 @@ impl DecisionTracesTests {
             log::info!("    ✅ Buffer management: PASSED");
         } else {
             log::warn!("    ❌ Buffer management: FAILED");
-            log::debug!("       Output: {}", output);
+            log::debug!("       Output: {}", output.raw_output);
         }
 
         Ok(passed)
@@ -172,11 +172,11 @@ impl DecisionTracesTests {
             .await?;
 
         // Check for export success
-        let export_ok = output.contains("export") ||
-                       output.contains("Export") ||
-                       output.contains("decisions") ||
-                       output.contains("json") ||
-                       output.contains("/tmp/decisions.json");
+        let export_ok = output.raw_output.contains("export") ||
+                       output.raw_output.contains("Export") ||
+                       output.raw_output.contains("decisions") ||
+                       output.raw_output.contains("json") ||
+                       output.raw_output.contains("/tmp/decisions.json");
 
         let passed = export_ok;
 
@@ -184,7 +184,7 @@ impl DecisionTracesTests {
             log::info!("    ✅ Decision export: PASSED");
         } else {
             log::warn!("    ❌ Decision export: FAILED");
-            log::debug!("       Output: {}", output);
+            log::debug!("       Output: {}", output.raw_output);
         }
 
         Ok(passed)
@@ -212,11 +212,11 @@ impl DecisionTracesTests {
             .await?;
 
         // Check for replay success
-        let replay_ok = output.contains("replay") ||
-                       output.contains("Replay") ||
-                       output.contains("decisions") ||
-                       output.contains("complete") ||
-                       output.contains("deterministic");
+        let replay_ok = output.raw_output.contains("replay") ||
+                       output.raw_output.contains("Replay") ||
+                       output.raw_output.contains("decisions") ||
+                       output.raw_output.contains("complete") ||
+                       output.raw_output.contains("deterministic");
 
         let passed = replay_ok;
 
@@ -224,7 +224,7 @@ impl DecisionTracesTests {
             log::info!("    ✅ Decision replay: PASSED");
         } else {
             log::warn!("    ❌ Decision replay: FAILED");
-            log::debug!("       Output: {}", output);
+            log::debug!("       Output: {}", output.raw_output);
         }
 
         Ok(passed)

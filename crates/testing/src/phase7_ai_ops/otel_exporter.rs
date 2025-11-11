@@ -52,11 +52,11 @@ impl OTelExporterTests {
             .await?;
 
         // Check for initialization indicators
-        let init_ok = output.contains("OTel") ||
-                     output.contains("otel") ||
-                     output.contains("initialized") ||
-                     output.contains("exporter") ||
-                     output.contains("CONNECTED");
+        let init_ok = output.raw_output.contains("OTel") ||
+                     output.raw_output.contains("otel") ||
+                     output.raw_output.contains("initialized") ||
+                     output.raw_output.contains("exporter") ||
+                     output.raw_output.contains("CONNECTED");
 
         let passed = init_ok;
 
@@ -64,7 +64,7 @@ impl OTelExporterTests {
             log::info!("    ✅ OTel initialization: PASSED");
         } else {
             log::warn!("    ❌ OTel initialization: FAILED");
-            log::debug!("       Output: {}", output);
+            log::debug!("       Output: {}", output.raw_output);
         }
 
         Ok(passed)
@@ -112,12 +112,12 @@ impl OTelExporterTests {
             .await?;
 
         // Check for span attributes
-        let span_ok = output.contains("span") ||
-                     output.contains("inference") ||
-                     output.contains("llm") ||
-                     output.contains("trace") ||
-                     output.contains("duration") ||
-                     output.contains("attributes");
+        let span_ok = output.raw_output.contains("span") ||
+                     output.raw_output.contains("inference") ||
+                     output.raw_output.contains("llm") ||
+                     output.raw_output.contains("trace") ||
+                     output.raw_output.contains("duration") ||
+                     output.raw_output.contains("attributes");
 
         let passed = span_ok;
 
@@ -125,7 +125,7 @@ impl OTelExporterTests {
             log::info!("    ✅ Span creation: PASSED");
         } else {
             log::warn!("    ❌ Span creation: FAILED");
-            log::debug!("       Output: {}", output);
+            log::debug!("       Output: {}", output.raw_output);
         }
 
         Ok(passed)
@@ -164,12 +164,12 @@ impl OTelExporterTests {
             .await?;
 
         // Look for trace hierarchy indicators
-        let context_ok = output.contains("parent") ||
-                        output.contains("child") ||
-                        output.contains("trace_id") ||
-                        output.contains("span_id") ||
-                        output.contains("graph") ||
-                        output.contains("inference");
+        let context_ok = output.raw_output.contains("parent") ||
+                        output.raw_output.contains("child") ||
+                        output.raw_output.contains("trace_id") ||
+                        output.raw_output.contains("span_id") ||
+                        output.raw_output.contains("graph") ||
+                        output.raw_output.contains("inference");
 
         let passed = context_ok;
 
@@ -177,7 +177,7 @@ impl OTelExporterTests {
             log::info!("    ✅ Context propagation: PASSED");
         } else {
             log::warn!("    ❌ Context propagation: FAILED");
-            log::debug!("       Output: {}", output);
+            log::debug!("       Output: {}", output.raw_output);
         }
 
         Ok(passed)
@@ -219,9 +219,9 @@ impl OTelExporterTests {
         let export_time = start.elapsed();
 
         // Check export succeeded
-        let export_ok = output.contains("export") ||
-                       output.contains("trace") ||
-                       output.contains("span");
+        let export_ok = output.raw_output.contains("export") ||
+                       output.raw_output.contains("trace") ||
+                       output.raw_output.contains("span");
 
         // Check timing (adjusted for smaller batch)
         let timing_ok = export_time < Duration::from_secs(1);
@@ -237,7 +237,7 @@ impl OTelExporterTests {
             log::info!("    ✅ Batch export: PASSED");
         } else {
             log::warn!("    ❌ Batch export: FAILED");
-            log::debug!("       Output: {}", output);
+            log::debug!("       Output: {}", output.raw_output);
         }
 
         Ok(passed)
