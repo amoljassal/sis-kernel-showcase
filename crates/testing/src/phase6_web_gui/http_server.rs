@@ -21,6 +21,7 @@ pub struct HTTPServerTestResults {
 /// HTTP server test suite
 pub struct HTTPServerTests {
     kernel_interface: KernelCommandInterface,
+    #[allow(dead_code)]
     base_url: String,
 }
 

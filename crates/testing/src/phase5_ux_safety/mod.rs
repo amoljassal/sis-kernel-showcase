@@ -26,6 +26,7 @@ pub struct Phase5Results {
 
 /// Phase 5 UX safety test suite
 pub struct Phase5UXSafetySuite {
+    #[allow(dead_code)]
     kernel_interface: KernelCommandInterface,
     safety_controls: safety_controls::SafetyControlsTests,
     explainability: explainability::ExplainabilityTests,

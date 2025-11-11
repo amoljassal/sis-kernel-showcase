@@ -22,6 +22,7 @@ pub struct RealTimeUpdateTestResults {
 /// Real-time update test suite
 pub struct RealTimeUpdateTests {
     kernel_interface: KernelCommandInterface,
+    #[allow(dead_code)]
     ws_url: String,
 }
 

@@ -26,6 +26,7 @@ pub struct Phase2Results {
 
 /// Phase 2 governance test suite
 pub struct Phase2GovernanceSuite {
+    #[allow(dead_code)]
     kernel_interface: KernelCommandInterface,
     model_governance: model_governance::ModelGovernanceTests,
     policy_enforcement: policy_enforcement::PolicyEnforcementTests,

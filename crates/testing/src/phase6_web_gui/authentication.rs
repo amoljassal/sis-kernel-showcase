@@ -21,6 +21,7 @@ pub struct AuthenticationTestResults {
 /// Authentication test suite
 pub struct AuthenticationTests {
     kernel_interface: KernelCommandInterface,
+    #[allow(dead_code)]
     base_url: String,
 }
 

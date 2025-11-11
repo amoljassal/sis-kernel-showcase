@@ -70,6 +70,7 @@ impl Default for Phase7Results {
 
 /// Phase 7 AI Operations Platform test suite
 pub struct Phase7AIOpsSuite {
+    #[allow(dead_code)]
     kernel_interface: KernelCommandInterface,
     model_lifecycle: model_lifecycle::ModelLifecycleTests,
     shadow_mode: shadow_mode::ShadowModeTests,

@@ -30,6 +30,7 @@ pub struct Phase6Results {
 
 /// Phase 6 Web GUI test suite
 pub struct Phase6WebGUISuite {
+    #[allow(dead_code)]
     kernel_interface: KernelCommandInterface,
     http_server: http_server::HTTPServerTests,
     websocket: websocket::WebSocketTests,

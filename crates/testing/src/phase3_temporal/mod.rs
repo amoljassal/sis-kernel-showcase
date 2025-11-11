@@ -26,6 +26,7 @@ pub struct Phase3Results {
 
 /// Phase 3 temporal isolation test suite
 pub struct Phase3TemporalSuite {
+    #[allow(dead_code)]
     kernel_interface: KernelCommandInterface,
     active_isolation: active_isolation::ActiveIsolationTests,
     deadline_validation: deadline_validation::DeadlineValidationTests,
