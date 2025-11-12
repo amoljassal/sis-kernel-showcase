@@ -35,7 +35,7 @@ pub struct QEMURuntimeManager {
     _config: TestSuiteConfig,
     cluster: QEMUCluster,
     processes: HashMap<usize, Child>,
-    serial_writers: Arc<Mutex<HashMap<usize, tokio::io::WriteHalf<tokio::fs::File>>>>,  // Write half of PTY devices
+    serial_writers: Arc<Mutex<HashMap<usize, tokio::fs::File>>>,  // PTY write file descriptors
 }
 
 impl QEMURuntimeManager {
@@ -366,18 +366,51 @@ impl QEMURuntimeManager {
             }
         });
 
-        // Open PTY device for bidirectional communication
-        let pty_file = tokio::fs::OpenOptions::new()
+        // Open PTY device separately for reading and writing to avoid contention
+        // Using tokio::io::split on a single file causes blocking issues with PTY devices
+        let pty_read = tokio::fs::OpenOptions::new()
             .read(true)
+            .open(&pty_path)
+            .await
+            .map_err(|e| TestError::QEMUError {
+                message: format!("Failed to open PTY {} for reading: {}", pty_path, e)
+            })?;
+
+        let pty_write = tokio::fs::OpenOptions::new()
             .write(true)
             .open(&pty_path)
             .await
             .map_err(|e| TestError::QEMUError {
-                message: format!("Failed to open PTY {}: {}", pty_path, e)
+                message: format!("Failed to open PTY {} for writing: {}", pty_path, e)
             })?;
 
-        // Split PTY into read and write halves for concurrent access
-        let (read_half, write_half) = tokio::io::split(pty_file);
+        // Configure PTY in raw mode for proper character transmission
+        // This is critical for capturing kernel output properly
+        #[allow(unsafe_code)] // Required for FFI termios operations via nix crate
+        {
+            use std::os::unix::io::{AsRawFd, BorrowedFd};
+            use nix::sys::termios::{self, SetArg};
+            let fd = pty_read.as_raw_fd();
+            // SAFETY: pty_read owns the fd and remains valid for the duration of this block
+            let borrowed_fd = unsafe { BorrowedFd::borrow_raw(fd) };
+            match termios::tcgetattr(&borrowed_fd) {
+                Ok(mut termios_attrs) => {
+                    termios::cfmakeraw(&mut termios_attrs);
+                    if let Err(e) = termios::tcsetattr(&borrowed_fd, SetArg::TCSANOW, &termios_attrs) {
+                        log::warn!("Failed to configure PTY {} in raw mode: {}", pty_path, e);
+                    } else {
+                        log::debug!("Configured PTY {} in raw mode", pty_path);
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to get PTY {} attributes: {}", pty_path, e);
+                }
+            }
+        }
+
+        // Use separate file descriptors for reading and writing
+        let read_half = pty_read;
+        let write_half = pty_write;
 
         // Spawn background task to capture serial output from read half and write to log file
         let serial_log_path = instance.serial_log_path.clone();
