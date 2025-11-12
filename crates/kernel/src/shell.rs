@@ -275,31 +275,31 @@ impl Shell {
                 "temporaliso" => { self.cmd_temporal_isolation_demo(); true },
                 #[cfg(feature = "demos")]
                 "phase3validation" => { self.cmd_phase3_validation(); true },
-                #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
+                #[cfg(feature = "llm")]
                 "llmctl" => { self.llmctl_cmd(&parts[1..]); true },
-                #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
+                #[cfg(feature = "llm")]
                 "llminfer" => { self.llminfer_cmd(&parts[1..]); true },
-                #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
+                #[cfg(feature = "llm")]
                 "llmstats" => { self.llmstats_cmd(); true },
-                #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
+                #[cfg(feature = "llm")]
                 "llmstream" => { self.llmstream_cmd(&parts[1..]); true },
-                #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
+                #[cfg(feature = "llm")]
                 "llmgraph" => { self.llmgraph_cmd(&parts[1..]); true },
-                #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
+                #[cfg(feature = "llm")]
                 "llmjson" => { self.llm_audit_json_cmd(); true },
-                #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
+                #[cfg(feature = "llm")]
                 "llmsig" => { self.llmsig_cmd(&parts[1..]); true },
-                #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
+                #[cfg(feature = "llm")]
                 "llmpoll" => { self.llmpoll_cmd(&parts[1..]); true },
-                #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
+                #[cfg(feature = "llm")]
                 "llmcancel" => { self.llmcancel_cmd(&parts[1..]); true },
-                #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
+                #[cfg(feature = "llm")]
                 "llmsummary" => { self.llm_summary_cmd(); true },
-                #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
+                #[cfg(feature = "llm")]
                 "llmverify" => { self.llm_verify_cmd(); true },
-                #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
+                #[cfg(feature = "llm")]
                 "llmhash" => { self.llm_hash_cmd(&parts[1..]); true },
-                #[cfg(all(feature = "llm", not(feature = "ai-ops")))]
+                #[cfg(feature = "llm")]
                 "llmkey" => { self.llm_key_cmd(); true },
                 "ctlkey" => { self.cmd_ctlkey(&parts[1..]); true },
                 "ctladmin" => { self.cmd_ctladmin(&parts[1..]); true },
