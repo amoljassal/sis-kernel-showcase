@@ -25,8 +25,10 @@ use alloc::boxed::Box;
 pub fn launch_all_apps() -> Result<()> {
     let wm = crate::window_manager::get_manager()
         .ok_or(crate::lib::error::Errno::ENODEV)?;
+
     let ctx = graphics::get_context()
         .ok_or(crate::lib::error::Errno::ENODEV)?;
+
     let ui_mgr = crate::ui::get_manager()
         .ok_or(crate::lib::error::Errno::ENODEV)?;
 

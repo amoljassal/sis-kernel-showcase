@@ -560,7 +560,8 @@ mod bringup {
 
                     // Launch all applications in windows
                     super::uart_print(b"APPS: LAUNCHING ALL APPS\n");
-                    if let Ok(()) = crate::applications::launch_all_apps() {
+                    let result = crate::applications::launch_all_apps();
+                    if let Ok(()) = result {
                         super::uart_print(b"APPS: ALL APPS RUNNING\n");
                     } else {
                         super::uart_print(b"APPS: LAUNCH FAILED\n");

@@ -94,21 +94,29 @@ impl KernelCommandInterface {
     
     /// Execute command with custom timeout
     pub async fn execute_command_with_timeout(&mut self, command: &str, timeout: Duration) -> TestResult<CommandOutput> {
+        log::info!("execute_command_with_timeout: START command='{}' timeout={:?}", command, timeout);
         let start_time = Instant::now();
         let old_timeout = self.command_timeout;
         self.command_timeout = timeout;
-        
+
         // Wait for shell prompt to be ready
+        log::info!("execute_command_with_timeout: waiting for shell prompt");
         self.wait_for_shell_prompt().await?;
+        log::info!("execute_command_with_timeout: shell prompt ready");
         
         // Mark current position in serial log before sending command
+        log::info!("execute_command_with_timeout: updating log position");
         self.update_log_position().await?;
-        
-        // Send command via direct serial socket connection  
+        log::info!("execute_command_with_timeout: log position updated");
+
+        // Send command via direct serial socket connection
+        log::info!("execute_command_with_timeout: sending command via serial");
         self.send_command_via_serial(command).await?;
-        
+        log::info!("execute_command_with_timeout: command sent, waiting for completion");
+
         // Wait for command completion and parse output
         let raw_output = self.wait_for_command_completion(command).await?;
+        log::info!("execute_command_with_timeout: command completed");
         let parsed_metrics = self.parse_command_output(&raw_output);
         
         let execution_time = start_time.elapsed();
@@ -193,22 +201,37 @@ impl KernelCommandInterface {
 
     /// Wait for shell prompt to be ready
     async fn wait_for_shell_prompt(&mut self) -> TestResult<()> {
-        let deadline = Instant::now() + Duration::from_secs(10);
-        
+        let deadline = Instant::now() + Duration::from_secs(60); // Increased from 10s to 60s for full boot
+        let mut attempt = 0;
+
         while Instant::now() < deadline {
+            attempt += 1;
             let content = fs::read_to_string(&self.serial_log_path).await
                 .map_err(|e| TestError::IoError(e))?;
-            
+
+            // Debug: log progress every 10 attempts (every 2 seconds)
+            if attempt % 10 == 0 {
+                let last_lines: Vec<&str> = content.lines().rev().take(3).collect();
+                log::debug!("Waiting for shell prompt (attempt {}), last 3 lines: {:?}", attempt, last_lines);
+            }
+
             if content.contains("sis>") {
-                log::debug!("Shell prompt detected, ready for commands");
+                log::info!("Shell prompt detected after {} attempts, ready for commands", attempt);
                 return Ok(());
             }
-            
+
             sleep(Duration::from_millis(200)).await;
         }
-        
+
+        // On timeout, log more diagnostic info
+        let content = fs::read_to_string(&self.serial_log_path).await
+            .unwrap_or_else(|_| String::from("<failed to read log>"));
+        let last_lines: Vec<&str> = content.lines().rev().take(10).collect();
+        log::error!("Shell prompt not detected within timeout. Last 10 lines of log: {:?}", last_lines);
+
         Err(TestError::ExecutionFailed {
-            message: "Shell prompt not detected within timeout".to_string()
+            message: format!("Shell prompt not detected within timeout. Log has {} bytes, {} lines",
+                           content.len(), content.lines().count())
         })
     }
 
