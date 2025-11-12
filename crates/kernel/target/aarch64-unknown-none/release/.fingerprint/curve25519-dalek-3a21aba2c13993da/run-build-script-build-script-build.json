@@ -1,1 +1,0 @@
-{"rustc":9181167738083167006,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[13595581133353633439,"build_script_build",false,13607915113927530126]],"local":[{"Precalculated":"4.1.3"}],"rustflags":["-C","link-arg=-Tsrc/arch/aarch64/aarch64-qemu.ld","-C","code-model=small","-C","relocation-model=static"],"config":0,"compile_kind":0}
