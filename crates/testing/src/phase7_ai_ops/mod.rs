@@ -85,26 +85,28 @@ impl Phase7AIOpsSuite {
     /// # Arguments
     ///
     /// * `serial_log_path` - Path to QEMU serial log
+    /// * `qemu_manager` - Arc-wrapped QEMU runtime manager
+    /// * `node_id` - Node ID for PTY communication
     /// * `monitor_port` - QEMU monitor port
-    pub fn new(serial_log_path: String, monitor_port: u16) -> Self {
+    pub fn new(serial_log_path: String, qemu_manager: std::sync::Arc<crate::qemu_runtime::QEMURuntimeManager>, node_id: usize, monitor_port: u16) -> Self {
         let serial_log_path_clone = serial_log_path.clone();
 
         Self {
-            kernel_interface: KernelCommandInterface::new(serial_log_path.clone(), monitor_port),
+            kernel_interface: KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port),
             model_lifecycle: model_lifecycle::ModelLifecycleTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
             shadow_mode: shadow_mode::ShadowModeTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
             otel_exporter: otel_exporter::OTelExporterTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
             decision_traces: decision_traces::DecisionTracesTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
             integration: integration_tests::Phase7IntegrationTests::new(
-                KernelCommandInterface::new(serial_log_path_clone, monitor_port)
+                KernelCommandInterface::new(serial_log_path_clone, qemu_manager.clone(), node_id, monitor_port)
             ),
         }
     }

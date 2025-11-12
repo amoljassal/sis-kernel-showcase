@@ -322,9 +322,18 @@ impl SISTestSuite {
     }
 
     pub async fn shutdown_qemu_runtime(&mut self) -> Result<(), TestError> {
-        if let Some(mut qemu_manager) = self.qemu_runtime.take() {
-            qemu_manager.shutdown_cluster().await?;
-            log::info!("QEMU runtime shutdown complete");
+        if let Some(qemu_manager_arc) = self.qemu_runtime.take() {
+            match std::sync::Arc::try_unwrap(qemu_manager_arc) {
+                Ok(mut qemu_manager) => {
+                    qemu_manager.shutdown_cluster().await?;
+                    log::info!("QEMU runtime shutdown complete");
+                }
+                Err(arc) => {
+                    log::warn!("Cannot shutdown QEMU: Arc has multiple owners");
+                    // Store back
+                    self.qemu_runtime = Some(arc);
+                }
+            }
         }
         Ok(())
     }
@@ -338,25 +347,25 @@ impl SISTestSuite {
                 log::info!("Initializing Phase 1-8 test suites with serial log: {}", serial_log_path);
 
                 self.phase1_suite = Some(phase1_dataflow::Phase1DataflowSuite::new(
-                    serial_log_path.clone(), monitor_port
+                    serial_log_path.clone(), qemu_manager.clone(), 0, monitor_port
                 ));
                 self.phase2_suite = Some(phase2_governance::Phase2GovernanceSuite::new(
-                    serial_log_path.clone(), monitor_port
+                    serial_log_path.clone(), qemu_manager.clone(), 0, monitor_port
                 ));
                 self.phase3_suite = Some(phase3_temporal::Phase3TemporalSuite::new(
-                    serial_log_path.clone(), monitor_port
+                    serial_log_path.clone(), qemu_manager.clone(), 0, monitor_port
                 ));
                 self.phase5_suite = Some(phase5_ux_safety::Phase5UXSafetySuite::new(
-                    serial_log_path.clone(), monitor_port
+                    serial_log_path.clone(), qemu_manager.clone(), 0, monitor_port
                 ));
                 self.phase6_suite = Some(phase6_web_gui::Phase6WebGUISuite::new(
-                    serial_log_path.clone(), monitor_port
+                    serial_log_path.clone(), qemu_manager.clone(), 0, monitor_port
                 ));
                 self.phase7_suite = Some(phase7_ai_ops::Phase7AIOpsSuite::new(
-                    serial_log_path.clone(), monitor_port
+                    serial_log_path.clone(), qemu_manager.clone(), 0, monitor_port
                 ));
                 self.phase8_suite = Some(phase8_deterministic::Phase8DeterministicSuite::new(
-                    serial_log_path, monitor_port
+                    serial_log_path, qemu_manager.clone(), 0, monitor_port
                 ));
 
                 log::info!("Phase 1-8 test suites initialized successfully");
@@ -443,7 +452,7 @@ impl SISTestSuite {
         if let Some(ref qemu_manager) = self.qemu_runtime {
             if let Some(serial_log_path) = qemu_manager.get_serial_log_path(0) {
                 let monitor_port = qemu_manager.get_monitor_port(0);
-                self.ai_validation.with_kernel_interface(serial_log_path, monitor_port);
+                self.ai_validation.with_kernel_interface(serial_log_path, qemu_manager.clone(), 0, monitor_port);
                 log::info!("Kernel command interface initialized for real AI validation");
             }
         }

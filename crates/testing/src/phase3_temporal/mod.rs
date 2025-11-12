@@ -35,17 +35,17 @@ pub struct Phase3TemporalSuite {
 
 impl Phase3TemporalSuite {
     /// Create a new Phase 3 test suite
-    pub fn new(serial_log_path: String, monitor_port: u16) -> Self {
+    pub fn new(serial_log_path: String, qemu_manager: std::sync::Arc<crate::qemu_runtime::QEMURuntimeManager>, node_id: usize, monitor_port: u16) -> Self {
         Self {
-            kernel_interface: KernelCommandInterface::new(serial_log_path.clone(), monitor_port),
+            kernel_interface: KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port),
             active_isolation: active_isolation::ActiveIsolationTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
             deadline_validation: deadline_validation::DeadlineValidationTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
             latency_tests: latency_tests::LatencyTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
         }
     }

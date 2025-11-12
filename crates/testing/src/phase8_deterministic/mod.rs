@@ -92,28 +92,28 @@ impl Phase8DeterministicSuite {
     ///
     /// * `serial_log_path` - Path to QEMU serial log
     /// * `monitor_port` - QEMU monitor port
-    pub fn new(serial_log_path: String, monitor_port: u16) -> Self {
+    pub fn new(serial_log_path: String, qemu_manager: std::sync::Arc<crate::qemu_runtime::QEMURuntimeManager>, node_id: usize, monitor_port: u16) -> Self {
         let serial_log_path_clone = serial_log_path.clone();
 
         Self {
-            kernel_interface: KernelCommandInterface::new(serial_log_path.clone(), monitor_port),
+            kernel_interface: KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port),
             cbs_edf: cbs_edf_scheduler::CBSEDFSchedulerTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
             slab_allocator: slab_allocator::SlabAllocatorTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
             adaptive_memory: adaptive_memory::AdaptiveMemoryTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
             meta_agent: meta_agent::MetaAgentTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
             stress_comparison: stress_comparison::StressComparisonTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
             rate_limiting: rate_limiting::RateLimitingTests::new(
-                KernelCommandInterface::new(serial_log_path_clone, monitor_port)
+                KernelCommandInterface::new(serial_log_path_clone, qemu_manager.clone(), node_id, monitor_port)
             ),
         }
     }
