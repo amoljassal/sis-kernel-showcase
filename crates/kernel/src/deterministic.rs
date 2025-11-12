@@ -1274,6 +1274,77 @@ impl<const MAX_SERVERS: usize> DeterministicScheduler<MAX_SERVERS> {
         }
         None
     }
+
+    /// Get jitter statistics
+    ///
+    /// Returns jitter measurements in nanoseconds.
+    ///
+    /// # Returns
+    ///
+    /// * `(samples, count, max, mean)` - Jitter statistics
+    ///   - samples: Reference to jitter sample array
+    ///   - count: Number of valid samples
+    ///   - max: Maximum jitter observed (ns)
+    ///   - mean: Mean jitter (ns)
+    pub fn get_jitter_stats(&self) -> (&[u64; 64], usize, u64, u64) {
+        let mut max_jitter = 0u64;
+        let mut sum_jitter = 0u64;
+
+        for i in 0..self.jitter_count {
+            let jitter = self.jitter_samples_ns[i];
+            if jitter > max_jitter {
+                max_jitter = jitter;
+            }
+            sum_jitter += jitter;
+        }
+
+        let mean_jitter = if self.jitter_count > 0 {
+            sum_jitter / (self.jitter_count as u64)
+        } else {
+            0
+        };
+
+        (&self.jitter_samples_ns, self.jitter_count, max_jitter, mean_jitter)
+    }
+
+    /// Get deadline miss count
+    ///
+    /// Returns the total number of deadline misses detected by the scheduler.
+    pub fn get_deadline_misses(&self) -> u32 {
+        self.deadline_misses
+    }
+
+    /// Get AI inference statistics
+    ///
+    /// Returns AI-specific scheduling metrics.
+    ///
+    /// # Returns
+    ///
+    /// * `(inference_count, deadline_misses, avg_latency_ns)` - AI statistics
+    pub fn get_ai_stats(&self) -> (u32, u32, u64) {
+        let avg_latency = if self.ai_completion_count > 0 {
+            let mut sum = 0u64;
+            for i in 0..self.ai_completion_count {
+                sum += self.ai_completion_times_ns[i];
+            }
+            sum / (self.ai_completion_count as u64)
+        } else {
+            0
+        };
+
+        (self.ai_inference_count, self.ai_deadline_misses, avg_latency)
+    }
+
+    /// Reset all scheduler counters and statistics
+    pub fn reset_counters(&mut self) {
+        self.jitter_count = 0;
+        self.deadline_misses = 0;
+        self.ai_inference_count = 0;
+        self.ai_deadline_misses = 0;
+        self.ai_completion_count = 0;
+        // Note: jitter_samples_ns and ai_completion_times_ns arrays keep old data
+        // but jitter_count and ai_completion_count being 0 means they won't be read
+    }
 }
 
 // --- LLM integration helpers (minimal), behind `deterministic` feature ---
