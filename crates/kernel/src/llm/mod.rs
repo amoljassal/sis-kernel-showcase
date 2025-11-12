@@ -10,10 +10,40 @@
 //! - **Drift Detection**: Monitor model performance degradation
 //! - **Version Control**: Git-like versioning for LoRA adapters
 
+pub mod basic;
 pub mod finetune;
 pub mod state_inference;
 pub mod drift_detector;
 pub mod version;
+
+// Re-export basic LLM functions and types (Phase 0/1 - inference, audit, control)
+pub use basic::{
+    // Types
+    Quantization,
+    ModelMeta,
+    LlmConfig,
+    LlmResult,
+    // Functions
+    audit,
+    audit_print,
+    audit_print_json,
+    load_model,
+    load_model_meta,
+    load_model_with_meta,
+    infer,
+    stats,
+    configure_budget,
+    infer_stream,
+    ctl_poll,
+    ctl_poll_id,
+    ctl_cancel,
+    ctl_cancel_id,
+    ctl_print_sessions,
+    ctl_peek_meta,
+    verify_demo_model,
+    load_model_package,
+    demo_hash_for,
+};
 
 pub use finetune::{
     LoRAAdapter,
@@ -70,6 +100,8 @@ pub static VERSION_CONTROL: AdapterVersionControl = AdapterVersionControl::new()
 
 /// Initialize all LLM subsystems
 pub fn init() {
+    // Phase 0/1: Basic LLM inference and control (no explicit init needed - uses lazy statics)
+    // Phase 2: AI Governance components
     finetune::init(FineTuneConfig::default());
     state_inference::init();
     crate::info!("llm: all subsystems initialized");

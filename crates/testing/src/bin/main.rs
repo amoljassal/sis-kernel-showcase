@@ -17,11 +17,24 @@ fn create_bar(percentage: f64, width: usize) -> String {
         "\x1b[31m" // Red
     };
 
-    format!("{}{}{}{}",
-        color,
-        "█".repeat(filled),
-        "\x1b[90m░\x1b[0m".repeat(empty),
-        "\x1b[0m")
+    // Build progress bar with minimal escape sequences
+    let mut bar = String::new();
+
+    // Filled portion with color
+    if filled > 0 {
+        bar.push_str(color);
+        bar.push_str(&"█".repeat(filled));
+        bar.push_str("\x1b[0m");
+    }
+
+    // Empty portion in gray
+    if empty > 0 {
+        bar.push_str("\x1b[90m");
+        bar.push_str(&"░".repeat(empty));
+        bar.push_str("\x1b[0m");
+    }
+
+    bar
 }
 
 #[tokio::main]
@@ -115,6 +128,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     if llm_smoke {
         // Minimal path: boot QEMU, run LLM smoke, shutdown, and exit with status
+        // Set features to include BOTH llm and ai-ops (mutual exclusion removed)
+        std::env::set_var("SIS_TEST_FEATURES", "bringup,graphctl-framed,deterministic,ai-ops,crypto-real,llm,neon-optimized");
         if let Err(e) = test_suite.initialize_qemu_runtime().await {
             log::error!("Failed to initialize QEMU runtime: {}", e);
             std::process::exit(1);

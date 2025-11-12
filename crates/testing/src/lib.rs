@@ -221,7 +221,7 @@ pub struct SISTestSuite {
     pub security: security::SecurityTestSuite,
     pub ai_validation: ai::AIModelValidationSuite,
     pub reporting: reporting::IndustryReportingEngine,
-    pub qemu_runtime: Option<qemu_runtime::QEMURuntimeManager>,
+    pub qemu_runtime: Option<std::sync::Arc<qemu_runtime::QEMURuntimeManager>>,
     pub qemu_all_booted: bool,
     // Phase test suites (initialized after QEMU)
     pub phase1_suite: Option<phase1_dataflow::Phase1DataflowSuite>,
@@ -298,17 +298,17 @@ impl SISTestSuite {
         // Launch QEMU cluster
         qemu_manager.launch_cluster().await?;
         
-        // Wait for all instances to boot with reduced timeout
+        // Wait for all instances to boot with extended timeout for full feature set
         let mut all_booted = true;
         for node_id in 0..self.config.qemu_nodes {
-            if !qemu_manager.wait_for_boot(node_id, 90).await? {
-                log::warn!("Node {} failed to boot within 45 seconds", node_id);
+            if !qemu_manager.wait_for_boot(node_id, 180).await? {
+                log::warn!("Node {} failed to boot within 180 seconds", node_id);
                 all_booted = false;
                 // Continue checking other nodes to report all failures
             }
         }
 
-        self.qemu_runtime = Some(qemu_manager);
+        self.qemu_runtime = Some(std::sync::Arc::new(qemu_manager));
         self.qemu_all_booted = all_booted;
         // When QEMU is in use, default to QEMU-aware thresholds unless overridden
         // This keeps CI thresholds realistic under emulation.
@@ -382,7 +382,7 @@ impl SISTestSuite {
             if let Some(ref mgr) = self.qemu_runtime {
                 if let Some(serial_path) = mgr.get_serial_log_path(0) {
                     use crate::kernel_interface::KernelCommandInterface;
-                    let mut kci = KernelCommandInterface::new(serial_path, mgr.get_monitor_port(0));
+                    let mut kci = KernelCommandInterface::new(serial_path, mgr.clone(), 0, mgr.get_monitor_port(0));
                     // Run a minimal sequence: load + infer + llmjson check
                     let _ = kci.execute_command("llmctl load --wcet-cycles 50000").await;
                     let _ = kci.execute_command("llminfer hello world from sis shell --max-tokens 8").await;
@@ -1039,7 +1039,7 @@ impl SISTestSuite {
         }
         if let Some(ref mgr) = self.qemu_runtime {
             if let Some(serial_path) = mgr.get_serial_log_path(0) {
-                let mut kci = KernelCommandInterface::new(serial_path, mgr.get_monitor_port(0));
+                let mut kci = KernelCommandInterface::new(serial_path, mgr.clone(), 0, mgr.get_monitor_port(0));
                 // Run minimal sequence; ignore non-fatal errors to keep smoke lenient
                 let _ = kci.execute_command("llmctl load --wcet-cycles 50000").await;
                 // Capture infer output to fall back if audit parsing misses
@@ -1095,7 +1095,7 @@ impl SISTestSuite {
         use crate::kernel_interface::KernelCommandInterface;
         if let Some(ref mgr) = self.qemu_runtime {
             if let Some(serial_path) = mgr.get_serial_log_path(0) {
-                let mut kci = KernelCommandInterface::new(serial_path, mgr.get_monitor_port(0));
+                let mut kci = KernelCommandInterface::new(serial_path, mgr.clone(), 0, mgr.get_monitor_port(0));
                 let _ = kci.execute_command("llmctl load --wcet-cycles 50000").await;
                 let _ = kci.execute_command("llmctl budget --period-ns 1000000000 --max-tokens-per-period 8").await;
                 let infer_out = kci.execute_command("llminfer hello world from sis shell --max-tokens 8").await;
@@ -1126,7 +1126,7 @@ impl SISTestSuite {
         }
         if let Some(ref mgr) = self.qemu_runtime {
             if let Some(serial_path) = mgr.get_serial_log_path(0) {
-                let mut kci = KernelCommandInterface::new(serial_path, mgr.get_monitor_port(0));
+                let mut kci = KernelCommandInterface::new(serial_path, mgr.clone(), 0, mgr.get_monitor_port(0));
                 // Accept case (metadata, no signature): exercises packaging caps pass
                 let cmd_ok = "llmctl load --model 7 --ctx 512 --vocab 50000 --quant int8 --size-bytes 1048576".to_string();
                 log::info!("LLM model smoke: running accept cmd: {}", cmd_ok);

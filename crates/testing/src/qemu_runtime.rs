@@ -5,10 +5,14 @@ use crate::{TestSuiteConfig, TestError};
 use serde::{Deserialize, Serialize};
 use std::process::Stdio;
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tokio::process::{Command, Child};
 use tokio::time::{sleep, Duration};
 use std::path::{Path, PathBuf};
 use tokio::fs;
+use tokio::io::AsyncWriteExt;
+use tokio::fs::OpenOptions;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QEMUInstance {
@@ -27,11 +31,11 @@ pub struct QEMUCluster {
     pub total_nodes: usize,
 }
 
-#[derive(Debug)]
 pub struct QEMURuntimeManager {
     _config: TestSuiteConfig,
     cluster: QEMUCluster,
     processes: HashMap<usize, Child>,
+    serial_writers: Arc<Mutex<HashMap<usize, tokio::io::WriteHalf<tokio::fs::File>>>>,  // Write half of PTY devices
 }
 
 impl QEMURuntimeManager {
@@ -80,7 +84,12 @@ impl QEMURuntimeManager {
             total_nodes: config.qemu_nodes,
         };
 
-        Self { _config: config.clone(), cluster, processes: HashMap::new() }
+        Self {
+            _config: config.clone(),
+            cluster,
+            processes: HashMap::new(),
+            serial_writers: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     pub async fn build_kernel(&self) -> Result<(), TestError> {
@@ -89,8 +98,9 @@ impl QEMURuntimeManager {
         let root = Self::workspace_root();
 
         // Build features: allow override via SIS_TEST_FEATURES; default includes Phase 7/8 features
-        let features_str = if let Ok(extra) = std::env::var("SIS_TEST_FEATURES") {
-            format!("bringup,graphctl-framed,deterministic,ai-ops,crypto-real,{}", extra)
+        let features_str = if let Ok(features) = std::env::var("SIS_TEST_FEATURES") {
+            // Use the specified features directly (replace, don't append)
+            features
         } else {
             // Default: Phase 8 features (deterministic scheduler) + Phase 7 (ai-ops) + crypto
             "bringup,graphctl-framed,deterministic,ai-ops,crypto-real".to_string()
@@ -233,8 +243,9 @@ impl QEMURuntimeManager {
             "-smp".to_string(), "2".to_string(),  // 2 cores for testing
             "-m".to_string(), "512M".to_string(),  // Match manual test setup
             "-nographic".to_string(),
-            // Use stdio with tee for both interaction and logging
-            "-serial".to_string(), "stdio".to_string(),
+            // Use PTY for bidirectional serial communication
+            "-chardev".to_string(), "pty,id=serial0".to_string(),
+            "-serial".to_string(), "chardev:serial0".to_string(),
             "-monitor".to_string(), format!("tcp:localhost:{},server,nowait", instance.monitor_port),
             "-bios".to_string(), firmware_path.to_string(),
             "-drive".to_string(), format!("if=none,id=esp,format=raw,file=fat:rw:{}", instance.esp_directory),
@@ -244,9 +255,9 @@ impl QEMURuntimeManager {
             // These -append kernel params are for Linux; left out for bare-metal kernel
             "-d".to_string(), "unimp,guest_errors".to_string(),
         ];
-        
+
         // Note: HVF is intentionally disabled for stability in bare‑metal bring‑up tests
-        
+
         // Add network device for distributed testing (use device variant for ARM virt)
         qemu_args.extend([
             "-netdev".to_string(), "user,id=n0".to_string(),
@@ -264,9 +275,10 @@ impl QEMURuntimeManager {
         ]);
 
         log::debug!("QEMU command: qemu-system-aarch64 {}", qemu_args.join(" "));
-        
-        let qemu_process = Command::new("qemu-system-aarch64")
+
+        let mut qemu_process = Command::new("qemu-system-aarch64")
             .args(qemu_args)
+            .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -274,9 +286,172 @@ impl QEMURuntimeManager {
                 message: format!("Failed to launch QEMU instance {}: {}", instance.node_id, e)
             })?;
 
+        // Read stdout to get PTY path (QEMU prints it to stdout, not stderr)
+        let stdout = qemu_process.stdout.take().expect("Failed to get stdout");
+        let stderr = qemu_process.stderr.take().expect("Failed to get stderr");
+
+        use tokio::io::AsyncBufReadExt;
+        let mut stdout_reader = tokio::io::BufReader::new(stdout).lines();
+        let mut stderr_reader = tokio::io::BufReader::new(stderr).lines();
+
+        // Wait for PTY path from QEMU output (format: "char device redirected to /dev/ttysXXX")
+        let mut pty_path = None;
+        let mut all_lines = Vec::new();
+        let mut attempts = 0;
+        while attempts < 50 && pty_path.is_none() {
+            tokio::select! {
+                line = stdout_reader.next_line() => {
+                    if let Ok(Some(line)) = line {
+                        log::debug!("QEMU stdout: {}", line);
+                        all_lines.push(line.clone());
+                        if line.contains("char device redirected to") {
+                            // Extract PTY path from line like: "char device redirected to /dev/ttys004 (label serial0)"
+                            if let Some(start) = line.find("/dev/") {
+                                if let Some(end) = line[start..].find(" ") {
+                                    pty_path = Some(line[start..start+end].to_string());
+                                } else {
+                                    // No space after path (end of line)
+                                    pty_path = Some(line[start..].trim_end_matches(')').to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+                line = stderr_reader.next_line() => {
+                    if let Ok(Some(line)) = line {
+                        log::debug!("QEMU stderr: {}", line);
+                        all_lines.push(line.clone());
+                        if line.contains("char device redirected to") {
+                            // Extract PTY path from line like: "char device redirected to /dev/ttys004 (label serial0)"
+                            if let Some(start) = line.find("/dev/") {
+                                if let Some(end) = line[start..].find(" ") {
+                                    pty_path = Some(line[start..start+end].to_string());
+                                } else {
+                                    // No space after path (end of line)
+                                    pty_path = Some(line[start..].trim_end_matches(')').to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+                _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
+                    attempts += 1;
+                }
+            }
+        }
+
+        if pty_path.is_none() {
+            log::error!("Failed to find PTY path. Captured {} lines:", all_lines.len());
+            for line in &all_lines {
+                log::error!("  {}", line);
+            }
+        }
+
+        let pty_path = pty_path.ok_or_else(|| TestError::QEMUError {
+            message: format!("Failed to get PTY path from QEMU output for instance {}", instance.node_id)
+        })?;
+
+        log::info!("Instance {} using PTY: {}", instance.node_id, pty_path);
+
+        // Spawn background tasks to drain QEMU's stdout/stderr to prevent pipe blocking
+        // This prevents QEMU output from interfering with PTY communication
+        tokio::spawn(async move {
+            while let Ok(Some(_line)) = stdout_reader.next_line().await {
+                // Discard QEMU stdout after PTY path extraction
+            }
+        });
+        tokio::spawn(async move {
+            while let Ok(Some(_line)) = stderr_reader.next_line().await {
+                // Discard QEMU stderr after PTY path extraction
+            }
+        });
+
+        // Open PTY device for bidirectional communication
+        let pty_file = tokio::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&pty_path)
+            .await
+            .map_err(|e| TestError::QEMUError {
+                message: format!("Failed to open PTY {}: {}", pty_path, e)
+            })?;
+
+        // Split PTY into read and write halves for concurrent access
+        let (read_half, write_half) = tokio::io::split(pty_file);
+
+        // Spawn background task to capture serial output from read half and write to log file
+        let serial_log_path = instance.serial_log_path.clone();
+
+        tokio::spawn(async move {
+            // Create or truncate the log file
+            let mut log_file = match OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&serial_log_path)
+                .await
+            {
+                Ok(file) => file,
+                Err(e) => {
+                    log::error!("Failed to create serial log file {}: {}", serial_log_path, e);
+                    return;
+                }
+            };
+
+            // Read from PTY in raw chunks to capture partial lines (like shell prompts)
+            use tokio::io::AsyncReadExt;
+            let mut read_half = read_half;
+            let mut buffer = vec![0u8; 4096];
+            let mut line_buffer = Vec::new();
+
+            loop {
+                // Use timeout to periodically flush partial lines
+                match tokio::time::timeout(
+                    tokio::time::Duration::from_millis(100),
+                    read_half.read(&mut buffer)
+                ).await {
+                    Ok(Ok(0)) => break, // EOF
+                    Ok(Ok(n)) => {
+                        // Process the chunk byte by byte, writing complete lines and buffering partial ones
+                        for &byte in &buffer[..n] {
+                            if byte == b'\n' {
+                                // Complete line - write with prefix
+                                let _ = log_file.write_all(b"[QEMU-OUT] ").await;
+                                let _ = log_file.write_all(&line_buffer).await;
+                                let _ = log_file.write_all(b"\n").await;
+                                let _ = log_file.flush().await;
+                                line_buffer.clear();
+                            } else if byte >= 32 || byte == b'\t' || byte == b'\r' {
+                                // Printable character or tab/CR
+                                line_buffer.push(byte);
+                            }
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        log::error!("PTY read error: {}", e);
+                        break;
+                    }
+                    Err(_) => {
+                        // Timeout - flush partial line if any
+                        if !line_buffer.is_empty() {
+                            let _ = log_file.write_all(b"[QEMU-OUT] ").await;
+                            let _ = log_file.write_all(&line_buffer).await;
+                            let _ = log_file.write_all(b"\n").await;
+                            let _ = log_file.flush().await;
+                            line_buffer.clear();
+                        }
+                    }
+                }
+            }
+
+            log::debug!("Serial log capture task finished for {}", serial_log_path);
+        });
+
+        // Store write half for command injection
+        self.serial_writers.lock().await.insert(instance.node_id, write_half);
         self.processes.insert(instance.node_id, qemu_process);
 
-        log::info!("Instance {} launched (serial log: {})", 
+        log::info!("Instance {} launched (serial log: {})",
                   instance.node_id, instance.serial_log_path);
         Ok(())
     }
@@ -312,6 +487,31 @@ impl QEMURuntimeManager {
         } else {
             Err(TestError::QEMUError {
                 message: format!("Instance {} not found in cluster", node_id)
+            })
+        }
+    }
+
+    /// Write a command to the serial console of a specific node via persistent socket connection
+    pub async fn write_command(&self, node_id: usize, command: &str) -> Result<(), TestError> {
+        let command_with_newline = format!("{}\n", command);
+
+        let mut writers = self.serial_writers.lock().await;
+        if let Some(writer) = writers.get_mut(&node_id) {
+            use tokio::io::AsyncWriteExt;
+            writer.write_all(command_with_newline.as_bytes()).await
+                .map_err(|e| TestError::QEMUError {
+                    message: format!("Failed to write command to PTY for node {}: {}", node_id, e)
+                })?;
+            writer.flush().await
+                .map_err(|e| TestError::QEMUError {
+                    message: format!("Failed to flush PTY for node {}: {}", node_id, e)
+                })?;
+
+            log::debug!("Sent command to node {} via PTY: {}", node_id, command);
+            Ok(())
+        } else {
+            Err(TestError::QEMUError {
+                message: format!("No serial writer found for node {}", node_id)
             })
         }
     }
