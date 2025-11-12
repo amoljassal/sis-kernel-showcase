@@ -35,17 +35,17 @@ pub struct Phase2GovernanceSuite {
 
 impl Phase2GovernanceSuite {
     /// Create a new Phase 2 test suite
-    pub fn new(serial_log_path: String, monitor_port: u16) -> Self {
+    pub fn new(serial_log_path: String, qemu_manager: std::sync::Arc<crate::qemu_runtime::QEMURuntimeManager>, node_id: usize, monitor_port: u16) -> Self {
         Self {
-            kernel_interface: KernelCommandInterface::new(serial_log_path.clone(), monitor_port),
+            kernel_interface: KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port),
             model_governance: model_governance::ModelGovernanceTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
             policy_enforcement: policy_enforcement::PolicyEnforcementTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
             audit_compliance: audit_compliance::AuditComplianceTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port)
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port)
             ),
         }
     }

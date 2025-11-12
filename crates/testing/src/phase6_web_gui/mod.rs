@@ -41,30 +41,30 @@ pub struct Phase6WebGUISuite {
 
 impl Phase6WebGUISuite {
     /// Create a new Phase 6 test suite
-    pub fn new(serial_log_path: String, monitor_port: u16) -> Self {
+    pub fn new(serial_log_path: String, qemu_manager: std::sync::Arc<crate::qemu_runtime::QEMURuntimeManager>, node_id: usize, monitor_port: u16) -> Self {
         let base_url = "http://localhost:8080".to_string();
         let ws_url = "ws://localhost:8080/ws".to_string();
 
         Self {
-            kernel_interface: KernelCommandInterface::new(serial_log_path.clone(), monitor_port),
+            kernel_interface: KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port),
             http_server: http_server::HTTPServerTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port),
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port),
                 base_url.clone(),
             ),
             websocket: websocket::WebSocketTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port),
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port),
                 ws_url.clone(),
             ),
             api_endpoints: api_endpoints::APIEndpointTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port),
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port),
                 base_url.clone(),
             ),
             authentication: authentication::AuthenticationTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port),
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port),
                 base_url.clone(),
             ),
             real_time: real_time_updates::RealTimeUpdateTests::new(
-                KernelCommandInterface::new(serial_log_path.clone(), monitor_port),
+                KernelCommandInterface::new(serial_log_path.clone(), qemu_manager.clone(), node_id, monitor_port),
                 ws_url.clone(),
             ),
         }

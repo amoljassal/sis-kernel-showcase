@@ -43,8 +43,8 @@ impl AIModelValidationSuite {
     }
     
     /// Initialize kernel command interface for real validation
-    pub fn with_kernel_interface(&mut self, serial_log_path: String, monitor_port: u16) {
-        self.kernel_interface = Some(KernelCommandInterface::new(serial_log_path, monitor_port));
+    pub fn with_kernel_interface(&mut self, serial_log_path: String, qemu_manager: std::sync::Arc<crate::qemu_runtime::QEMURuntimeManager>, node_id: usize, monitor_port: u16) {
+        self.kernel_interface = Some(KernelCommandInterface::new(serial_log_path, qemu_manager, node_id, monitor_port));
     }
     
     pub async fn validate_inference_accuracy(&mut self) -> Result<AIResults, TestError> {
