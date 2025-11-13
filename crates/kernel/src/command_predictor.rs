@@ -307,7 +307,7 @@ pub fn extract_command_features(cmd: &str, _args: &[&str]) -> [i16; 8] {
     features[3] = pressure << 8;
 
     // Feature 4: Current scheduling load (active operators from agent bus messages)
-    let messages = crate::agent_bus::get_all_messages();
+    let messages = crate::internal_agent_bus::get_all_messages();
     let sched_load = messages.len().min(255) as i16;
     features[4] = (sched_load * 100).min(32767);
 

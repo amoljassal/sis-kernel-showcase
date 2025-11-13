@@ -160,7 +160,7 @@ impl super::Shell {
                 unsafe { crate::uart_print(b"  Total Events: "); }
                 self.print_number_simple(total as u64);
                 unsafe { crate::uart_print(b"\n\n"); }
-                crate::agent_bus::print_bus_stats();
+                crate::internal_agent_bus::print_bus_stats();
             }
             _ => unsafe { crate::uart_print(b"Usage: coordctl <status|history|agents|conflict-stats|conflict-history|priorities|process|stats> [--json]\n"); }
         }

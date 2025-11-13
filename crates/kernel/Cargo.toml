@@ -80,6 +80,8 @@ shadow-mode = []      # Shadow agent, canary deployment
 otel = []             # OpenTelemetry exporter, drift detection
 decision-traces = []  # Decision trace buffer and export
 initramfs-models = [] # Embed models as initramfs (cpio newc) for integration tests
+# Phase 9: Agentic Platform
+agentsys = []         # Capability-based system for LLM agents
 
 [build-dependencies]
 chrono = "0.4"

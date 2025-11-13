@@ -1236,7 +1236,7 @@ pub fn get_last_decision() -> MetaDecision {
 
 /// Periodic meta-agent tick: check if decision is needed and execute
 pub fn meta_agent_tick() {
-    let current_time = crate::agent_bus::get_timestamp_us();
+    let current_time = crate::internal_agent_bus::get_timestamp_us();
 
     let should_decide = META_AGENT.lock().should_decide(current_time);
     if !should_decide {
@@ -1257,7 +1257,7 @@ pub fn meta_agent_tick() {
 
 /// Force a meta-agent decision immediately (for testing/debugging)
 pub fn force_meta_decision() -> MetaDecision {
-    let current_time = crate::agent_bus::get_timestamp_us();
+    let current_time = crate::internal_agent_bus::get_timestamp_us();
     let decision = META_AGENT.lock().decide(current_time);
     let _ = META_AGENT.lock().execute_decision(&decision);
     decision
@@ -1268,7 +1268,7 @@ pub fn force_meta_decision() -> MetaDecision {
 /// This performs inference with a hypothetical state WITHOUT modifying
 /// the agent's actual state or statistics. Used for "what-if" scenario analysis.
 pub fn simulate_decision_with_state(hypothetical_state: MetaState) -> MetaDecision {
-    let current_time = crate::agent_bus::get_timestamp_us();
+    let current_time = crate::internal_agent_bus::get_timestamp_us();
     let mut agent = META_AGENT.lock();
 
     // Save original state
@@ -1366,17 +1366,17 @@ pub fn collect_telemetry() -> MetaState {
     state.memory_failures = heap_stats.allocation_failures().min(100) as u8;
 
     // Collect scheduling telemetry from agent bus
-    let messages = crate::agent_bus::get_all_messages();
+    let messages = crate::internal_agent_bus::get_all_messages();
     let mut deadline_misses = 0u8;
     let mut load_high = false;
 
     for msg in messages.iter() {
         match msg {
-            crate::agent_bus::AgentMessage::SchedulingLoadHigh { deadline_misses: misses, .. } => {
+            crate::internal_agent_bus::AgentMessage::SchedulingLoadHigh { deadline_misses: misses, .. } => {
                 deadline_misses = deadline_misses.saturating_add(*misses);
                 load_high = true;
             }
-            crate::agent_bus::AgentMessage::SchedulingCriticalOperatorLatency { .. } => {
+            crate::internal_agent_bus::AgentMessage::SchedulingCriticalOperatorLatency { .. } => {
                 state.critical_ops_count = state.critical_ops_count.saturating_add(1);
             }
             _ => {}
@@ -1393,14 +1393,14 @@ pub fn collect_telemetry() -> MetaState {
 
     for msg in messages.iter() {
         match msg {
-            crate::agent_bus::AgentMessage::CommandHeavyPredicted { .. } => {
+            crate::internal_agent_bus::AgentMessage::CommandHeavyPredicted { .. } => {
                 state.command_heaviness = state.command_heaviness.saturating_add(10).min(100);
             }
-            crate::agent_bus::AgentMessage::CommandRapidStream { commands_per_sec, .. } => {
+            crate::internal_agent_bus::AgentMessage::CommandRapidStream { commands_per_sec, .. } => {
                 command_count = command_count.saturating_add(*commands_per_sec);
                 rapid_detected = true;
             }
-            crate::agent_bus::AgentMessage::CommandLowAccuracy { recent_accuracy, .. } => {
+            crate::internal_agent_bus::AgentMessage::CommandLowAccuracy { recent_accuracy, .. } => {
                 state.prediction_accuracy = *recent_accuracy;
             }
             _ => {}
