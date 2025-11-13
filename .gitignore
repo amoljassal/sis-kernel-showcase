@@ -1,5 +1,6 @@
 # Rust build artifacts
 /target/
+**/target/
 *.pdb
 
 # Cargo lock file (keep for binary projects)
