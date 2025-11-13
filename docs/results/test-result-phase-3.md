@@ -2176,4 +2176,1284 @@ warning: profile package spec `bootloader_api` in profile `dev` did not match an
 [2025-11-13T13:50:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
 [2025-11-13T13:50:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
 [2025-11-13T13:50:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
-[
+[2025-11-13T13:51:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 16'' timeout=30s
+[2025-11-13T13:51:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:51:04Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:51:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:51:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:51:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:51:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:51:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:51:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 17'' timeout=30s
+[2025-11-13T13:51:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:51:34Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:51:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:51:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:51:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:51:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:51:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:52:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 18'' timeout=30s
+[2025-11-13T13:52:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:52:04Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:52:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:52:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:52:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:52:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:52:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:52:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 19'' timeout=30s
+[2025-11-13T13:52:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:52:34Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:52:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:52:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:52:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:52:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:52:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:53:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 20'' timeout=30s
+[2025-11-13T13:53:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:53:04Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:53:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:53:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:53:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:53:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:53:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:53:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 21'' timeout=30s
+[2025-11-13T13:53:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:53:34Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:53:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:53:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:53:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:53:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:53:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:54:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 22'' timeout=30s
+[2025-11-13T13:54:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:54:04Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:54:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:54:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:54:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:54:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:54:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:54:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 23'' timeout=30s
+[2025-11-13T13:54:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:54:34Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:54:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:54:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:54:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:54:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:54:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:55:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 24'' timeout=30s
+[2025-11-13T13:55:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:55:04Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:55:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:55:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:55:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:55:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:55:04Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:55:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 25'' timeout=30s
+[2025-11-13T13:55:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:55:34Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:55:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:55:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:55:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:55:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:55:34Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:56:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 26'' timeout=30s
+[2025-11-13T13:56:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:56:05Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:56:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:56:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:56:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:56:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:56:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:56:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 27'' timeout=30s
+[2025-11-13T13:56:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:56:35Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:56:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:56:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:56:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:56:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:56:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:57:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 28'' timeout=30s
+[2025-11-13T13:57:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:57:05Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:57:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:57:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:57:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:57:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:57:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:57:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 29'' timeout=30s
+[2025-11-13T13:57:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:57:35Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:57:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:57:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:57:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:57:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:57:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:58:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 30'' timeout=30s
+[2025-11-13T13:58:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:58:05Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:58:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:58:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:58:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:58:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:58:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:58:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 31'' timeout=30s
+[2025-11-13T13:58:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:58:35Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:58:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:58:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:58:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:58:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:58:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:59:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 32'' timeout=30s
+[2025-11-13T13:59:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:59:05Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:59:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:59:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:59:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:59:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:59:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T13:59:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 33'' timeout=30s
+[2025-11-13T13:59:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T13:59:35Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T13:59:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T13:59:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T13:59:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T13:59:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T13:59:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:00:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 34'' timeout=30s
+[2025-11-13T14:00:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:00:05Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:00:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:00:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:00:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:00:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:00:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:00:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 35'' timeout=30s
+[2025-11-13T14:00:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:00:35Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:00:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:00:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:00:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:00:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:00:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:01:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 36'' timeout=30s
+[2025-11-13T14:01:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:01:05Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:01:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:01:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:01:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:01:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:01:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:01:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 37'' timeout=30s
+[2025-11-13T14:01:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:01:35Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:01:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:01:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:01:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:01:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:01:35Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:02:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 38'' timeout=30s
+[2025-11-13T14:02:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:02:05Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:02:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:02:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:02:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:02:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:02:05Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:02:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 39'' timeout=30s
+[2025-11-13T14:02:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:02:36Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:02:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:02:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:02:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:02:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:02:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:03:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 40'' timeout=30s
+[2025-11-13T14:03:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:03:06Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:03:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:03:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:03:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:03:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:03:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:03:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 41'' timeout=30s
+[2025-11-13T14:03:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:03:36Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:03:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:03:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:03:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:03:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:03:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:04:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 42'' timeout=30s
+[2025-11-13T14:04:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:04:06Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:04:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:04:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:04:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:04:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:04:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:04:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 43'' timeout=30s
+[2025-11-13T14:04:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:04:36Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:04:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:04:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:04:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:04:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:04:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:05:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 44'' timeout=30s
+[2025-11-13T14:05:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:05:06Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:05:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:05:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:05:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:05:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:05:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:05:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 45'' timeout=30s
+[2025-11-13T14:05:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:05:36Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:05:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:05:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:05:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:05:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:05:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:06:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 46'' timeout=30s
+[2025-11-13T14:06:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:06:06Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:06:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:06:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:06:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:06:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:06:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:06:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 47'' timeout=30s
+[2025-11-13T14:06:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:06:36Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:06:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:06:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:06:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:06:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:06:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:07:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 48'' timeout=30s
+[2025-11-13T14:07:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:07:06Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:07:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:07:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:07:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:07:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:07:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:07:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 49'' timeout=30s
+[2025-11-13T14:07:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:07:36Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:07:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:07:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:07:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:07:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:07:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:08:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 50'' timeout=30s
+[2025-11-13T14:08:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:08:06Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:08:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:08:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:08:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:08:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:08:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:08:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 51'' timeout=30s
+[2025-11-13T14:08:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:08:36Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:08:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:08:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:08:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:08:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:08:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:09:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 52'' timeout=30s
+[2025-11-13T14:09:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:09:06Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:09:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:09:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:09:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:09:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:09:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:09:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 53'' timeout=30s
+[2025-11-13T14:09:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:09:36Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:09:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:09:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:09:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:09:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:09:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:10:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 54'' timeout=30s
+[2025-11-13T14:10:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:10:06Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:10:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:10:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:10:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:10:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:10:06Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:10:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 55'' timeout=30s
+[2025-11-13T14:10:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:10:36Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:10:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:10:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:10:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:10:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:10:36Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:11:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 56'' timeout=30s
+[2025-11-13T14:11:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:11:07Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:11:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:11:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:11:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:11:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:11:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:11:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 57'' timeout=30s
+[2025-11-13T14:11:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:11:37Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:11:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:11:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:11:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:11:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:11:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:12:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 58'' timeout=30s
+[2025-11-13T14:12:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:12:07Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:12:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:12:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:12:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:12:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:12:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:12:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 59'' timeout=30s
+[2025-11-13T14:12:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:12:37Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:12:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:12:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:12:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:12:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:12:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:13:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 60'' timeout=30s
+[2025-11-13T14:13:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:13:07Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:13:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:13:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:13:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:13:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:13:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:13:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 61'' timeout=30s
+[2025-11-13T14:13:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:13:37Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:13:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:13:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:13:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:13:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:13:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:14:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 62'' timeout=30s
+[2025-11-13T14:14:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:14:07Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:14:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:14:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:14:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:14:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:14:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:14:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 63'' timeout=30s
+[2025-11-13T14:14:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:14:37Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:14:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:14:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:14:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:14:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:14:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:15:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 64'' timeout=30s
+[2025-11-13T14:15:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:15:07Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:15:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:15:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:15:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:15:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:15:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:15:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 65'' timeout=30s
+[2025-11-13T14:15:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:15:37Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:15:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:15:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:15:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:15:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:15:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:16:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 66'' timeout=30s
+[2025-11-13T14:16:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:16:07Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:16:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:16:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:16:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:16:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:16:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:16:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 67'' timeout=30s
+[2025-11-13T14:16:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:16:37Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:16:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:16:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:16:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:16:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:16:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:17:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 68'' timeout=30s
+[2025-11-13T14:17:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:17:07Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:17:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:17:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:17:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:17:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:17:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:17:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 69'' timeout=30s
+[2025-11-13T14:17:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:17:37Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:17:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:17:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:17:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:17:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:17:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:18:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 70'' timeout=30s
+[2025-11-13T14:18:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:18:07Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:18:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:18:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:18:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:18:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:18:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:18:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 71'' timeout=30s
+[2025-11-13T14:18:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:18:37Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:18:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:18:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:18:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:18:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:18:37Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:19:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 72'' timeout=30s
+[2025-11-13T14:19:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:19:07Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:19:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:19:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:19:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:19:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:19:07Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:19:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 73'' timeout=30s
+[2025-11-13T14:19:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:19:38Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:19:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:19:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:19:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:19:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:19:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:20:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 74'' timeout=30s
+[2025-11-13T14:20:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:20:08Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:20:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:20:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:20:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:20:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:20:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:20:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 75'' timeout=30s
+[2025-11-13T14:20:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:20:38Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:20:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:20:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:20:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:20:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:20:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:21:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 76'' timeout=30s
+[2025-11-13T14:21:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:21:08Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:21:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:21:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:21:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:21:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:21:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:21:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 77'' timeout=30s
+[2025-11-13T14:21:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:21:38Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:21:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:21:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:21:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:21:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:21:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:22:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 78'' timeout=30s
+[2025-11-13T14:22:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:22:08Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:22:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:22:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:22:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:22:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:22:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:22:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 79'' timeout=30s
+[2025-11-13T14:22:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:22:38Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:22:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:22:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:22:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:22:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:22:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:23:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 80'' timeout=30s
+[2025-11-13T14:23:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:23:08Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:23:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:23:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:23:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:23:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:23:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:23:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 81'' timeout=30s
+[2025-11-13T14:23:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:23:38Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:23:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:23:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:23:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:23:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:23:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:24:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 82'' timeout=30s
+[2025-11-13T14:24:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:24:08Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:24:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:24:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:24:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:24:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:24:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:24:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 83'' timeout=30s
+[2025-11-13T14:24:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:24:38Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:24:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:24:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:24:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:24:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:24:38Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:25:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 84'' timeout=30s
+[2025-11-13T14:25:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:25:08Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:25:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:25:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:25:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:25:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:25:08Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:25:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 85'' timeout=30s
+[2025-11-13T14:25:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:25:39Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:25:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:25:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:25:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:25:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:25:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:26:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 86'' timeout=30s
+[2025-11-13T14:26:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:26:09Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:26:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:26:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:26:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:26:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:26:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:26:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 87'' timeout=30s
+[2025-11-13T14:26:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:26:39Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:26:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:26:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:26:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:26:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:26:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:27:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 88'' timeout=30s
+[2025-11-13T14:27:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:27:09Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:27:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:27:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:27:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:27:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:27:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:27:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 89'' timeout=30s
+[2025-11-13T14:27:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:27:39Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:27:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:27:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:27:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:27:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:27:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:28:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 90'' timeout=30s
+[2025-11-13T14:28:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:28:09Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:28:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:28:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:28:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:28:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:28:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:28:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 91'' timeout=30s
+[2025-11-13T14:28:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:28:39Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:28:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:28:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:28:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:28:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:28:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:29:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 92'' timeout=30s
+[2025-11-13T14:29:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:29:09Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:29:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:29:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:29:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:29:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:29:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:29:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 93'' timeout=30s
+[2025-11-13T14:29:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:29:39Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:29:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:29:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:29:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:29:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:29:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:30:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 94'' timeout=30s
+[2025-11-13T14:30:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:30:09Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:30:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:30:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:30:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:30:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:30:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:30:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 95'' timeout=30s
+[2025-11-13T14:30:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:30:39Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:30:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:30:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:30:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:30:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:30:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:31:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 96'' timeout=30s
+[2025-11-13T14:31:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:31:09Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:31:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:31:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:31:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:31:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:31:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:31:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 97'' timeout=30s
+[2025-11-13T14:31:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:31:39Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:31:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:31:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:31:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:31:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:31:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:32:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 98'' timeout=30s
+[2025-11-13T14:32:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:32:09Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:32:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:32:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:32:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:32:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:32:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:32:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llminfer 'test 99'' timeout=30s
+[2025-11-13T14:32:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:32:39Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:32:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:32:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:32:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:32:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:32:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:33:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='otelctl export-traces' timeout=30s
+[2025-11-13T14:33:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:33:09Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:33:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:33:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:33:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:33:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:33:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:33:39Z INFO  sis_testing::phase7_ai_ops::otel_exporter] OTel Exporter Tests: 1/4 passed (25%)
+[2025-11-13T14:33:39Z INFO  sis_testing::phase7_ai_ops::integration_tests] Running Phase 7 Integration Tests...
+[2025-11-13T14:33:39Z INFO  sis_testing::phase7_ai_ops::integration_tests]   Testing complete AI Ops workflow...
+[2025-11-13T14:33:39Z INFO  sis_testing::phase7_ai_ops::integration_tests]     Step 1: Register model-v2
+[2025-11-13T14:33:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llmctl register --id model-v2 --size 1024 --ctx 4096' timeout=30s
+[2025-11-13T14:33:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:33:39Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:33:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:33:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:33:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:33:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:33:39Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:09Z INFO  sis_testing::phase7_ai_ops::integration_tests]     Step 2: Deploy shadow agent
+[2025-11-13T14:34:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llmctl shadow-deploy --id model-v2 --traffic 0' timeout=30s
+[2025-11-13T14:34:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:09Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:09Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:10Z INFO  sis_testing::phase7_ai_ops::integration_tests]     Step 3: Enable OpenTelemetry tracing
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='otelctl enable-tracing' timeout=30s
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:10Z INFO  sis_testing::phase7_ai_ops::integration_tests]     Step 4: Canary rollout (10% → 50%)
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llmctl shadow-traffic --percent 10' timeout=30s
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llmctl shadow-traffic --percent 50' timeout=30s
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:10Z INFO  sis_testing::phase7_ai_ops::integration_tests]     Step 5: A/B performance comparison
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llmctl shadow-compare' timeout=30s
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:10Z INFO  sis_testing::phase7_ai_ops::integration_tests]     Step 6: Shadow promotion/retirement
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='llmctl shadow-promote' timeout=30s
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:10Z INFO  sis_testing::phase7_ai_ops::integration_tests]     Step 7: Export observability data
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='otelctl export-traces --output /tmp/traces.json' timeout=30s
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='autoctl export-decisions --output /tmp/decisions.json' timeout=30s
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:10Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:40Z INFO  sis_testing::phase7_ai_ops::integration_tests]     ✅ Complete AI Ops workflow: PASSED (78% success)
+[2025-11-13T14:34:40Z INFO  sis_testing::phase7_ai_ops::integration_tests] Phase 7 Integration Tests: 1/1 passed
+[2025-11-13T14:34:40Z INFO  sis_testing::phase7_ai_ops] ✅ Phase 7 validation complete: 40.0% (2/5 subsystems passed)
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic] 🚀 Starting Phase 8: Performance Optimization validation
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic::cbs_edf_scheduler] Running CBS+EDF Scheduler Tests...
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic::cbs_edf_scheduler]   Testing admission control...
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='graphctl create --num-operators 10' timeout=30s
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic::slab_allocator] Running Slab Allocator Tests...
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic::slab_allocator]   Testing slab performance benchmarks...
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic::slab_allocator]     ✅ Slab performance: PASSED
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic::slab_allocator]   Testing slab vs linked-list comparison...
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic::slab_allocator]     ✅ Slab comparison: PASSED
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic::slab_allocator]   Testing slab cache efficiency...
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='memctl slab-stats' timeout=30s
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic::adaptive_memory] Running Adaptive Memory Tests...
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic::adaptive_memory]   Testing strategy switching...
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='memctl strategy status' timeout=30s
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic::meta_agent] Running Meta-Agent Tests...
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic::meta_agent]   Testing meta-agent inference...
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='autoctl on' timeout=30s
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic::rate_limiting] Running Rate Limiting Tests...
+[2025-11-13T14:34:40Z INFO  sis_testing::phase8_deterministic::rate_limiting]   Testing strategy change rate limiting...
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='stresstest memory --duration 5000' timeout=30s
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:40Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='det on 10000000 100000000 100000000' timeout=30s
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:41Z INFO  sis_testing::phase8_deterministic::slab_allocator]     ✅ Cache efficiency: PASSED
+[2025-11-13T14:34:41Z INFO  sis_testing::phase8_deterministic::slab_allocator] Slab Allocator Tests: 3/3 passed
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='stresstest memory --duration 1000' timeout=30s
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='stresstest memory --duration 1000' timeout=30s
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:41Z INFO  sis_testing::phase8_deterministic::rate_limiting]     ✅ Strategy change rate limit: PASSED
+[2025-11-13T14:34:41Z INFO  sis_testing::phase8_deterministic::rate_limiting]   Testing meta-agent directive rate limiting...
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='autoctl on' timeout=30s
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:41Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='stresstest memory --duration 5000' timeout=30s
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='det on 90000000 100000000 100000000' timeout=30s
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='memctl strategy status' timeout=30s
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='autoctl audit last 10' timeout=30s
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:46Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:47Z WARN  sis_testing::phase8_deterministic::meta_agent]     ❌ Meta-agent inference: FAILED
+[2025-11-13T14:34:47Z INFO  sis_testing::phase8_deterministic::meta_agent]   Testing confidence thresholds...
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='autoctl audit last 50' timeout=30s
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:47Z INFO  sis_testing::phase8_deterministic::adaptive_memory]     ✅ Strategy switching: PASSED
+[2025-11-13T14:34:47Z INFO  sis_testing::phase8_deterministic::adaptive_memory]   Testing directive thresholds...
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='autoctl audit last 10' timeout=30s
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:47Z INFO  sis_testing::phase8_deterministic::rate_limiting]     ✅ Meta-agent directive rate limit: PASSED
+[2025-11-13T14:34:47Z INFO  sis_testing::phase8_deterministic::rate_limiting]   Testing no output flooding...
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='stresstest memory --duration 5000' timeout=30s
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:47Z INFO  sis_testing::phase8_deterministic::cbs_edf_scheduler]     ✅ Admission control: PASSED
+[2025-11-13T14:34:47Z INFO  sis_testing::phase8_deterministic::cbs_edf_scheduler]   Testing deadline miss detection...
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='det on 50000000 100000000 100000000' timeout=30s
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:47Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:49Z WARN  sis_testing::phase8_deterministic::meta_agent]     ❌ Confidence thresholds: FAILED
+[2025-11-13T14:34:49Z INFO  sis_testing::phase8_deterministic::meta_agent]   Testing multi-subsystem directives...
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='autoctl audit last 10' timeout=30s
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:49Z INFO  sis_testing::phase8_deterministic::adaptive_memory]     ✅ Directive thresholds: PASSED
+[2025-11-13T14:34:49Z INFO  sis_testing::phase8_deterministic::adaptive_memory]   Testing oscillation detection...
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='stresstest memory --duration 2000' timeout=30s
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:49Z INFO  sis_testing::phase8_deterministic::rate_limiting]     ✅ No output flooding: PASSED
+[2025-11-13T14:34:49Z INFO  sis_testing::phase8_deterministic::rate_limiting] Rate Limiting Tests: 3/3 passed
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='graphctl start 100' timeout=30s
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:49Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='det status' timeout=30s
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='memctl strategy history' timeout=30s
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:54Z INFO  sis_testing::phase8_deterministic::meta_agent]     ✅ Multi-subsystem directives: PASSED
+[2025-11-13T14:34:54Z INFO  sis_testing::phase8_deterministic::meta_agent]   Testing reward feedback...
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='autoctl audit last 50' timeout=30s
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:54Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:59Z WARN  sis_testing::phase8_deterministic::meta_agent]     ❌ Reward feedback: FAILED
+[2025-11-13T14:34:59Z INFO  sis_testing::phase8_deterministic::meta_agent] Meta-Agent Tests: 1/4 passed
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:59Z INFO  sis_testing::phase8_deterministic::cbs_edf_scheduler]     ✅ Deadline miss detection: PASSED
+[2025-11-13T14:34:59Z INFO  sis_testing::phase8_deterministic::cbs_edf_scheduler]   Testing budget replenishment...
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='det on 10000000 100000000 100000000' timeout=30s
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:34:59Z WARN  sis_testing::phase8_deterministic::adaptive_memory]     ❌ Oscillation detection: FAILED
+[2025-11-13T14:34:59Z INFO  sis_testing::phase8_deterministic::adaptive_memory]   Testing rate-limited output...
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='stresstest memory --duration 1000' timeout=30s
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:34:59Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:35:01Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:35:01Z INFO  sis_testing::phase8_deterministic::adaptive_memory]     ✅ Rate-limited output: PASSED
+[2025-11-13T14:35:01Z INFO  sis_testing::phase8_deterministic::adaptive_memory] Adaptive Memory Tests: 3/4 passed
+[2025-11-13T14:35:01Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:35:01Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='det status' timeout=30s
+[2025-11-13T14:35:01Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:35:01Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:35:01Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:35:01Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:35:01Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:35:01Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:35:01Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:35:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:35:02Z INFO  sis_testing::phase8_deterministic::cbs_edf_scheduler]     ✅ Budget replenishment: PASSED
+[2025-11-13T14:35:02Z INFO  sis_testing::phase8_deterministic::cbs_edf_scheduler]   Testing EDF priority scheduling...
+[2025-11-13T14:35:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='graphctl create --num-operators 3' timeout=30s
+[2025-11-13T14:35:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:35:02Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:35:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:35:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:35:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:35:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:35:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:35:32Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='det on 5000000 50000000 50000000' timeout=30s
+[2025-11-13T14:35:32Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:35:32Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:35:32Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:35:32Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:35:32Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:35:32Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:35:32Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:36:02Z INFO  sis_testing::phase8_deterministic::cbs_edf_scheduler]   Testing graph integration...
+[2025-11-13T14:36:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='graphctl create --num-operators 5' timeout=30s
+[2025-11-13T14:36:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:36:02Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:36:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:36:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:36:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:36:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:36:02Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:36:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='det on 10000000 100000000 100000000' timeout=30s
+[2025-11-13T14:36:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:36:33Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:36:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:36:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:36:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:36:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:36:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='graphctl add-operator 1 --in none --out 0 --prio 10' timeout=30s
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command completed
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='graphctl start 100' timeout=30s
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:37:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:37:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='det status' timeout=30s
+[2025-11-13T14:37:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:37:33Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:37:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:37:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:37:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:37:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:37:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:38:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='det off' timeout=30s
+[2025-11-13T14:38:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:38:03Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:38:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:38:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:38:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:38:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:38:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:38:33Z WARN  sis_testing::phase8_deterministic::cbs_edf_scheduler]     ❌ Graph integration: FAILED
+[2025-11-13T14:38:33Z INFO  sis_testing::phase8_deterministic::cbs_edf_scheduler] CBS+EDF Scheduler Tests: 3/5 passed (60%)
+[2025-11-13T14:38:33Z INFO  sis_testing::phase8_deterministic::stress_comparison] Running Stress Comparison Tests...
+[2025-11-13T14:38:33Z INFO  sis_testing::phase8_deterministic::stress_comparison]   Testing autonomy OFF baseline...
+[2025-11-13T14:38:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='autoctl off' timeout=30s
+[2025-11-13T14:38:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:38:33Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:38:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:38:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:38:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:38:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:38:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:39:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='stresstest memory --duration 5000' timeout=30s
+[2025-11-13T14:39:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:39:03Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:39:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:39:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:39:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:39:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:39:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:39:33Z INFO  sis_testing::phase8_deterministic::stress_comparison]   Testing autonomy ON comparison...
+[2025-11-13T14:39:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='autoctl on' timeout=30s
+[2025-11-13T14:39:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:39:33Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:39:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:39:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:39:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:39:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:39:33Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:40:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: START command='stresstest memory --duration 5000' timeout=30s
+[2025-11-13T14:40:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: waiting for shell prompt
+[2025-11-13T14:40:03Z INFO  sis_testing::kernel_interface] Shell prompt detected after 1 attempts, ready for commands
+[2025-11-13T14:40:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: shell prompt ready
+[2025-11-13T14:40:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: updating log position
+[2025-11-13T14:40:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: log position updated
+[2025-11-13T14:40:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: sending command via serial
+[2025-11-13T14:40:03Z INFO  sis_testing::kernel_interface] execute_command_with_timeout: command sent, waiting for completion
+[2025-11-13T14:40:33Z INFO  sis_testing::phase8_deterministic::stress_comparison]   Testing performance delta validation...
+[2025-11-13T14:40:33Z INFO  sis_testing::phase8_deterministic::stress_comparison]     ✅ Performance delta: PASSED
+[2025-11-13T14:40:33Z INFO  sis_testing::phase8_deterministic::stress_comparison] Stress Comparison Tests: 1/3 passed
+[2025-11-13T14:40:33Z INFO  sis_testing::phase8_deterministic] ✅ Phase 8 validation complete: 66.7% (4/6 subsystems passed)
+[2025-11-13T14:40:33Z INFO  sis_testing::reporting] Generating comprehensive industry-grade validation report
+[2025-11-13T14:40:33Z INFO  sis_testing::reporting::analytics] Generating comprehensive analytics report
+[2025-11-13T14:40:33Z INFO  sis_testing::reporting] JSON report written to: target/testing/validation_report.json
+[2025-11-13T14:40:33Z INFO  sis_testing::reporting] Analytics JSON report written to: target/testing/analytics_report.json
+[2025-11-13T14:40:33Z INFO  sis_testing::reporting::visualization] Generating interactive visualization dashboard
+[2025-11-13T14:40:33Z INFO  sis_testing::reporting] Interactive dashboard written to: target/testing/interactive_dashboard.html
+[2025-11-13T14:40:33Z INFO  sis_testing::reporting] HTML dashboard written to: target/testing/dashboard.html
+[2025-11-13T14:40:33Z INFO  sis_testing::reporting] Executive summary written to: target/testing/executive_summary.md
+[2025-11-13T14:40:33Z INFO  sis_testing::reporting] Technical report written to: target/testing/technical_report.md
+[2025-11-13T14:40:33Z INFO  sis_testing::reporting] Performance charts placeholder written to: target/testing/performance_charts.svg
+[2025-11-13T14:40:33Z INFO  sis_testing::reporting] Comprehensive industry-grade report generated in: target/testing
+[2025-11-13T14:40:33Z WARN  sis_testing] Cannot shutdown QEMU: Arc has multiple owners
+[2025-11-13T14:40:33Z INFO  sis_test_runner] 
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ╔═══════════════════════════════════════════════════════════════════╗
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ║          SIS KERNEL COMPREHENSIVE TEST VALIDATION REPORT          ║
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ╚═══════════════════════════════════════════════════════════════════╝
+[2025-11-13T14:40:33Z INFO  sis_test_runner] 
+[2025-11-13T14:40:33Z INFO  sis_test_runner]   Status: █ NEEDS IMPROVEMENT
+[2025-11-13T14:40:33Z INFO  sis_test_runner]   Overall Score: 53.8%
+[2025-11-13T14:40:33Z INFO  sis_test_runner]   Test Results: 7 PASS / 6 FAIL / 13 TOTAL
+[2025-11-13T14:40:33Z INFO  sis_test_runner] 
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ┌─────────────────────────────────────────────────────────────────┐
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ CORE SYSTEM COVERAGE                                            │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ├─────────────────────────────────────────────────────────────────┤
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │  Performance:      100.0%  ███████████████████████████████████
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │  Correctness:      100.0%  ███████████████████████████████████
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │  Security:         100.0%  ███████████████████████████████████
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │  Distributed:      100.0%  ███████████████████████████████████
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │  AI Validation:    100.0%  ███████████████████████████████████
+[2025-11-13T14:40:33Z INFO  sis_test_runner] └─────────────────────────────────────────────────────────────────┘
+[2025-11-13T14:40:33Z INFO  sis_test_runner] 
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ┌─────────────────────────────────────────────────────────────────┐
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ PHASE IMPLEMENTATION PROGRESS                                   │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ├─────────────────────────────────────────────────────────────────┤
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │  Phase 1 - AI-Native Dataflow:          30.8%  ███████░░░░░░░░░░░░░░░░
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │  Phase 2 - AI Governance:               44.4%  ██████████░░░░░░░░░░░░░
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │  Phase 3 - Temporal Isolation:          80.0%  ██████████████████░░░░░
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │  Phase 5 - UX Safety:                   33.3%  ███████░░░░░░░░░░░░░░░░
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │  Phase 6 - Web GUI Management:          47.1%  ██████████░░░░░░░░░░░░░
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │  Phase 7 - AI Operations:               40.0%  █████████░░░░░░░░░░░░░░
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │  Phase 8 - Performance Optimization:    66.7%  ███████████████░░░░░░░░
+[2025-11-13T14:40:33Z INFO  sis_test_runner] └─────────────────────────────────────────────────────────────────┘
+[2025-11-13T14:40:33Z INFO  sis_test_runner] 
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ┌─────────────────────────────────────────────────────────────────┐
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ DETAILED VALIDATION RESULTS                                     │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ├─────────────────────────────────────────────────────────────────┤
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ ✓ PASS
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Test: AI Inference <3000μs (P99)
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Target: 3000μs | Measured: 2262.00μs
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Industry Benchmark: TensorFlow Lite: 50-100ms, ONNX: 25-80ms
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ ✓ PASS
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Test: Context Switch <50µs (P95)
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Target: 50µs | Measured: 84ns
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Industry Benchmark: Relaxed for QEMU emulation (scheduler overhead)
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ ✓ PASS
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Test: Memory Safety Guaranteed
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Target: 0 violations | Measured: 0 violations in 10000 tests
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Industry Benchmark: C/C++ kernels: Multiple violations expected
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ ✓ PASS
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Test: Byzantine Consensus <6ms (100 nodes)
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Target: 6ms | Measured: 5.17ms
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Industry Benchmark: Tendermint: 5-10ms
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ ✓ PASS
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Test: Zero Critical Vulnerabilities
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Target: 0 critical | Measured: 0 critical, 0 total
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Industry Benchmark: Industry average: 5.2 critical vulnerabilities
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ ✓ PASS
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Test: AI Inference Accuracy >99.9% (Simulated validation)
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Target: 99.9% | Measured: 99.950%
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Industry Benchmark: Simulated validation: 99.9% baseline
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ ✗ FAIL
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Test: Phase 1: AI-Native Dataflow
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Target: ≥75% pass rate | Measured: 30.8%
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Industry Benchmark: Industry standard: 60-70% test coverage
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ ✗ FAIL
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Test: Phase 2: AI Governance & Safety Policies
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Target: ≥75% pass rate | Measured: 44.4%
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Industry Benchmark: Industry standard: MLOps governance 50-65%
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ ✓ PASS
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Test: Phase 3: Temporal Isolation
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Target: ≥75% pass rate | Measured: 80.0%
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Industry Benchmark: Industry standard: Real-time 70-80%
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ ✗ FAIL
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Test: Phase 5: User Experience Safety
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Target: ≥75% pass rate | Measured: 33.3%
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Industry Benchmark: Industry standard: UX safety 55-70%
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ ✗ FAIL
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Test: Phase 6: Web GUI Management
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Target: ≥75% pass rate | Measured: 47.1%
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Industry Benchmark: Industry standard: Web UI 65-75%
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ ✗ FAIL
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Test: Phase 7: AI Operations Platform
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Target: ≥75% pass rate | Measured: 40.0%
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Industry Benchmark: Industry standard: MLOps 50-70%
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │ ✗ FAIL
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Test: Phase 8: Performance Optimization
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Target: ≥75% pass rate | Measured: 66.7%
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │   Industry Benchmark: Industry standard: Performance opt 60-75%
+[2025-11-13T14:40:33Z INFO  sis_test_runner] │
+[2025-11-13T14:40:33Z INFO  sis_test_runner] └─────────────────────────────────────────────────────────────────┘
+[2025-11-13T14:40:33Z INFO  sis_test_runner] 
+[2025-11-13T14:40:33Z INFO  sis_test_runner] 📊 Reports generated in: target/testing/
+[2025-11-13T14:40:33Z INFO  sis_test_runner] 🌐 View dashboard: target/testing/dashboard.html
+[2025-11-13T14:40:33Z INFO  sis_test_runner] 
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ╔═══════════════════════════════════════════════════════════════════╗
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ║                                                                   ║
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ║  ✗ WARNING: SIS Kernel requires improvements before production  ║
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ║    readiness (53.8%). Review failed tests above.                ║
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ║                                                                   ║
+[2025-11-13T14:40:33Z INFO  sis_test_runner] ╚═══════════════════════════════════════════════════════════════════╝
+amoljassal@Amols-Mac-mini sis-kernel % 
