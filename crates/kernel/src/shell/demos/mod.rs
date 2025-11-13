@@ -244,11 +244,16 @@ impl super::Shell {
 
 // Free helpers for NPU/demo flows
 pub fn npu_driver_demo() {
-    use crate::npu_driver::{initialize_npu_driver, submit_ai_inference, get_npu_stats, NPU_DRIVER};
+    use crate::npu_driver::{initialize_npu_driver, get_npu_stats};
     unsafe { crate::uart_print(b"[NPU DRIVER] Initializing NPU driver...\n"); }
-    match initialize_npu_driver() { Ok(()) => unsafe { crate::uart_print(b"[NPU DRIVER] Initialization complete\n"); }, Err(_) => unsafe { crate::uart_print(b"[NPU DRIVER] Initialization failed\n"); } }
-    let _ = submit_ai_inference(&[1.0, 2.0, 3.0, 4.0]); let stats = get_npu_stats(); unsafe { crate::uart_print(b"[NPU DRIVER] Jobs completed: "); } super::Shell { running: true }.print_number_simple(stats.jobs_completed as u64); unsafe { crate::uart_print(b"\n"); }
-    let drv = unsafe { &*NPU_DRIVER.get() }; let _ = drv; // avoid unused
+    match initialize_npu_driver() {
+        Ok(()) => unsafe { crate::uart_print(b"[NPU DRIVER] Initialization complete\n"); },
+        Err(_) => unsafe { crate::uart_print(b"[NPU DRIVER] Initialization failed\n"); }
+    }
+    let stats = get_npu_stats();
+    unsafe { crate::uart_print(b"[NPU DRIVER] Jobs completed: "); }
+    super::Shell { running: true }.print_number_simple(stats.total_jobs_completed as u64);
+    unsafe { crate::uart_print(b"\n"); }
 }
 
 pub fn npu_driver_performance_validation() { test_npu_job_lifecycle(); test_npu_interrupt_latency(); test_npu_queue_efficiency(); }

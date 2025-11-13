@@ -92,7 +92,7 @@ mod mlctl_helpers;
 mod actorctl_helpers;
 #[cfg(feature = "llm")]
 mod llmctl_helpers;
-#[cfg(feature = "demos")]
+#[cfg(any(feature = "demos", feature = "deterministic"))]
 mod demos;
 
 impl Shell {
@@ -227,7 +227,7 @@ impl Shell {
                 "npudemo" => { self.cmd_npu_demo(); true },
                 #[cfg(feature = "demos")]
                 "npudriver" => { self.cmd_npu_driver_demo(); true },
-                #[cfg(feature = "demos")]
+                #[cfg(feature = "deterministic")]
                 "rtaivalidation" => { self.cmd_realtime_ai_validation(); true },
                 "neuralctl" => { self.cmd_neuralctl(&parts[1..]); true },
                 "agentctl" => { self.agentctl_cmd(&parts[1..]); true },
@@ -271,9 +271,9 @@ impl Shell {
                 "benchmark" => { self.cmd_benchmark(&parts[1..]); true },
                 "fullautodemo" => { self.cmd_fullautodemo(&parts[1..]); true },
                 "compliance" => { self.cmd_compliance(&parts[1..]); true },
-                #[cfg(feature = "demos")]
+                #[cfg(any(feature = "demos", feature = "deterministic"))]
                 "temporaliso" => { self.cmd_temporal_isolation_demo(); true },
-                #[cfg(feature = "demos")]
+                #[cfg(any(feature = "demos", feature = "deterministic"))]
                 "phase3validation" => { self.cmd_phase3_validation(); true },
                 #[cfg(feature = "llm")]
                 "llmctl" => { self.llmctl_cmd(&parts[1..]); true },
