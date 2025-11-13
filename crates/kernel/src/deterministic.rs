@@ -1022,11 +1022,6 @@ impl<const MAX_SERVERS: usize> DeterministicScheduler<MAX_SERVERS> {
         // Note: Deadline miss checking would need job tracking to determine original deadline
     }
 
-    /// Get AI inference statistics
-    pub fn get_ai_stats(&self) -> (u32, u32, u32) {
-        (self.ai_inference_count, self.ai_deadline_misses, self.ai_completion_count as u32)
-    }
-    
     /// Emit Phase 2 deterministic metrics including AI inference stats
     pub fn emit_metrics(&self) {
         let (used_ppm, accepted, rejected) = self.admission_controller.stats();
