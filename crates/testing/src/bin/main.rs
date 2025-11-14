@@ -50,6 +50,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let llm_smoke = args.iter().any(|a| a == "--llm-smoke");
     let llm_smoke_det = args.iter().any(|a| a == "--llm-smoke-det");
     let llm_model_smoke = args.iter().any(|a| a == "--llm-model-smoke");
+    // Parse optional --phase <N> argument (e.g., --phase 9 or --phase=9)
+    let mut selected_phase: Option<u8> = None;
+    for i in 0..args.len() {
+        if args[i] == "--phase" {
+            if let Some(val) = args.get(i + 1) {
+                if let Ok(p) = val.parse::<u8>() { selected_phase = Some(p); }
+            }
+        } else if let Some(rest) = args[i].strip_prefix("--phase=") {
+            if let Ok(p) = rest.parse::<u8>() { selected_phase = Some(p); }
+        }
+    }
 
     let config = if llm_smoke || llm_smoke_det || llm_model_smoke {
         log::info!("Mode: LLM smoke (single QEMU node)");
@@ -199,7 +210,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let validation_result = test_suite.execute_comprehensive_validation().await;
+    // If a specific phase is selected, execute only that phase's tests
+    let validation_result = if let Some(phase) = selected_phase {
+        log::info!("Phase selection detected: running Phase {} only", phase);
+        // Ensure phase suites are initialized (requires QEMU when enabled)
+        test_suite.initialize_phase_suites();
+        test_suite.execute_phase_validation(phase).await
+    } else {
+        test_suite.execute_comprehensive_validation().await
+    };
     
     // Ensure QEMU cleanup
     if let Err(e) = test_suite.shutdown_qemu_runtime().await {
@@ -265,6 +284,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let phase6 = report.test_coverage.phase6_coverage * 100.0;
             let phase7 = report.test_coverage.phase7_coverage * 100.0;
             let phase8 = report.test_coverage.phase8_coverage * 100.0;
+            let phase9 = report.test_coverage.phase9_coverage * 100.0;
 
             log::info!("│  Phase 1 - AI-Native Dataflow:        {:>6.1}%  {}", phase1, create_bar(phase1, 23));
             log::info!("│  Phase 2 - AI Governance:             {:>6.1}%  {}", phase2, create_bar(phase2, 23));
@@ -273,6 +293,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             log::info!("│  Phase 6 - Web GUI Management:        {:>6.1}%  {}", phase6, create_bar(phase6, 23));
             log::info!("│  Phase 7 - AI Operations:             {:>6.1}%  {}", phase7, create_bar(phase7, 23));
             log::info!("│  Phase 8 - Performance Optimization:  {:>6.1}%  {}", phase8, create_bar(phase8, 23));
+            log::info!("│  Phase 9 - Agentic Platform:          {:>6.1}%  {}", phase9, create_bar(phase9, 23));
             log::info!("└─────────────────────────────────────────────────────────────────┘");
             log::info!("");
 

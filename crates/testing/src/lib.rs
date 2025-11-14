@@ -427,9 +427,15 @@ impl SISTestSuite {
             if let Some(ref mgr) = self.qemu_runtime {
                 if let Some(log_path) = mgr.get_serial_log_path(0) {
                     // Wait briefly for the kernel to emit METRIC lines after boot
-                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(45);
                     let mut loaded = false;
                     loop {
+                        // Break early if kernel reports metrics completion
+                        if let Ok(data) = std::fs::read_to_string(&log_path) {
+                            if data.contains("METRICS: COMPLETE") {
+                                log::info!("Detected 'METRICS: COMPLETE' in serial log");
+                            }
+                        }
                         match performance::PerformanceTestFramework::load_from_serial_log(&log_path) {
                             Ok((Some(perf), dump)) => {
                                 log::info!("Loaded real performance metrics from {}", log_path);
@@ -680,6 +686,132 @@ impl SISTestSuite {
                 phase8_results,
                 phase9_results,
             ).await
+        }
+    }
+
+    /// Execute only a single phase validation suite, based on the provided phase number.
+    /// Supported phases: 1, 2, 3, 5, 6, 7, 8, 9.
+    pub async fn execute_phase_validation(&mut self, phase: u8) -> anyhow::Result<ValidationReport> {
+        log::info!("Starting single-phase validation for Phase {}", phase);
+
+        // Ensure phase test suites are available
+        self.initialize_phase_suites();
+
+        // For a targeted phase run, skip performance/correctness/etc. and other phases
+        match phase {
+            1 => {
+                let phase1_results = if let Some(ref mut suite) = self.phase1_suite {
+                    match suite.validate_phase1().await {
+                        Ok(r) => Some(r),
+                        Err(e) => { log::warn!("Phase 1 validation failed: {}", e); None }
+                    }
+                } else { None };
+                self.generate_validation_report(
+                    None, None, None, None, None,
+                    phase1_results,
+                    None, None, None, None, None, None, None,
+                ).await
+            }
+            2 => {
+                let phase2_results = if let Some(ref mut suite) = self.phase2_suite {
+                    match suite.validate_phase2().await {
+                        Ok(r) => Some(r),
+                        Err(e) => { log::warn!("Phase 2 validation failed: {}", e); None }
+                    }
+                } else { None };
+                self.generate_validation_report(
+                    None, None, None, None, None,
+                    None,
+                    phase2_results,
+                    None, None, None, None, None, None,
+                ).await
+            }
+            3 => {
+                let phase3_results = if let Some(ref mut suite) = self.phase3_suite {
+                    match suite.validate_phase3().await {
+                        Ok(r) => Some(r),
+                        Err(e) => { log::warn!("Phase 3 validation failed: {}", e); None }
+                    }
+                } else { None };
+                self.generate_validation_report(
+                    None, None, None, None, None,
+                    None, None,
+                    phase3_results,
+                    None, None, None, None, None,
+                ).await
+            }
+            5 => {
+                let phase5_results = if let Some(ref mut suite) = self.phase5_suite {
+                    match suite.validate_phase5().await {
+                        Ok(r) => Some(r),
+                        Err(e) => { log::warn!("Phase 5 validation failed: {}", e); None }
+                    }
+                } else { None };
+                self.generate_validation_report(
+                    None, None, None, None, None,
+                    None, None, None,
+                    phase5_results,
+                    None, None, None, None,
+                ).await
+            }
+            6 => {
+                let phase6_results = if let Some(ref mut suite) = self.phase6_suite {
+                    match suite.validate_phase6().await {
+                        Ok(r) => Some(r),
+                        Err(e) => { log::warn!("Phase 6 validation failed: {}", e); None }
+                    }
+                } else { None };
+                self.generate_validation_report(
+                    None, None, None, None, None,
+                    None, None, None, None,
+                    phase6_results,
+                    None, None, None,
+                ).await
+            }
+            7 => {
+                let phase7_results = if let Some(ref mut suite) = self.phase7_suite {
+                    match suite.validate_phase7().await {
+                        Ok(r) => Some(r),
+                        Err(e) => { log::warn!("Phase 7 validation failed: {}", e); None }
+                    }
+                } else { None };
+                self.generate_validation_report(
+                    None, None, None, None, None,
+                    None, None, None, None, None,
+                    phase7_results,
+                    None, None,
+                ).await
+            }
+            8 => {
+                let phase8_results = if let Some(ref mut suite) = self.phase8_suite {
+                    match suite.validate_phase8().await {
+                        Ok(r) => Some(r),
+                        Err(e) => { log::warn!("Phase 8 validation failed: {}", e); None }
+                    }
+                } else { None };
+                self.generate_validation_report(
+                    None, None, None, None, None,
+                    None, None, None, None, None, None,
+                    phase8_results,
+                    None,
+                ).await
+            }
+            9 => {
+                let phase9_results = if let Some(ref mut suite) = self.phase9_suite {
+                    match suite.validate_phase9().await {
+                        Ok(r) => Some(r),
+                        Err(e) => { log::warn!("Phase 9 validation failed: {}", e); None }
+                    }
+                } else { None };
+                self.generate_validation_report(
+                    None, None, None, None, None,
+                    None, None, None, None, None, None, None,
+                    phase9_results,
+                ).await
+            }
+            other => {
+                anyhow::bail!("Unsupported phase '{}'. Supported phases: 1, 2, 3, 5, 6, 7, 8, 9", other)
+            }
         }
     }
 

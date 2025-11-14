@@ -68,6 +68,8 @@ impl super::Shell {
         unsafe {
             if ok { crate::uart_print(b"Graph created\n"); }
             else { crate::uart_print(b"Graph create error\n"); }
+            // Sentinel for harness completion
+            crate::uart_print(b"CMD_DONE\n");
         }
     }
 
@@ -103,6 +105,7 @@ impl super::Shell {
                 crate::uart_print(b"Execution complete: ");
                 self.print_number_simple(steps as u64);
                 crate::uart_print(b" steps\n");
+                crate::uart_print(b"CMD_DONE\n");
             }
         } else {
             unsafe { crate::uart_print(b"[CTL] invalid steps\n"); }
@@ -192,6 +195,7 @@ impl super::Shell {
                     } else {
                         crate::uart_print(b"[GRAPH] add-operator failed\n");
                     }
+                    crate::uart_print(b"CMD_DONE\n");
                 }
             } else {
                 // Untyped add-operator (0x03)
@@ -214,6 +218,7 @@ impl super::Shell {
                     } else {
                         crate::uart_print(b"[GRAPH] add-operator failed\n");
                     }
+                    crate::uart_print(b"CMD_DONE\n");
                 }
             }
         }
@@ -231,13 +236,17 @@ impl super::Shell {
                 } else {
                     crate::uart_print(b"[GRAPH] add-operator failed\n");
                 }
+                crate::uart_print(b"CMD_DONE\n");
             }
         }
     }
 
     pub(crate) fn graphctl_destroy(&self) {
         // Print a friendly status for tests
-        unsafe { crate::uart_print(b"[GRAPH] Graph destroyed\n"); }
+        unsafe {
+            crate::uart_print(b"[GRAPH] Graph destroyed\n");
+            crate::uart_print(b"CMD_DONE\n");
+        }
     }
 
     pub(crate) fn graphctl_det(&self, args: &[&str]) {

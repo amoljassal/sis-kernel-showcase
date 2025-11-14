@@ -86,6 +86,8 @@ impl AuditLogger {
                 uart::print_hex8(record.opcode);
                 uart::print_str(" ts=");
                 uart::print_u64(record.timestamp_us);
+                uart::print_str(" allowed=");
+                if record.allowed { uart::print_str("true"); } else { uart::print_str("false"); }
                 uart::print_str("\n");
                 shown += 1;
             }
