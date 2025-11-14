@@ -10,7 +10,7 @@
 //! - Synchronous execution model (async in future phases)
 
 use crate::control::CtrlError;
-use crate::security::agent_policy::{PolicyEngine, Capability, AgentId};
+use crate::security::agent_policy::{PolicyEngine, Capability};
 use crate::security::agent_audit::AuditLogger;
 use crate::trace::metric_kv;
 
@@ -19,6 +19,7 @@ pub mod handlers;
 
 // Re-export for convenience
 pub use protocol::*;
+pub use crate::security::agent_policy::AgentId;
 
 /// Global policy engine instance (static for Phase 1)
 static mut POLICY_ENGINE: Option<PolicyEngine> = None;

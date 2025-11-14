@@ -102,8 +102,8 @@ impl QEMURuntimeManager {
             // Use the specified features directly (replace, don't append)
             features
         } else {
-            // Default: Phase 8 features (deterministic scheduler) + Phase 7 (ai-ops) + crypto
-            "bringup,graphctl-framed,deterministic,ai-ops,crypto-real".to_string()
+            // Default: All production features for comprehensive testing
+            "bringup,graphctl-framed,deterministic,ai-ops,crypto-real,agentsys,llm,otel,decision-traces,model-lifecycle,shadow-mode".to_string()
         };
 
         // Build UEFI bootloader first

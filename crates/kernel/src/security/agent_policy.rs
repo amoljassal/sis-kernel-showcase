@@ -11,7 +11,6 @@
 //! }
 //! ```
 
-use crate::security::cred::Credential;
 use crate::trace::metric_kv;
 
 /// Agent identifier (unique per agent instance)
@@ -162,8 +161,8 @@ impl PolicyEngine {
 
 /// Resource being accessed (for scope validation)
 #[derive(Debug)]
-pub enum Resource {
-    FilePath(&'static str),
+pub enum Resource<'a> {
+    FilePath(&'a str),
     FileSize(usize),
     AudioTrack(u32),
     DocRef(u32),

@@ -36,7 +36,7 @@ impl AuditLogger {
 
     /// Log an operation
     pub fn log_operation(&mut self, agent_id: AgentId, opcode: u8, allowed: bool) {
-        let timestamp_us = crate::time::uptime_us();
+        let timestamp_us = crate::time::get_timestamp_us();
 
         let record = AuditRecord {
             agent_id,
