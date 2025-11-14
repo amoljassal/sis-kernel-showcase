@@ -2348,6 +2348,7 @@ impl Shell {
             "add-channel" => { self.graphctl_add_channel(&args[1..]); }
             "add-operator" => { self.graphctl_add_operator(&args[1..]); }
             "start" => { self.graphctl_start(&args[1..]); }
+            "destroy" => { self.graphctl_destroy(); }
             "det" | "deterministic" => { self.graphctl_det(&args[1..]); }
             "stats" => { self.graphctl_stats(); }
             "show" | "export" => { self.graphctl_show_export(); }
