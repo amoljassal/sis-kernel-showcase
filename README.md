@@ -8,6 +8,8 @@
 
 > Note: This project currently runs in QEMU (emulated ARM64). All tests, stress results, and metrics reflect QEMU behavior and are not representative of physical hardware.
 
+> Terminology note: In this README, any “COMPLETE ✅” markers describe components implemented and exercised in QEMU. They are not claims of production readiness or hardware validation.
+
 An AArch64 (ARM64) operating system prototype that boots under UEFI in QEMU with kernel‑resident AI/ML components. It includes foundational OS subsystems (VFS, memory management, processes, device drivers, network stack, basic security, window manager) and experimental AI/ML modules (neural agents, meta‑agent coordination, stress tests, autonomy metrics). Results and examples in this repository are QEMU‑based.
 
 **🎯 Quick Links:** [Try It Now](#quick-start---single-command) | [Architecture](#architecture-overview) | [Latest Results](#latest-results) | [Test Results](#-comprehensive-test-suite---industry-grade-validation) | [Demo Videos](#demo-videos) | [Contributing](docs/CONTRIBUTING.md) | [Roadmap](#roadmap-near-term)
@@ -73,6 +75,22 @@ These results are from QEMU (ARM64, stdio serial). They reflect recent runs with
 Artifacts for the latest runs are in `target/testing/` (JSON report, dashboard HTML).
 
 ---
+
+## Implementation Status (QEMU)
+
+This section reflects what is implemented today in the codebase when running under QEMU, and what is stubbed or partial. It is intended to be factual and non‑promotional.
+
+- Core OS: boots to shell, VFS (ext4/tmpfs), basic smoltcp networking, processes, memory manager, UART, simple drivers. All validated in QEMU only.
+- Deterministic scheduler: CBS+EDF scaffolding with admission control, jitter/metrics, and AI inference server accounting. Not hardware‑validated; not a hard real‑time claim.
+- LLM service: kernel‑resident control‑plane stub (deterministic tokenization/streaming, budgets, audit). No real transformer weights or external models.
+- AI‑Ops (governance): orchestrator, drift detector, and versioning code paths exist; exercised in QEMU tests; some heavy paths simulate behavior.
+- OpenTelemetry: span building implemented; file sink/write path is stubbed.
+- AgentSys: capability policy and audit logger implemented; FS/audio/doc/screenshot/record handlers simulate I/O to serial (no VFS/device effects).
+- GUI + daemon: present and functional against a live QEMU instance; still evolving; not production‑grade.
+- Devices: virtio‑console path exists; virtio‑snd is declared but not implemented; NPU is emulated via MMIO.
+- Hardware: no physical ARM64 validation yet; everything here is based on QEMU.
+
+See also “Known Limitations & Feature Status” below for a compact matrix.
 
 ### 2. Web GUI Live Dashboard (90 sec)
 ```bash
@@ -192,31 +210,34 @@ User Command → Shell Parser → Neural Agent → Meta-Agent Coordinator
 
 | Area | Limitation | Status | Workaround/Notes |
 |------|------------|--------|------------------|
-| **Hardware** | Only tested on QEMU, not validated on real ARM64 hardware | Planned | Use QEMU for now; Pi 4/Jetson validation in roadmap |
-| **SMP** | Uniprocessor only, no multi-core support | Planned | Single-core sufficient for current AI features |
-| **NPU** | Emulated NPU (MMIO), not real hardware accelerator | By Design | Demonstrates interface; real NPU requires hardware |
-| **Network** | Basic smoltcp TCP/IP, no advanced protocols | Partial | HTTP/TCP works; UDP/ICMP supported |
-| **Storage** | ext4 journaling complete, but limited FS operations | Functional | Create/read/write/delete work; no fsck yet |
-| **GUI** | Web GUI uses sample data, not live kernel connection | In Progress | Next milestone: wire GUI to running kernel |
-| **Real-Time** | CBS+EDF scheduler tested in emulation, not hard RT validated | Tested | QEMU timing not representative of hardware |
-| **Security** | Basic credential system, no SELinux/capabilities | Functional | Ed25519 signatures work; ACLs planned |
-| **LLM** | Stub tokenizer, not real transformer weights | Demo | Shows inference path; full LLM requires model loading |
+| **Hardware** | Only tested in QEMU; no real ARM64 bring‑up yet | Planned | Use QEMU for now; Pi 4/5 and Jetson validation are roadmap items |
+| **SMP** | Uniprocessor focus; SMP code exists but unvalidated | Planned | Single core sufficient for current QEMU demos |
+| **NPU** | Emulated (MMIO); no real accelerator support | By Design | Validates interface; real NPU requires hardware |
+| **Network** | Basic smoltcp TCP/IP | Functional | TCP/UDP/DHCP in QEMU; advanced protocols not targeted |
+| **Storage** | ext4 journaling implemented; utilities limited | Functional | Create/read/write/delete work; no fsck yet |
+| **GUI** | Live QEMU control supported; still evolving | In Progress | Works with daemon against QEMU; expect instability |
+| **Real‑Time** | CBS+EDF in QEMU only | Tested | Not a hard real‑time claim; QEMU timing not representative |
+| **Security** | Basic creds/permissions; no SELinux | Functional | Ed25519 under `crypto-real`; broader MAC/RBAC not implemented |
+| **LLM** | Control‑plane stub, no real model | Demo | Deterministic tokenization/streaming for integration paths |
 
 ### Feature Status Matrix
 
 | Feature | QEMU | Hardware | Production | Notes |
 |---------|------|----------|------------|-------|
-| Boot to Shell | ✅ | ⏳ | ✅ | Tested 1000+ boots in QEMU |
-| VFS (ext4/tmpfs) | ✅ | ⏳ | ✅ | Journaling complete |
-| Network Stack | ✅ | ⏳ | ✅ | TCP/UDP/DHCP work |
-| Stress Tests | ✅ | ⏳ | ✅ | 7 tests, 100% pass rate |
-| AI Autonomy | ✅ | ⏳ | ✅ | 6-layer safety system |
-| Web GUI | ✅ | ⏳ | 🚧 | Needs live kernel wire-up |
-| Model Lifecycle | ✅ | ⏳ | ✅ | Load/swap/rollback work |
-| Shadow Deploy | ✅ | ⏳ | ✅ | Divergence detection works |
+| Boot to Shell | ✅ | — | — | Boots reliably in QEMU; no endurance claim |
+| VFS (ext4/tmpfs) | ✅ | — | — | Journaling implemented; no fsck |
+| Network Stack | ✅ | — | — | smoltcp TCP/UDP/DHCP |
+| Deterministic Scheduler | ✅ | — | — | CBS+EDF scaffolding; QEMU timing only |
+| Stress/Validation Suites | ✅ | — | — | See “Latest Results”; slow under full load |
+| LLM (kernel) | 🚧 | — | — | Stub operator; no real model weights |
+| AI‑Ops (governance) | ✅ | — | — | Orchestrator, drift, versioning present |
+| OpenTelemetry | 🚧 | — | — | Spans built; sink write stubbed |
+| AgentSys | ✅ | — | — | Policy + audit; handlers simulate I/O |
+| Web GUI + Daemon | ✅ | — | — | Live QEMU control; still evolving |
+| Audio (virtio‑snd) | ❌ | — | — | Feature declared; driver not implemented |
 
 **Legend:**
-✅ Complete & Tested | 🚧 Partial/In Progress | ⏳ Planned | ❌ Not Supported
+✅ Implemented and exercised in QEMU | 🚧 Partial/In Progress | — Not claimed | ❌ Not implemented
 
 ---
 
@@ -231,8 +252,9 @@ User Command → Shell Parser → Neural Agent → Meta-Agent Coordinator
    - **Why this matters:** Completes the full-stack demo (shell → kernel → daemon → GUI)
 
 2. **Hardware Validation** (High Priority)
-   - Test on Raspberry Pi 4 (4GB/8GB models)
+   - Test on Raspberry Pi 4/5 (4GB/8GB models)
    - Test on NVIDIA Jetson Nano/Xavier
+   - Explore a SystemReady‑compliant Arm dev box for heavier validation (e.g., Ampere‑based)
    - Document hardware-specific quirks and performance
    - **Why this matters:** Proves real-world applicability beyond QEMU
 
@@ -335,26 +357,26 @@ Sections marked Planned describe upcoming work with scaffolding present in code.
   - [Autonomous Meta-Agent Execution](#autonomous-meta-agent-execution-week-5-day-1-2-complete)
 
 ### Production & Operations
-- [Phase 4: Production Readiness (COMPLETE ✅)](#phase-4-production-readiness-complete-)
+- [Phase 4: Production Readiness (QEMU focus)](#phase-4-production-readiness-qemu-focus)
   - [Testing & CI](#testing--ci)
   - [Security & Audit](#security--audit)
 - [Phase 5: UX Safety Enhancements (COMPLETE ✅)](#phase-5-ux-safety-enhancements-complete-)
 - [Phase 6: Web GUI Management Interface (COMPLETE ✅)](#phase-6-web-gui-management-interface-complete-)
   - [GUI Architecture](#web-gui-management-interface-new-in-phase-6-)
   - [Real-Time Monitoring](#real-time-monitoring)
-- [Phase 7: AI Operations Platform (COMPLETE ✅)](#phase-7-ai-operations-platform-complete-)
+- [Phase 7: AI Operations Platform (QEMU components)](#phase-7-ai-operations-platform-qemu-components)
   - [Model Lifecycle Management](#model-lifecycle-management)
   - [Shadow Deployments](#shadow-deployments)
   - [Decision Tracing](#decision-tracing)
   - [OpenTelemetry Integration](#opentelemetry-integration)
-- [Phase 8: Core OS Performance Optimization (COMPLETE ✅)](#phase-8-core-os-performance-optimization-complete-)
+- [Phase 8: Core OS Performance Optimization (in progress)](#phase-8-core-os-performance-optimization-in-progress)
   - [Unified CBS+EDF Scheduler](#81-unified-deterministic-scheduler-cbsedf)
   - [Bonwick Slab Allocator](#82-bonwick-slab-allocator)
   - [VirtIO Zero-Copy DMA](#83-virtio-zero-copy-dma-optimization)
   - [Fork Scaffolding](#84-process-foundation-fork-scaffolding)
   - [Profiling Framework](#85-profiling-framework)
   - [Bug Fixes & Production Hardening](#86-bug-fixes--production-hardening)
-- [Phase 9: AgentSys - LLM Agent Platform (COMPLETE ✅)](#phase-9-agentsys---llm-agent-platform-complete-)
+- [Phase 9: AgentSys - LLM Agent Platform (QEMU implementation)](#phase-9-agentsys---llm-agent-platform-qemu-implementation)
   - [Capability-Based Security Model](#91-capability-based-security-model)
   - [TLV Protocol & Message Routing](#92-tlv-protocol--message-routing)
   - [Policy Engine & Scope Restrictions](#93-policy-engine--scope-restrictions)
@@ -2307,7 +2329,7 @@ sis> driftctl status --json
 
 ### Future Enhancements (Phase 3+)
 
-Phase 2 is complete and production-ready. Future enhancements could include:
+Phase 2 is implemented and exercised in QEMU. It is not production‑hardened. Future enhancements could include:
 - Federated learning across robot fleet
 - Multi-objective optimization (Pareto-optimal decisions)
 - Advanced drift detection (concept vs data drift separation)
@@ -2316,11 +2338,11 @@ Phase 2 is complete and production-ready. Future enhancements could include:
 
 ---
 
-## Phase 4: Production Readiness (COMPLETE ✅)
+## Phase 4: Production Readiness (QEMU focus)
 
-**Status:** PRODUCTION READY - Enterprise-grade observability and reliability
+**Status:** Implemented for QEMU development; not hardware‑validated
 
-Phase 4 transformed the SIS kernel from an experimental prototype into a production-ready system with comprehensive testing, observability, chaos engineering, security hardening, and deployment infrastructure.
+Phase 4 added testing, observability, chaos engineering, security primitives, and deployment scaffolding for QEMU development. It is not a claim of production readiness.
 
 **Implementation Summary:**
 - **55 new files** added (+8,988 lines of production code)
@@ -3108,7 +3130,7 @@ autoctl whatif mem=80 frag=70    # Re-check if it would execute now
 - UX enhancements assessment: `docs/plans/UX-ENHANCEMENTS-ASSESSMENT.md`
 - Complete feature specifications with pros/cons analysis
 
-## Phase 7: AI Operations Platform (COMPLETE ✅)
+## Phase 7: AI Operations Platform (QEMU components)
 
 **Status:** PRODUCTION READY - Enterprise AI/ML operations infrastructure
 
@@ -3361,7 +3383,7 @@ All Phase 7 subsystems have been tested end-to-end:
 - ✅ Documentation complete for all APIs
 - ✅ Shell help text available for all commands
 
-## Phase 8: Core OS Performance Optimization (COMPLETE ✅)
+## Phase 8: Core OS Performance Optimization (in progress)
 
 **Status:** PRODUCTION READY - Enterprise-grade OS performance optimization
 
@@ -3745,7 +3767,7 @@ Phase 8 required resolving 9 critical issues during integration:
 - New: `deterministic.rs`, `sched_glue.rs`, `slab.rs`, `fork.rs`, `pagetable.rs`, `profiling/mod.rs`, `slab_bench.rs`, `virtio_bench.rs`, `virtqueue.rs`
 - Modified: `buddy.rs`, `heap.rs`, `virtio_blk.rs`, `mod.rs` (process, mm), `shell.rs`, `syscall/mod.rs`, `trap.rs`
 
-## Phase 9: AgentSys - LLM Agent Platform (COMPLETE ✅)
+## Phase 9: AgentSys - LLM Agent Platform (QEMU implementation)
 
 **Status:** COMPLETE ✅ - Capability-based system call layer for LLM-driven agents
 
@@ -5024,7 +5046,7 @@ Implemented today:
 - Neural/LLM audit rings with JSON output; host frames over VirtIO console for neural control.
 - Runtime metrics toggle: `metricsctl on|off|status` (emission on UART; snapshot APIs currently stubbed).
 - GICv3 init and EL1 physical timer; stable bring-up to shell.
-- **Web GUI Management Interface (Phase 6 ✅):** React/TypeScript SPA with real-time WebSocket streaming, HTTP REST API via sisctl daemon, QEMU lifecycle management, metrics visualization, graph visualization, autonomy monitoring, and production-ready build system.
+- **Web GUI Management Interface (Phase 6 ✅):** React/TypeScript SPA with real-time WebSocket streaming, HTTP REST API via sisctl daemon, QEMU lifecycle management, metrics visualization, graph visualization, autonomy monitoring, and a demo‑grade build system (QEMU only).
 
 Planned (Phase 4+; scaffolding present but not fully integrated):
 - Autonomous meta-agent running on a periodic timer with guarded actions and full safety rollbacks.
@@ -5088,7 +5110,7 @@ Notes:
 
 ## Web GUI Management Interface (NEW in Phase 6 ✅)
 
-The SIS Kernel now includes a production-ready web-based management interface for real-time monitoring and control.
+The SIS Kernel includes a web-based management interface suitable for QEMU demos and development. It is not production‑hardened.
 
 **Prerequisites:**
 - Node.js 18+ and pnpm installed
@@ -7764,7 +7786,7 @@ sis> stresstest report
 
 ## Week 7.1: ✅ COMPLETE - Enhanced Stress Tests with Variability & Observability
 
-**Goal**: Transform deterministic stress tests into production-ready validation with genuine variability, comprehensive metrics, and CI/CD integration.
+**Goal**: Make deterministic stress tests CI‑friendly with genuine variability, comprehensive metrics, and integration in QEMU.
 
 **Status**: ✅ Complete - All enhancements implemented, tested, and validated in QEMU
 
@@ -8407,7 +8429,7 @@ All tests show:
 
 ### Impact
 
-This enhancement transforms stress tests from "runs without crashing" validation into production-ready quality gates with:
+This enhancement turns stress tests from "runs without crashing" checks into practical quality gates for QEMU with:
 1. **Statistical rigor**: Run-to-run variability enables statistical analysis
 2. **AI observability**: Quantified proof of autonomous intervention effectiveness
 3. **Performance measurement**: Latency percentiles for SLA validation
@@ -10068,7 +10090,7 @@ brew install expect
 **Expected Results:**
 - AI Verification: PASS (2+ inferences, demo complete)
 - Benchmarks: PASS (5/5 tests, neural network active, high throughput, stable)
-- Compliance: PASS (92% score, 100/100 safety, production ready)
+- Compliance: PASS (92% score, 100/100 safety) in QEMU; not a production claim
 
 **Individual Test Scripts:**
 ```bash
@@ -10216,11 +10238,14 @@ You can generate a validation report and open a small HTML dashboard.
 
 - Quick run (QEMU-aware):
   - `SIS_QEMU=1 cargo run -p sis-testing --release -- --quick`
+- Single phase only:
+  - `cargo run -p sis-testing --release -- --phase 9` runs just Phase 9
 - Open the dashboard:
   - macOS: `open target/testing/dashboard.html`
   - Linux: `xdg-open target/testing/dashboard.html`
 - Expected note:
   - In QEMU, the “AI inference <40µs” check will show FAIL (~2.3 ms). That target is for hardware; other categories pass in this demo.
+  - Full‑suite runs are significantly slower and will peg a CPU core; prefer `--phase` during iteration.
 
 ## Architecture Note
 
