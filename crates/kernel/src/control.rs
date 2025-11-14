@@ -682,6 +682,43 @@ pub fn det_reset_counters_direct() -> Result<(), CtrlError> {
     }
 }
 
+/// Get jitter statistics from the current graph's scheduler
+#[cfg(feature = "deterministic")]
+pub fn det_get_jitter_stats() -> Result<(usize, u64, u64), CtrlError> {
+    unsafe {
+        if let Some(ref g) = CTRL_GRAPH {
+            let (_samples, count, max_jitter, mean_jitter) = g.get_jitter_stats();
+            Ok((count, max_jitter, mean_jitter))
+        } else {
+            Err(CtrlError::NoGraph)
+        }
+    }
+}
+
+/// Get deadline miss count from the current graph's scheduler
+#[cfg(feature = "deterministic")]
+pub fn det_get_deadline_misses() -> Result<u32, CtrlError> {
+    unsafe {
+        if let Some(ref g) = CTRL_GRAPH {
+            Ok(g.get_deadline_misses())
+        } else {
+            Err(CtrlError::NoGraph)
+        }
+    }
+}
+
+/// Get AI inference statistics from the current graph's scheduler
+#[cfg(feature = "deterministic")]
+pub fn det_get_ai_stats() -> Result<(u32, u32, u64), CtrlError> {
+    unsafe {
+        if let Some(ref g) = CTRL_GRAPH {
+            Ok(g.get_ai_stats())
+        } else {
+            Err(CtrlError::NoGraph)
+        }
+    }
+}
+
 /// Directly add a channel (used by shell to avoid frame-path stalls)
 pub fn add_channel_direct(capacity: u16) -> Result<(), CtrlError> {
     unsafe {

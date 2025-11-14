@@ -877,7 +877,10 @@ impl GraphApi {
 
     /// Reset deterministic counters
     #[cfg(feature = "deterministic")]
-    pub fn det_reset(&mut self) { self.det_overrun_count = 0; }
+    pub fn det_reset(&mut self) {
+        self.det_overrun_count = 0;
+        self.det_scheduler.reset_counters();
+    }
 
     /// Return whether deterministic mode is enabled
     #[cfg(feature = "deterministic")]
@@ -886,6 +889,24 @@ impl GraphApi {
     /// Return configured WCET (ns)
     #[cfg(feature = "deterministic")]
     pub fn det_wcet(&self) -> u64 { self.det_wcet_ns }
+
+    /// Get jitter statistics from the scheduler
+    #[cfg(feature = "deterministic")]
+    pub fn get_jitter_stats(&self) -> (&[u64; 64], usize, u64, u64) {
+        self.det_scheduler.get_jitter_stats()
+    }
+
+    /// Get deadline miss count from the scheduler
+    #[cfg(feature = "deterministic")]
+    pub fn get_deadline_misses(&self) -> u32 {
+        self.det_scheduler.get_deadline_misses()
+    }
+
+    /// Get AI inference statistics from the scheduler
+    #[cfg(feature = "deterministic")]
+    pub fn get_ai_stats(&self) -> (u32, u32, u64) {
+        self.det_scheduler.get_ai_stats()
+    }
 }
 
 #[allow(dead_code)]

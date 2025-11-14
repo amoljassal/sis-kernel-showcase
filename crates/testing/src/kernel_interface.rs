@@ -284,14 +284,18 @@ impl KernelCommandInterface {
 
     /// Read new content from serial log since last position
     async fn read_new_log_content(&mut self) -> TestResult<String> {
+        // Read entire file (UTF-8). We must slice by byte offset, not by char count.
         let file_content = fs::read_to_string(&self.serial_log_path).await
             .map_err(|e| TestError::IoError(e))?;
-        
-        if file_content.len() as u64 > self.last_log_position {
-            let new_content = file_content.chars()
-                .skip(self.last_log_position as usize)
-                .collect::<String>();
-            self.last_log_position = file_content.len() as u64;
+
+        let bytes = file_content.as_bytes();
+        let total_len = bytes.len() as u64;
+        if total_len > self.last_log_position {
+            let start = self.last_log_position as usize;
+            let slice = &bytes[start..];
+            // Lossy conversion to handle any non-UTF8 or control sequences safely
+            let new_content = String::from_utf8_lossy(slice).to_string();
+            self.last_log_position = total_len;
             Ok(new_content)
         } else {
             Ok(String::new())
@@ -311,6 +315,8 @@ impl KernelCommandInterface {
         let mut metrics = HashMap::new();
         
         for line in output.lines() {
+            // Strip harness log prefix if present
+            let line = if let Some(rest) = line.strip_prefix("[QEMU-OUT] ") { rest } else { line };
             // Parse METRIC lines: "METRIC key=value"
             if let Some(metric_line) = line.strip_prefix("METRIC ") {
                 if let Some((key, value)) = metric_line.split_once('=') {

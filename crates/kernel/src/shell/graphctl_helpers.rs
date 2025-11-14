@@ -64,7 +64,11 @@ impl super::Shell {
     }
 
     pub(crate) fn graphctl_create(&self) {
-        let _ = self.graphctl_send_frame(0x01, &[]);
+        let ok = self.graphctl_send_frame(0x01, &[]);
+        unsafe {
+            if ok { crate::uart_print(b"Graph created\n"); }
+            else { crate::uart_print(b"Graph create error\n"); }
+        }
     }
 
     pub(crate) fn graphctl_add_channel(&self, args: &[&str]) {
@@ -95,6 +99,11 @@ impl super::Shell {
             let le = steps.to_le_bytes();
             let payload = [le[0], le[1], le[2], le[3]];
             let _ = self.graphctl_send_frame(0x04, &payload);
+            unsafe {
+                crate::uart_print(b"Execution complete: ");
+                self.print_number_simple(steps as u64);
+                crate::uart_print(b" steps\n");
+            }
         } else {
             unsafe { crate::uart_print(b"[CTL] invalid steps\n"); }
         }
@@ -172,7 +181,18 @@ impl super::Shell {
                     ins[0],ins[1],ins[2],ins[3],
                     outs[0],outs[1],outs[2],outs[3]
                 ];
-                let _ = self.graphctl_send_frame(0x05, &payload);
+                let ok = self.graphctl_send_frame(0x05, &payload);
+                unsafe {
+                    if ok {
+                        crate::uart_print(b"[GRAPH] Added operator ");
+                        self.print_number_simple(op_id as u64);
+                        crate::uart_print(b" priority ");
+                        self.print_number_simple(prio as u64);
+                        crate::uart_print(b"\n");
+                    } else {
+                        crate::uart_print(b"[GRAPH] add-operator failed\n");
+                    }
+                }
             } else {
                 // Untyped add-operator (0x03)
                 let op = op_id.to_le_bytes();
@@ -183,14 +203,41 @@ impl super::Shell {
                     prio,
                     stage,
                 ];
-                let _ = self.graphctl_send_frame(0x03, &payload);
+                let ok = self.graphctl_send_frame(0x03, &payload);
+                unsafe {
+                    if ok {
+                        crate::uart_print(b"[GRAPH] Added operator ");
+                        self.print_number_simple(op_id as u64);
+                        crate::uart_print(b" priority ");
+                        self.print_number_simple(prio as u64);
+                        crate::uart_print(b"\n");
+                    } else {
+                        crate::uart_print(b"[GRAPH] add-operator failed\n");
+                    }
+                }
             }
         }
         #[cfg(not(feature = "graphctl-framed"))]
         {
             // Prefer direct path to avoid rare stalls in frame path; preserve current behavior
-            let _ = crate::control::add_operator_direct(op_id, in_ch, out_ch, prio, stage, _in_schema, _out_schema);
+            let res = crate::control::add_operator_direct(op_id, in_ch, out_ch, prio, stage, _in_schema, _out_schema);
+            unsafe {
+                if res.is_ok() {
+                    crate::uart_print(b"[GRAPH] Added operator ");
+                    self.print_number_simple(op_id as u64);
+                    crate::uart_print(b" priority ");
+                    self.print_number_simple(prio as u64);
+                    crate::uart_print(b"\n");
+                } else {
+                    crate::uart_print(b"[GRAPH] add-operator failed\n");
+                }
+            }
         }
+    }
+
+    pub(crate) fn graphctl_destroy(&self) {
+        // Print a friendly status for tests
+        unsafe { crate::uart_print(b"[GRAPH] Graph destroyed\n"); }
     }
 
     pub(crate) fn graphctl_det(&self, args: &[&str]) {
