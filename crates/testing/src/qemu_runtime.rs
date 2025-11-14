@@ -66,7 +66,11 @@ impl QEMURuntimeManager {
     }
 
     pub fn new(config: &TestSuiteConfig) -> Self {
-        let base_port = 7000;
+        // Allow overriding base port to avoid conflicts across runs
+        let base_port = std::env::var("SIS_TEST_BASE_PORT")
+            .ok()
+            .and_then(|s| s.parse::<u16>().ok())
+            .unwrap_or(7000);
         let instances = (0..config.qemu_nodes)
             .map(|node_id| QEMUInstance {
                 node_id,
@@ -236,6 +240,23 @@ impl QEMURuntimeManager {
         // Clear previous log if exists
         let _ = fs::remove_file(&instance.serial_log_path).await;
 
+        // Pick a free monitor port (avoid 'address already in use')
+        fn find_free_tcp_port(preferred: u16) -> u16 {
+            use std::net::TcpListener;
+            let mut p = preferred;
+            for _ in 0..1000 {
+                if let Ok(listener) = TcpListener::bind(("127.0.0.1", p)) {
+                    // Free; drop listener and return port
+                    drop(listener);
+                    return p;
+                }
+                p = p.wrapping_add(1);
+            }
+            preferred
+        }
+
+        let monitor_port = find_free_tcp_port(instance.monitor_port);
+
         let mut qemu_args = vec![
             "-name".to_string(), format!("sis-node{}", instance.node_id),
             "-M".to_string(), "virt,gic-version=3,highmem=on,secure=off".to_string(),  // Enable highmem for M-series simulation
@@ -246,7 +267,7 @@ impl QEMURuntimeManager {
             // Use PTY for bidirectional serial communication
             "-chardev".to_string(), "pty,id=serial0".to_string(),
             "-serial".to_string(), "chardev:serial0".to_string(),
-            "-monitor".to_string(), format!("tcp:localhost:{},server,nowait", instance.monitor_port),
+            "-monitor".to_string(), format!("tcp:localhost:{},server,nowait", monitor_port),
             "-bios".to_string(), firmware_path.to_string(),
             "-drive".to_string(), format!("if=none,id=esp,format=raw,file=fat:rw:{}", instance.esp_directory),
             "-device".to_string(), "virtio-blk-pci,drive=esp".to_string(),
@@ -353,16 +374,33 @@ impl QEMURuntimeManager {
 
         log::info!("Instance {} using PTY: {}", instance.node_id, pty_path);
 
-        // Spawn background tasks to drain QEMU's stdout/stderr to prevent pipe blocking
-        // This prevents QEMU output from interfering with PTY communication
+        // Spawn background tasks to mirror QEMU stdout/stderr into the serial log as well.
+        // Many UEFI firmwares print early boot messages to stdout before the kernel uses UART.
+        // Mirroring them helps boot detection and debugging.
+        let serial_log_for_stdout = instance.serial_log_path.clone();
         tokio::spawn(async move {
-            while let Ok(Some(_line)) = stdout_reader.next_line().await {
-                // Discard QEMU stdout after PTY path extraction
+            while let Ok(Some(line)) = stdout_reader.next_line().await {
+                let mut f = match OpenOptions::new().create(true).append(true).open(&serial_log_for_stdout).await {
+                    Ok(file) => file,
+                    Err(_) => continue,
+                };
+                let _ = f.write_all(b"[QEMU-OUT] ").await;
+                let _ = f.write_all(line.as_bytes()).await;
+                let _ = f.write_all(b"\n").await;
+                let _ = f.flush().await;
             }
         });
+        let serial_log_for_stderr = instance.serial_log_path.clone();
         tokio::spawn(async move {
-            while let Ok(Some(_line)) = stderr_reader.next_line().await {
-                // Discard QEMU stderr after PTY path extraction
+            while let Ok(Some(line)) = stderr_reader.next_line().await {
+                let mut f = match OpenOptions::new().create(true).append(true).open(&serial_log_for_stderr).await {
+                    Ok(file) => file,
+                    Err(_) => continue,
+                };
+                let _ = f.write_all(b"[QEMU-OUT] ").await;
+                let _ = f.write_all(line.as_bytes()).await;
+                let _ = f.write_all(b"\n").await;
+                let _ = f.flush().await;
             }
         });
 
@@ -526,7 +564,8 @@ impl QEMURuntimeManager {
 
     /// Write a command to the serial console of a specific node via persistent socket connection
     pub async fn write_command(&self, node_id: usize, command: &str) -> Result<(), TestError> {
-        let command_with_newline = format!("{}\n", command);
+        // Send CRLF to satisfy UART line editing (accepts CR or LF); CRLF is safest across PTY backends
+        let command_with_newline = format!("{}\r\n", command);
 
         let mut writers = self.serial_writers.lock().await;
         if let Some(writer) = writers.get_mut(&node_id) {

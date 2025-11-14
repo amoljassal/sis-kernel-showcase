@@ -92,7 +92,7 @@ mod mlctl_helpers;
 mod actorctl_helpers;
 #[cfg(feature = "llm")]
 mod llmctl_helpers;
-#[cfg(feature = "demos")]
+#[cfg(any(feature = "demos", feature = "deterministic"))]
 mod demos;
 
 impl Shell {
@@ -227,7 +227,7 @@ impl Shell {
                 "npudemo" => { self.cmd_npu_demo(); true },
                 #[cfg(feature = "demos")]
                 "npudriver" => { self.cmd_npu_driver_demo(); true },
-                #[cfg(feature = "demos")]
+                #[cfg(feature = "deterministic")]
                 "rtaivalidation" => { self.cmd_realtime_ai_validation(); true },
                 "neuralctl" => { self.cmd_neuralctl(&parts[1..]); true },
                 "agentctl" => { self.agentctl_cmd(&parts[1..]); true },
@@ -271,9 +271,9 @@ impl Shell {
                 "benchmark" => { self.cmd_benchmark(&parts[1..]); true },
                 "fullautodemo" => { self.cmd_fullautodemo(&parts[1..]); true },
                 "compliance" => { self.cmd_compliance(&parts[1..]); true },
-                #[cfg(feature = "demos")]
+                #[cfg(any(feature = "demos", feature = "deterministic"))]
                 "temporaliso" => { self.cmd_temporal_isolation_demo(); true },
-                #[cfg(feature = "demos")]
+                #[cfg(any(feature = "demos", feature = "deterministic"))]
                 "phase3validation" => { self.cmd_phase3_validation(); true },
                 #[cfg(feature = "llm")]
                 "llmctl" => { self.llmctl_cmd(&parts[1..]); true },
@@ -2251,11 +2251,52 @@ impl Shell {
                 #[cfg(feature = "deterministic")]
                 {
                     match crate::control::det_status_direct() {
-                        Ok((enabled, wcet, overruns)) => unsafe {
-                            crate::uart_print(b"[DET] enabled="); self.print_number_simple(enabled as u64);
-                            crate::uart_print(b" wcet_ns="); self.print_number_simple(wcet);
-                            crate::uart_print(b" misses="); self.print_number_simple(overruns as u64);
-                            crate::uart_print(b"\n");
+                        Ok((enabled, wcet, overruns)) => {
+                            unsafe {
+                                crate::uart_print(b"[DET] enabled="); self.print_number_simple(enabled as u64);
+                                crate::uart_print(b" wcet_ns="); self.print_number_simple(wcet);
+                                crate::uart_print(b" misses="); self.print_number_simple(overruns as u64);
+                                crate::uart_print(b"\n");
+                            }
+
+                            // Show scheduler deadline misses
+                            if let Ok(deadline_misses) = crate::control::det_get_deadline_misses() {
+                                unsafe {
+                                    crate::uart_print(b"[DET] scheduler_deadline_misses=");
+                                    self.print_number_simple(deadline_misses as u64);
+                                    crate::uart_print(b"\n");
+                                }
+                            }
+
+                            // Show jitter statistics
+                            if let Ok((count, max_jitter, mean_jitter)) = crate::control::det_get_jitter_stats() {
+                                if count > 0 {
+                                    unsafe {
+                                        crate::uart_print(b"[DET] jitter_samples=");
+                                        self.print_number_simple(count as u64);
+                                        crate::uart_print(b" max_jitter_ns=");
+                                        self.print_number_simple(max_jitter);
+                                        crate::uart_print(b" mean_jitter_ns=");
+                                        self.print_number_simple(mean_jitter);
+                                        crate::uart_print(b"\n");
+                                    }
+                                }
+                            }
+
+                            // Show AI stats if available
+                            if let Ok((ai_inferences, ai_misses, avg_latency)) = crate::control::det_get_ai_stats() {
+                                if ai_inferences > 0 {
+                                    unsafe {
+                                        crate::uart_print(b"[DET] ai_inferences=");
+                                        self.print_number_simple(ai_inferences as u64);
+                                        crate::uart_print(b" ai_deadline_misses=");
+                                        self.print_number_simple(ai_misses as u64);
+                                        crate::uart_print(b" ai_avg_latency_ns=");
+                                        self.print_number_simple(avg_latency);
+                                        crate::uart_print(b"\n");
+                                    }
+                                }
+                            }
                         },
                         Err(_) => unsafe { crate::uart_print(b"[DET] no active graph\n"); },
                     }
@@ -2307,6 +2348,7 @@ impl Shell {
             "add-channel" => { self.graphctl_add_channel(&args[1..]); }
             "add-operator" => { self.graphctl_add_operator(&args[1..]); }
             "start" => { self.graphctl_start(&args[1..]); }
+            "destroy" => { self.graphctl_destroy(); }
             "det" | "deterministic" => { self.graphctl_det(&args[1..]); }
             "stats" => { self.graphctl_stats(); }
             "show" | "export" => { self.graphctl_show_export(); }
