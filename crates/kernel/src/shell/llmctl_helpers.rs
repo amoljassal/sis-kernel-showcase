@@ -236,7 +236,11 @@ impl super::Shell {
         }
     }
 
-    pub(crate) fn llm_audit_json_cmd(&self) { crate::llm::audit_print_json(); }
+    pub(crate) fn llm_audit_json_cmd(&self) {
+        crate::llm::audit_print_json();
+        // Sentinel to aid harness completion detection
+        unsafe { crate::uart_print(b"CMD_DONE\n"); }
+    }
 
     pub(crate) fn llmsig_cmd(&self, args: &[&str]) {
         if args.len() < 1 {

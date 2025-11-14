@@ -7,7 +7,7 @@ use std::process::Stdio;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::process::{Command, Child};
+use tokio::process::{Command, Child, ChildStdin};
 use tokio::time::{sleep, Duration};
 use std::path::{Path, PathBuf};
 use tokio::fs;
@@ -35,7 +35,7 @@ pub struct QEMURuntimeManager {
     _config: TestSuiteConfig,
     cluster: QEMUCluster,
     processes: HashMap<usize, Child>,
-    serial_writers: Arc<Mutex<HashMap<usize, tokio::fs::File>>>,  // PTY write file descriptors
+    serial_writers: Arc<Mutex<HashMap<usize, ChildStdin>>>,  // Serial writers via child's stdin when using -serial stdio
 }
 
 impl QEMURuntimeManager {
@@ -104,6 +104,9 @@ impl QEMURuntimeManager {
         // Build features: allow override via SIS_TEST_FEATURES; default includes Phase 7/8 features
         let features_str = if let Ok(features) = std::env::var("SIS_TEST_FEATURES") {
             // Use the specified features directly (replace, don't append)
+            features
+        } else if let Ok(features) = std::env::var("SIS_FEATURES") {
+            // Back-compat: accept SIS_FEATURES as an alias
             features
         } else {
             // Default: All production features for comprehensive testing
@@ -264,9 +267,8 @@ impl QEMURuntimeManager {
             "-smp".to_string(), "2".to_string(),  // 2 cores for testing
             "-m".to_string(), "512M".to_string(),  // Match manual test setup
             "-nographic".to_string(),
-            // Use PTY for bidirectional serial communication
-            "-chardev".to_string(), "pty,id=serial0".to_string(),
-            "-serial".to_string(), "chardev:serial0".to_string(),
+            // Use stdio for bidirectional serial communication (child stdin/stdout)
+            "-serial".to_string(), "stdio".to_string(),
             "-monitor".to_string(), format!("tcp:localhost:{},server,nowait", monitor_port),
             "-bios".to_string(), firmware_path.to_string(),
             "-drive".to_string(), format!("if=none,id=esp,format=raw,file=fat:rw:{}", instance.esp_directory),
@@ -299,227 +301,82 @@ impl QEMURuntimeManager {
 
         let mut qemu_process = Command::new("qemu-system-aarch64")
             .args(qemu_args)
-            .stdin(Stdio::null())
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| TestError::QEMUError {
                 message: format!("Failed to launch QEMU instance {}: {}", instance.node_id, e)
             })?;
-
-        // Read stdout to get PTY path (QEMU prints it to stdout, not stderr)
+        // Take stdio pipes
         let stdout = qemu_process.stdout.take().expect("Failed to get stdout");
         let stderr = qemu_process.stderr.take().expect("Failed to get stderr");
-
-        use tokio::io::AsyncBufReadExt;
-        let mut stdout_reader = tokio::io::BufReader::new(stdout).lines();
-        let mut stderr_reader = tokio::io::BufReader::new(stderr).lines();
-
-        // Wait for PTY path from QEMU output (format: "char device redirected to /dev/ttysXXX")
-        let mut pty_path = None;
-        let mut all_lines = Vec::new();
-        let mut attempts = 0;
-        while attempts < 50 && pty_path.is_none() {
-            tokio::select! {
-                line = stdout_reader.next_line() => {
-                    if let Ok(Some(line)) = line {
-                        log::debug!("QEMU stdout: {}", line);
-                        all_lines.push(line.clone());
-                        if line.contains("char device redirected to") {
-                            // Extract PTY path from line like: "char device redirected to /dev/ttys004 (label serial0)"
-                            if let Some(start) = line.find("/dev/") {
-                                if let Some(end) = line[start..].find(" ") {
-                                    pty_path = Some(line[start..start+end].to_string());
-                                } else {
-                                    // No space after path (end of line)
-                                    pty_path = Some(line[start..].trim_end_matches(')').to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-                line = stderr_reader.next_line() => {
-                    if let Ok(Some(line)) = line {
-                        log::debug!("QEMU stderr: {}", line);
-                        all_lines.push(line.clone());
-                        if line.contains("char device redirected to") {
-                            // Extract PTY path from line like: "char device redirected to /dev/ttys004 (label serial0)"
-                            if let Some(start) = line.find("/dev/") {
-                                if let Some(end) = line[start..].find(" ") {
-                                    pty_path = Some(line[start..start+end].to_string());
-                                } else {
-                                    // No space after path (end of line)
-                                    pty_path = Some(line[start..].trim_end_matches(')').to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-                _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
-                    attempts += 1;
-                }
-            }
-        }
-
-        if pty_path.is_none() {
-            log::error!("Failed to find PTY path. Captured {} lines:", all_lines.len());
-            for line in &all_lines {
-                log::error!("  {}", line);
-            }
-        }
-
-        let pty_path = pty_path.ok_or_else(|| TestError::QEMUError {
-            message: format!("Failed to get PTY path from QEMU output for instance {}", instance.node_id)
-        })?;
-
-        log::info!("Instance {} using PTY: {}", instance.node_id, pty_path);
+        let stdin = qemu_process.stdin.take().expect("Failed to get stdin");
 
         // Spawn background tasks to mirror QEMU stdout/stderr into the serial log as well.
         // Many UEFI firmwares print early boot messages to stdout before the kernel uses UART.
         // Mirroring them helps boot detection and debugging.
         let serial_log_for_stdout = instance.serial_log_path.clone();
         tokio::spawn(async move {
-            while let Ok(Some(line)) = stdout_reader.next_line().await {
-                let mut f = match OpenOptions::new().create(true).append(true).open(&serial_log_for_stdout).await {
-                    Ok(file) => file,
-                    Err(_) => continue,
-                };
-                let _ = f.write_all(b"[QEMU-OUT] ").await;
-                let _ = f.write_all(line.as_bytes()).await;
-                let _ = f.write_all(b"\n").await;
-                let _ = f.flush().await;
-            }
-        });
-        let serial_log_for_stderr = instance.serial_log_path.clone();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = stderr_reader.next_line().await {
-                let mut f = match OpenOptions::new().create(true).append(true).open(&serial_log_for_stderr).await {
-                    Ok(file) => file,
-                    Err(_) => continue,
-                };
-                let _ = f.write_all(b"[QEMU-OUT] ").await;
-                let _ = f.write_all(line.as_bytes()).await;
-                let _ = f.write_all(b"\n").await;
-                let _ = f.flush().await;
-            }
-        });
-
-        // Open PTY device separately for reading and writing to avoid contention
-        // Using tokio::io::split on a single file causes blocking issues with PTY devices
-        let pty_read = tokio::fs::OpenOptions::new()
-            .read(true)
-            .open(&pty_path)
-            .await
-            .map_err(|e| TestError::QEMUError {
-                message: format!("Failed to open PTY {} for reading: {}", pty_path, e)
-            })?;
-
-        let pty_write = tokio::fs::OpenOptions::new()
-            .write(true)
-            .open(&pty_path)
-            .await
-            .map_err(|e| TestError::QEMUError {
-                message: format!("Failed to open PTY {} for writing: {}", pty_path, e)
-            })?;
-
-        // Configure PTY in raw mode for proper character transmission
-        // This is critical for capturing kernel output properly
-        #[allow(unsafe_code)] // Required for FFI termios operations via nix crate
-        {
-            use std::os::unix::io::{AsRawFd, BorrowedFd};
-            use nix::sys::termios::{self, SetArg};
-            let fd = pty_read.as_raw_fd();
-            // SAFETY: pty_read owns the fd and remains valid for the duration of this block
-            let borrowed_fd = unsafe { BorrowedFd::borrow_raw(fd) };
-            match termios::tcgetattr(&borrowed_fd) {
-                Ok(mut termios_attrs) => {
-                    termios::cfmakeraw(&mut termios_attrs);
-                    if let Err(e) = termios::tcsetattr(&borrowed_fd, SetArg::TCSANOW, &termios_attrs) {
-                        log::warn!("Failed to configure PTY {} in raw mode: {}", pty_path, e);
-                    } else {
-                        log::debug!("Configured PTY {} in raw mode", pty_path);
-                    }
-                }
-                Err(e) => {
-                    log::warn!("Failed to get PTY {} attributes: {}", pty_path, e);
-                }
-            }
-        }
-
-        // Use separate file descriptors for reading and writing
-        let read_half = pty_read;
-        let write_half = pty_write;
-
-        // Spawn background task to capture serial output from read half and write to log file
-        let serial_log_path = instance.serial_log_path.clone();
-
-        tokio::spawn(async move {
-            // Create or truncate the log file
-            let mut log_file = match OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .open(&serial_log_path)
-                .await
-            {
-                Ok(file) => file,
-                Err(e) => {
-                    log::error!("Failed to create serial log file {}: {}", serial_log_path, e);
-                    return;
-                }
-            };
-
-            // Read from PTY in raw chunks to capture partial lines (like shell prompts)
             use tokio::io::AsyncReadExt;
-            let mut read_half = read_half;
-            let mut buffer = vec![0u8; 4096];
-            let mut line_buffer = Vec::new();
-
+            let mut reader = tokio::io::BufReader::new(stdout);
+            let mut buf = [0u8; 4096];
+            let mut line_buffer: Vec<u8> = Vec::new();
             loop {
-                // Use timeout to periodically flush partial lines
-                match tokio::time::timeout(
-                    tokio::time::Duration::from_millis(100),
-                    read_half.read(&mut buffer)
-                ).await {
-                    Ok(Ok(0)) => break, // EOF
+                match tokio::time::timeout(Duration::from_millis(10), reader.read(&mut buf)).await {
+                    Ok(Ok(0)) => break,
                     Ok(Ok(n)) => {
-                        // Process the chunk byte by byte, writing complete lines and buffering partial ones
-                        for &byte in &buffer[..n] {
-                            if byte == b'\n' {
-                                // Complete line - write with prefix
-                                let _ = log_file.write_all(b"[QEMU-OUT] ").await;
-                                let _ = log_file.write_all(&line_buffer).await;
-                                let _ = log_file.write_all(b"\n").await;
-                                let _ = log_file.flush().await;
+                        for &b in &buf[..n] {
+                            if b == b'\n' {
+                                if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&serial_log_for_stdout).await {
+                                    let _ = f.write_all(b"[QEMU-OUT] ").await;
+                                    let _ = f.write_all(&line_buffer).await;
+                                    let _ = f.write_all(b"\n").await;
+                                    let _ = f.flush().await;
+                                }
                                 line_buffer.clear();
-                            } else if byte >= 32 || byte == b'\t' || byte == b'\r' {
-                                // Printable character or tab/CR
-                                line_buffer.push(byte);
+                            } else if b >= 32 || b == b'\t' || b == b'\r' {
+                                line_buffer.push(b);
                             }
                         }
                     }
-                    Ok(Err(e)) => {
-                        log::error!("PTY read error: {}", e);
-                        break;
-                    }
+                    Ok(Err(_)) => break,
                     Err(_) => {
-                        // Timeout - flush partial line if any
                         if !line_buffer.is_empty() {
-                            let _ = log_file.write_all(b"[QEMU-OUT] ").await;
-                            let _ = log_file.write_all(&line_buffer).await;
-                            let _ = log_file.write_all(b"\n").await;
-                            let _ = log_file.flush().await;
+                            if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&serial_log_for_stdout).await {
+                                let _ = f.write_all(b"[QEMU-OUT] ").await;
+                                let _ = f.write_all(&line_buffer).await;
+                                let _ = f.write_all(b"\n").await;
+                                let _ = f.flush().await;
+                            }
                             line_buffer.clear();
                         }
                     }
                 }
             }
-
-            log::debug!("Serial log capture task finished for {}", serial_log_path);
         });
-
-        // Store write half for command injection
-        self.serial_writers.lock().await.insert(instance.node_id, write_half);
+        let serial_log_for_stderr = instance.serial_log_path.clone();
+        tokio::spawn(async move {
+            use tokio::io::AsyncReadExt;
+            let mut reader = tokio::io::BufReader::new(stderr);
+            let mut buf = [0u8; 4096];
+            loop {
+                match reader.read(&mut buf).await {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&serial_log_for_stderr).await {
+                            let _ = f.write_all(b"[QEMU-OUT] ").await;
+                            let _ = f.write_all(&buf[..n]).await;
+                            let _ = f.write_all(b"\n").await;
+                            let _ = f.flush().await;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+        // Store child's stdin for command injection (serial stdio)
+        self.serial_writers.lock().await.insert(instance.node_id, stdin);
         self.processes.insert(instance.node_id, qemu_process);
 
         log::info!("Instance {} launched (serial log: {})",
@@ -562,7 +419,7 @@ impl QEMURuntimeManager {
         }
     }
 
-    /// Write a command to the serial console of a specific node via persistent socket connection
+    /// Write a command to the serial console of a specific node via child stdin (-serial stdio)
     pub async fn write_command(&self, node_id: usize, command: &str) -> Result<(), TestError> {
         // Send CRLF to satisfy UART line editing (accepts CR or LF); CRLF is safest across PTY backends
         let command_with_newline = format!("{}\r\n", command);
@@ -572,14 +429,14 @@ impl QEMURuntimeManager {
             use tokio::io::AsyncWriteExt;
             writer.write_all(command_with_newline.as_bytes()).await
                 .map_err(|e| TestError::QEMUError {
-                    message: format!("Failed to write command to PTY for node {}: {}", node_id, e)
+                    message: format!("Failed to write command to QEMU stdin for node {}: {}", node_id, e)
                 })?;
             writer.flush().await
                 .map_err(|e| TestError::QEMUError {
-                    message: format!("Failed to flush PTY for node {}: {}", node_id, e)
+                    message: format!("Failed to flush QEMU stdin for node {}: {}", node_id, e)
                 })?;
 
-            log::debug!("Sent command to node {} via PTY: {}", node_id, command);
+            log::debug!("Sent command to node {} via stdio: {}", node_id, command);
             Ok(())
         } else {
             Err(TestError::QEMUError {

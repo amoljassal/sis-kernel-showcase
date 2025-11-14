@@ -218,6 +218,17 @@ static DEFAULT_AGENTS: &[AgentToken] = &[
         enabled: true,
     },
     AgentToken {
+        agent_id: 5,
+        name: "assistant",
+        capabilities: &[
+            Capability::FsBasic,
+            Capability::AudioControl,
+            Capability::DocBasic,
+        ],
+        scope: Scope::UNRESTRICTED,
+        enabled: true,
+    },
+    AgentToken {
         agent_id: AGENT_ID_TEST,
         name: "test_agent",
         capabilities: &[

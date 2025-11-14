@@ -82,9 +82,33 @@ impl KernelCommandInterface {
             qemu_manager,
             node_id,
             monitor_port,
-            command_timeout: Duration::from_secs(30), // Increased for Phase 3 validation commands
+            command_timeout: Duration::from_secs(45), // Slightly higher default for real kernel commands
             last_log_position: 0,
         }
+    }
+
+    /// Wait until the full shell is launched and a prompt is visible at least once.
+    /// Looks for robust boot markers and then the prompt. Times out after 90s.
+    pub async fn wait_for_full_shell_ready(&mut self) -> TestResult<()> {
+        let deadline = Instant::now() + Duration::from_secs(90);
+        let mut saw_shell_banner = false;
+        let mut saw_probe = false;
+        loop {
+            if Instant::now() >= deadline { break; }
+            let content = fs::read_to_string(&self.serial_log_path).await
+                .map_err(TestError::IoError)?;
+            if content.contains("[MAIN] STARTING FULL SHELL") || content.contains("LAUNCHING SHELL") {
+                saw_shell_banner = true;
+            }
+            if content.contains("[SHELL] PROBE POST") {
+                saw_probe = true;
+            }
+            if content.contains("sis>") && (saw_shell_banner || saw_probe) {
+                return Ok(());
+            }
+            sleep(Duration::from_millis(200)).await;
+        }
+        Err(TestError::ExecutionFailed { message: "Shell not ready within 90s".into() })
     }
 
     /// Execute a shell command in the running kernel and parse structured output
@@ -99,10 +123,18 @@ impl KernelCommandInterface {
         let old_timeout = self.command_timeout;
         self.command_timeout = timeout;
 
-        // Wait for shell prompt to be ready
+        // Ensure full shell has launched and prompt is ready
+        let _ = self.wait_for_full_shell_ready().await; // best effort pre-check
         log::info!("execute_command_with_timeout: waiting for shell prompt");
         self.wait_for_shell_prompt().await?;
         log::info!("execute_command_with_timeout: shell prompt ready");
+
+        // Send a newline to synchronize with the shell, then wait briefly for prompt again.
+        // This reduces flakiness when the previous prompt was stale in the log.
+        let _ = self.qemu_manager.write_command(self.node_id, "").await; // CRLF only
+        let _ = tokio::time::timeout(Duration::from_secs(2), async {
+            let _ = self.wait_for_shell_prompt().await; // Best-effort
+        }).await;
         
         // Mark current position in serial log before sending command
         log::info!("execute_command_with_timeout: updating log position");
@@ -253,7 +285,16 @@ impl KernelCommandInterface {
                 "[NPU PERF] NPU driver performance validation complete", // Earlier completion point
                 "sis>" // Primary completion indicator
             ],
-            _ => vec!["sis>"], // Default shell prompt
+            // Common short commands that print a completion sentinel
+            cmd if cmd.starts_with("agentsys ") => vec![
+                "CMD_DONE",
+                "[AgentSys] Test PASSED",
+                "[AgentSys] Status:",
+                "[AUDIT] Recent operations:",
+                "sis>",
+            ],
+            cmd if cmd.starts_with("llmctl ") || cmd.starts_with("llmjson") || cmd.starts_with("graphctl ") => vec!["CMD_DONE", "sis>"],
+            _ => vec!["CMD_DONE", "sis>"], // Prefer CMD_DONE sentinel; fallback to shell prompt
         };
         
         let deadline = Instant::now() + self.command_timeout;
@@ -276,9 +317,20 @@ impl KernelCommandInterface {
             sleep(Duration::from_millis(100)).await;
         }
         
+        // On timeout, include the last few hundred characters from the serial log to aid debugging
+        let tail = match fs::read_to_string(&self.serial_log_path).await {
+            Ok(content) => {
+                let s: String = content.chars().rev().take(300).collect::<String>().chars().rev().collect();
+                s
+            }
+            Err(_) => String::new(),
+        };
         Err(TestError::ExecutionFailed {
-            message: format!("Command '{}' timed out after {:?}. Output: {}", 
-                           command, self.command_timeout, accumulated_output.chars().take(200).collect::<String>())
+            message: format!("Command '{}' timed out after {:?}. Output: {} | Log tail: {}",
+                command,
+                self.command_timeout,
+                accumulated_output.chars().take(200).collect::<String>(),
+                tail)
         })
     }
 
@@ -294,7 +346,15 @@ impl KernelCommandInterface {
             let start = self.last_log_position as usize;
             let slice = &bytes[start..];
             // Lossy conversion to handle any non-UTF8 or control sequences safely
-            let new_content = String::from_utf8_lossy(slice).to_string();
+            let mut new_content = String::from_utf8_lossy(slice).to_string();
+            // Filter very noisy QEMU firmware lines that can appear late and drown signal
+            if new_content.contains("pflash_write: Unimplemented flash cmd sequence") {
+                new_content = new_content
+                    .lines()
+                    .filter(|l| !l.contains("pflash_write: Unimplemented flash cmd sequence"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+            }
             self.last_log_position = total_len;
             Ok(new_content)
         } else {
