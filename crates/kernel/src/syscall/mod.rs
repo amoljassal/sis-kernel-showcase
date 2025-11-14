@@ -533,9 +533,48 @@ pub fn sys_getdents64(fd: i32, dirp: *mut u8, count: usize) -> Result<isize> {
 
 /// sys_readlinkat - Read symbolic link (stub for Phase A1)
 pub fn sys_readlinkat(dirfd: i32, pathname: *const u8, buf: *mut u8, bufsiz: usize) -> Result<isize> {
-    let _ = (dirfd, pathname, buf, bufsiz);
-    // For Phase A1, return EINVAL (no symlinks yet)
-    Err(Errno::EINVAL)
+    if pathname.is_null() || buf.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    // Convert path to str
+    let path_str = unsafe {
+        let mut len = 0;
+        while len < 4096 && *pathname.add(len) != 0 {
+            len += 1;
+        }
+        let bytes = core::slice::from_raw_parts(pathname, len);
+        core::str::from_utf8(bytes).map_err(|_| Errno::EINVAL)?
+    };
+
+    // Handle dirfd (AT_FDCWD = -100 means current dir)
+    // For now, we ignore dirfd and use absolute paths
+    const AT_FDCWD: i32 = -100;
+    let full_path = if dirfd == AT_FDCWD || dirfd < 0 {
+        path_str.to_string()
+    } else {
+        // For now, ignore dirfd
+        path_str.to_string()
+    };
+
+    // Read link target from VFS
+    match crate::vfs::readlink(&full_path) {
+        Ok(target) => {
+            let target_bytes = target.as_bytes();
+            let copy_len = core::cmp::min(bufsiz, target_bytes.len());
+
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    target_bytes.as_ptr(),
+                    buf,
+                    copy_len
+                );
+            }
+
+            Ok(copy_len as isize)
+        }
+        Err(e) => Err(e)
+    }
 }
 
 /// sys_exit - Terminate current process
@@ -1406,22 +1445,28 @@ pub fn sys_clock_gettime(clk_id: i32, tp: *mut u8) -> Result<isize> {
     // Clock IDs
     const CLOCK_REALTIME: i32 = 0;
     const CLOCK_MONOTONIC: i32 = 1;
+    const CLOCK_PROCESS_CPUTIME_ID: i32 = 2;
 
-    // For Phase A1, return dummy time (TODO: get actual time from timer)
-    // timespec structure: tv_sec (8 bytes), tv_nsec (8 bytes)
-    let seconds: i64 = 100; // Dummy value
-    let nanoseconds: i64 = 0;
-
-    match clk_id {
-        CLOCK_REALTIME | CLOCK_MONOTONIC => {
-            unsafe {
-                *(tp as *mut i64) = seconds;
-                *(tp.add(8) as *mut i64) = nanoseconds;
-            }
-            Ok(0)
+    // Get real time from hardware timer
+    let ns = match clk_id {
+        CLOCK_REALTIME | CLOCK_MONOTONIC => crate::time::current_time_ns(),
+        CLOCK_PROCESS_CPUTIME_ID => {
+            // For now, same as monotonic
+            crate::time::current_time_ns()
         }
-        _ => Err(Errno::EINVAL),
+        _ => return Err(Errno::EINVAL),
+    };
+
+    // Convert to timespec (tv_sec, tv_nsec)
+    let seconds = (ns / 1_000_000_000) as i64;
+    let nanoseconds = (ns % 1_000_000_000) as i64;
+
+    unsafe {
+        *(tp as *mut i64) = seconds;
+        *(tp.add(8) as *mut i64) = nanoseconds;
     }
+
+    Ok(0)
 }
 
 /// sys_nanosleep - Sleep for specified time
@@ -1443,12 +1488,19 @@ pub fn sys_nanosleep(req: *const u8, rem: *mut u8) -> Result<isize> {
         return Err(Errno::EINVAL);
     }
 
-    // Phase A1: Minimal sleep implementation
-    // TODO: Implement proper sleep with timer and scheduler wakeup
-    // For now, just yield CPU
-    crate::process::scheduler::yield_now();
+    // Calculate total sleep duration in nanoseconds
+    let sleep_ns = seconds as u64 * 1_000_000_000 + nanoseconds as u64;
 
-    // If rem is not null, write remaining time (always 0 for Phase A1)
+    // Get start time
+    let start = crate::time::current_time_ns();
+    let target = start + sleep_ns;
+
+    // Simple busy-wait with yield (could be improved with scheduler sleep)
+    while crate::time::current_time_ns() < target {
+        crate::process::scheduler::yield_now();
+    }
+
+    // If rem is not null, write remaining time (always 0 since we completed)
     if !rem.is_null() {
         unsafe {
             *(rem as *mut i64) = 0;
