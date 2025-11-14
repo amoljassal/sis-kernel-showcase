@@ -8,7 +8,7 @@ impl super::Shell {
         }
         match args[0] {
             "bus" => {
-                let messages = crate::agent_bus::get_all_messages();
+                let messages = crate::internal_agent_bus::get_all_messages();
                 unsafe { crate::uart_print(b"[AGENT BUS] Messages ("); }
                 self.print_number_simple(messages.len() as u64);
                 unsafe { crate::uart_print(b" total):\n"); }
@@ -16,14 +16,14 @@ impl super::Shell {
                 if messages.is_empty() {
                     unsafe { crate::uart_print(b"  (no messages)\n"); }
                 } else {
-                    for msg in messages.iter() { crate::agent_bus::print_message(msg); }
+                    for msg in messages.iter() { crate::internal_agent_bus::print_message(msg); }
                 }
             }
             "stats" => {
-                crate::agent_bus::print_bus_stats();
+                crate::internal_agent_bus::print_bus_stats();
             }
             "clear" => {
-                crate::agent_bus::clear_message_bus();
+                crate::internal_agent_bus::clear_message_bus();
                 unsafe { crate::uart_print(b"[AGENT BUS] Cleared all messages\n"); }
             }
             _ => unsafe { crate::uart_print(b"Usage: agentctl <bus|stats|clear>\n"); }

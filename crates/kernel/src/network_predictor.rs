@@ -401,7 +401,7 @@ pub fn extract_flow_features(conn: &ConnectionState) -> [i16; 6] {
     features[4] = send_rate;
 
     // Feature 5: Current system load (from agent bus)
-    let messages = crate::agent_bus::get_all_messages();
+    let messages = crate::internal_agent_bus::get_all_messages();
     let load = messages.len().min(255) as i16;
     features[5] = load * 100;
 

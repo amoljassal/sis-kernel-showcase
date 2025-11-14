@@ -5,7 +5,7 @@
 impl super::Shell {
     pub(crate) fn cmd_coord_demo(&self) {
         unsafe { crate::uart_print(b"\n=== Cross-Agent Coordination Demo ===\n\n"); }
-        crate::agent_bus::clear_message_bus();
+        crate::internal_agent_bus::clear_message_bus();
         unsafe { crate::uart_print(b"[DEMO] Phase 1: Simulating memory stress...\n"); }
         let (_conf1, _oom1, _compact1) = crate::neural::predict_memory_health();
         for _ in 0..100000 { core::hint::spin_loop(); }
@@ -13,7 +13,7 @@ impl super::Shell {
         for i in 0..15 { let cmd = if i % 2 == 0 { "test" } else { "stress" }; let (_c, _s) = crate::neural::predict_command(cmd); }
         for _ in 0..100000 { core::hint::spin_loop(); }
         unsafe { crate::uart_print(b"\n[DEMO] Phase 3: Checking agent bus for messages...\n"); }
-        let messages = crate::agent_bus::get_all_messages();
+        let messages = crate::internal_agent_bus::get_all_messages();
         unsafe { crate::uart_print(b"  Messages published: "); }
         self.print_number_simple(messages.len() as u64);
         unsafe { crate::uart_print(b"\n\n"); }
@@ -21,7 +21,7 @@ impl super::Shell {
             unsafe { crate::uart_print(b"  ["); }
             self.print_number_simple(idx as u64);
             unsafe { crate::uart_print(b"] "); }
-            crate::agent_bus::print_message(msg);
+            crate::internal_agent_bus::print_message(msg);
         }
         unsafe { crate::uart_print(b"\n[DEMO] Phase 4: Processing cross-agent coordination...\n"); }
         crate::neural::process_agent_coordination();

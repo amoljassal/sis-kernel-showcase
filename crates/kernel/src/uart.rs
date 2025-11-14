@@ -283,3 +283,109 @@ pub unsafe fn has_rx_data() -> bool {
     let uart_ptr = &raw const GLOBAL_UART;
     (*uart_ptr).has_rx_data()
 }
+
+/// Print a string to UART
+pub fn print_str(s: &str) {
+    unsafe { write_bytes(s.as_bytes()); }
+}
+
+/// Print a u8 as decimal to UART
+pub fn print_u8(n: u8) {
+    let mut buf = [0u8; 3]; // max 255 (3 digits)
+    let mut num = n as usize;
+    let mut i = 0;
+
+    if num == 0 {
+        unsafe { write_bytes(b"0"); }
+        return;
+    }
+
+    while num > 0 {
+        buf[i] = b'0' + (num % 10) as u8;
+        num /= 10;
+        i += 1;
+    }
+
+    while i > 0 {
+        i -= 1;
+        unsafe { write_byte(buf[i]); }
+    }
+}
+
+/// Print a u16 as decimal to UART
+pub fn print_u16(n: u16) {
+    let mut buf = [0u8; 5]; // max 65535 (5 digits)
+    let mut num = n as usize;
+    let mut i = 0;
+
+    if num == 0 {
+        unsafe { write_bytes(b"0"); }
+        return;
+    }
+
+    while num > 0 {
+        buf[i] = b'0' + (num % 10) as u8;
+        num /= 10;
+        i += 1;
+    }
+
+    while i > 0 {
+        i -= 1;
+        unsafe { write_byte(buf[i]); }
+    }
+}
+
+/// Print a u32 as decimal to UART
+pub fn print_u32(n: u32) {
+    let mut buf = [0u8; 10]; // max 4294967295 (10 digits)
+    let mut num = n;
+    let mut i = 0;
+
+    if num == 0 {
+        unsafe { write_bytes(b"0"); }
+        return;
+    }
+
+    while num > 0 {
+        buf[i] = b'0' + (num % 10) as u8;
+        num /= 10;
+        i += 1;
+    }
+
+    while i > 0 {
+        i -= 1;
+        unsafe { write_byte(buf[i]); }
+    }
+}
+
+/// Print a u64 as decimal to UART
+pub fn print_u64(n: u64) {
+    let mut buf = [0u8; 20]; // max 18446744073709551615 (20 digits)
+    let mut num = n;
+    let mut i = 0;
+
+    if num == 0 {
+        unsafe { write_bytes(b"0"); }
+        return;
+    }
+
+    while num > 0 {
+        buf[i] = b'0' + (num % 10) as u8;
+        num /= 10;
+        i += 1;
+    }
+
+    while i > 0 {
+        i -= 1;
+        unsafe { write_byte(buf[i]); }
+    }
+}
+
+/// Print a u8 as hexadecimal (e.g., "A5") to UART
+pub fn print_hex8(n: u8) {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    unsafe {
+        write_byte(HEX[(n >> 4) as usize]);
+        write_byte(HEX[(n & 0xF) as usize]);
+    }
+}

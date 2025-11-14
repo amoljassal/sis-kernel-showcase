@@ -11,6 +11,21 @@
 //!  0x11 LlmInferStart { max_tokens_le_u16, prompt_utf8[...] } (feature: `llm`)
 //!  0x12 LlmInferPoll { infer_id_le_u32 } (feature: `llm`, reserved for streaming)
 //!  0x13 LlmCancel { infer_id_le_u32 } (feature: `llm`)
+//!  0x30 AgentSys_FsList { path_len_u16, path_utf8[...] } (feature: `agentsys`)
+//!  0x31 AgentSys_FsRead { path_len_u16, offset_u64, len_u32, path_utf8[...] } (feature: `agentsys`)
+//!  0x32 AgentSys_FsWrite { path_len_u16, offset_u64, data_len_u32, path_utf8[...], data[...] } (feature: `agentsys`)
+//!  0x33 AgentSys_FsStat { path_len_u16, path_utf8[...] } (feature: `agentsys`)
+//!  0x34 AgentSys_FsCreate { path_len_u16, kind_u8, path_utf8[...] } (feature: `agentsys`)
+//!  0x35 AgentSys_FsDelete { path_len_u16, path_utf8[...] } (feature: `agentsys`)
+//!  0x36 AgentSys_AudioPlay { track_ref_u32 } (feature: `agentsys`)
+//!  0x37 AgentSys_AudioStop {} (feature: `agentsys`)
+//!  0x38 AgentSys_AudioVolume { level_u8 } (feature: `agentsys`)
+//!  0x39 AgentSys_DocNew { name_len_u16, name_utf8[...] } (feature: `agentsys`)
+//!  0x3A AgentSys_DocEdit { doc_ref_u32, ops_count_u16, ops[...] } (feature: `agentsys`)
+//!  0x3B AgentSys_DocSave { doc_ref_u32 } (feature: `agentsys`)
+//!  0x3C AgentSys_Screenshot {} (feature: `agentsys`)
+//!  0x3D AgentSys_AudioRecord { duration_secs_u16 } (feature: `agentsys`)
+//!  0x3E-0x3F Reserved for future AgentSys operations (feature: `agentsys`)
 
 use crate::graph::{GraphApi, OperatorSpec, Stage};
 #[cfg(feature = "llm")]
@@ -22,6 +37,9 @@ use heapless::String as HString;
 
 /// Maximum allowed control payload length (bytes)
 pub const MAX_CTRL_LEN: usize = 64;
+
+#[cfg(feature = "agentsys")]
+pub const AGENTSYS_MAX_PAYLOAD: usize = 4096;
 
 /// Simple 64-bit capability token for control-plane authorization.
 /// Frames must include this token as the first 8 bytes of payload.
@@ -537,6 +555,16 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
                 let _ = drv.write_data(line.as_bytes());
             }
             Ok(())
+        }
+        #[cfg(feature = "agentsys")]
+        0x30..=0x3F => {
+            // AgentSys operations
+            let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            crate::agent_sys::handle_frame(cmd, tok, p)
+        }
+        #[cfg(not(feature = "agentsys"))]
+        0x30..=0x3F => {
+            Err(CtrlError::Unsupported)
         }
         _ => Err(CtrlError::Unsupported),
     }

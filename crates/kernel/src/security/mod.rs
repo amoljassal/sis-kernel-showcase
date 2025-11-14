@@ -13,3 +13,10 @@ pub use cred::{
 };
 pub use perm::{Permission, inode_permission, check_permission};
 pub use random::{init as init_random, fill_random_bytes, random_u64, random_u32, random_range};
+
+// Phase 9: AgentSys security modules
+#[cfg(feature = "agentsys")]
+pub mod agent_policy;
+
+#[cfg(feature = "agentsys")]
+pub mod agent_audit;

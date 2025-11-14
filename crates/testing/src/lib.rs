@@ -30,6 +30,7 @@ pub mod phase5_ux_safety;
 pub mod phase6_web_gui;
 pub mod phase7_ai_ops;
 pub mod phase8_deterministic;
+pub mod phase9_agentic;
 
 // Core test result types
 
@@ -94,6 +95,7 @@ pub struct ValidationReport {
     pub phase6_results: Option<phase6_web_gui::Phase6Results>,
     pub phase7_results: Option<phase7_ai_ops::Phase7Results>,
     pub phase8_results: Option<phase8_deterministic::Phase8Results>,
+    pub phase9_results: Option<phase9_agentic::Phase9Results>,
     pub test_coverage: TestCoverageReport,
     pub generated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -112,6 +114,7 @@ pub struct TestCoverageReport {
     pub phase6_coverage: f64,
     pub phase7_coverage: f64,
     pub phase8_coverage: f64,
+    pub phase9_coverage: f64,
     pub overall_coverage: f64,
 }
 
@@ -231,6 +234,7 @@ pub struct SISTestSuite {
     pub phase6_suite: Option<phase6_web_gui::Phase6WebGUISuite>,
     pub phase7_suite: Option<phase7_ai_ops::Phase7AIOpsSuite>,
     pub phase8_suite: Option<phase8_deterministic::Phase8DeterministicSuite>,
+    pub phase9_suite: Option<phase9_agentic::Phase9AgenticSuite>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -277,6 +281,7 @@ impl SISTestSuite {
             phase6_suite: None,
             phase7_suite: None,
             phase8_suite: None,
+            phase9_suite: None,
             config,
         }
     }
@@ -365,10 +370,13 @@ impl SISTestSuite {
                     serial_log_path.clone(), qemu_manager.clone(), 0, monitor_port
                 ));
                 self.phase8_suite = Some(phase8_deterministic::Phase8DeterministicSuite::new(
+                    serial_log_path.clone(), qemu_manager.clone(), 0, monitor_port
+                ));
+                self.phase9_suite = Some(phase9_agentic::Phase9AgenticSuite::new(
                     serial_log_path, qemu_manager.clone(), 0, monitor_port
                 ));
 
-                log::info!("Phase 1-8 test suites initialized successfully");
+                log::info!("Phase 1-9 test suites initialized successfully");
             } else {
                 log::warn!("Cannot initialize phase suites: serial log path not available");
             }
@@ -486,7 +494,8 @@ impl SISTestSuite {
                         phase6_results: None,
                         phase7_results: None,
                         phase8_results: None,
-                        test_coverage: TestCoverageReport { performance_coverage: 0.0, correctness_coverage: 0.0, security_coverage: 0.0, distributed_coverage: 0.0, ai_coverage: 0.0, phase1_coverage: 0.0, phase2_coverage: 0.0, phase3_coverage: 0.0, phase5_coverage: 0.0, phase6_coverage: 0.0, phase7_coverage: 0.0, phase8_coverage: 0.0, overall_coverage: 0.0 },
+                        phase9_results: None,
+                        test_coverage: TestCoverageReport { performance_coverage: 0.0, correctness_coverage: 0.0, security_coverage: 0.0, distributed_coverage: 0.0, ai_coverage: 0.0, phase1_coverage: 0.0, phase2_coverage: 0.0, phase3_coverage: 0.0, phase5_coverage: 0.0, phase6_coverage: 0.0, phase7_coverage: 0.0, phase8_coverage: 0.0, phase9_coverage: 0.0, overall_coverage: 0.0 },
                         generated_at: chrono::Utc::now(),
                     });
                 }
@@ -514,7 +523,7 @@ impl SISTestSuite {
             )?;
 
             // Run phase test suites (if initialized)
-            log::info!("Running Phase 1-8 comprehensive test suites");
+            log::info!("Running Phase 1-9 comprehensive test suites");
 
             let phase1_results = if let Some(ref mut suite) = self.phase1_suite {
                 match suite.validate_phase1().await {
@@ -586,6 +595,16 @@ impl SISTestSuite {
                 }
             } else { None };
 
+            let phase9_results = if let Some(ref mut suite) = self.phase9_suite {
+                match suite.validate_phase9().await {
+                    Ok(r) => Some(r),
+                    Err(e) => {
+                        log::warn!("Phase 9 validation failed: {}", e);
+                        None
+                    }
+                }
+            } else { None };
+
             self.generate_validation_report(
                 Some(maybe_perf_results),
                 Some(correctness_results),
@@ -599,6 +618,7 @@ impl SISTestSuite {
                 phase6_results,
                 phase7_results,
                 phase8_results,
+                phase9_results,
             ).await
         } else {
             // Sequential execution for debugging
@@ -611,7 +631,7 @@ impl SISTestSuite {
             let ai_results = self.ai_validation.validate_inference_accuracy().await?;
 
             // Run phase test suites sequentially
-            log::info!("Running Phase 1-8 comprehensive test suites (sequential)");
+            log::info!("Running Phase 1-9 comprehensive test suites (sequential)");
 
             let phase1_results = if let Some(ref mut suite) = self.phase1_suite {
                 suite.validate_phase1().await.ok()
@@ -641,6 +661,10 @@ impl SISTestSuite {
                 suite.validate_phase8().await.ok()
             } else { None };
 
+            let phase9_results = if let Some(ref mut suite) = self.phase9_suite {
+                suite.validate_phase9().await.ok()
+            } else { None };
+
             self.generate_validation_report(
                 Some(perf_results),
                 Some(correctness_results),
@@ -654,6 +678,7 @@ impl SISTestSuite {
                 phase6_results,
                 phase7_results,
                 phase8_results,
+                phase9_results,
             ).await
         }
     }
@@ -672,6 +697,7 @@ impl SISTestSuite {
         phase6_results: Option<phase6_web_gui::Phase6Results>,
         phase7_results: Option<phase7_ai_ops::Phase7Results>,
         phase8_results: Option<phase8_deterministic::Phase8Results>,
+        phase9_results: Option<phase9_agentic::Phase9Results>,
     ) -> anyhow::Result<ValidationReport> {
         let mut validation_results = Vec::new();
 
@@ -700,7 +726,7 @@ impl SISTestSuite {
             validation_results.extend(self.validate_ai_claims(ai));
         }
 
-        // Validate Phase 1-8 claims
+        // Validate Phase 1-9 claims
         if let Some(ref phase1) = phase1_results {
             validation_results.push(ValidationResult {
                 claim: "Phase 1: AI-Native Dataflow".to_string(),
@@ -785,6 +811,23 @@ impl SISTestSuite {
             });
         }
 
+        if let Some(ref phase9) = phase9_results {
+            validation_results.push(ValidationResult {
+                claim: "Phase 9: Agentic Platform".to_string(),
+                target: "≥75% pass rate (100% target)".to_string(),
+                measured: format!("{:.1}%", phase9.overall_score),
+                passed: phase9.overall_score >= 75.0,
+                confidence_level: 0.95,
+                industry_comparison: Some("Industry standard: Agent systems 50-65%".to_string()),
+                evidence: vec![
+                    format!("Score: {:.1}%", phase9.overall_score),
+                    format!("Protocol tests: {}", if phase9.protocol_tests_passed { "PASS" } else { "FAIL" }),
+                    format!("Capability tests: {}", if phase9.capability_tests_passed { "PASS" } else { "FAIL" }),
+                    format!("Audit tests: {}", if phase9.audit_tests_passed { "PASS" } else { "FAIL" }),
+                ],
+            });
+        }
+
         let test_coverage = self.calculate_test_coverage(
             &validation_results,
             phase1_results.as_ref(),
@@ -794,6 +837,7 @@ impl SISTestSuite {
             phase6_results.as_ref(),
             phase7_results.as_ref(),
             phase8_results.as_ref(),
+            phase9_results.as_ref(),
         );
         let overall_score = self.calculate_overall_score(&validation_results);
 
@@ -812,6 +856,7 @@ impl SISTestSuite {
             phase6_results,
             phase7_results,
             phase8_results,
+            phase9_results,
             test_coverage,
             generated_at: chrono::Utc::now(),
         };
@@ -965,6 +1010,7 @@ impl SISTestSuite {
         phase6: Option<&phase6_web_gui::Phase6Results>,
         phase7: Option<&phase7_ai_ops::Phase7Results>,
         phase8: Option<&phase8_deterministic::Phase8Results>,
+        phase9: Option<&phase9_agentic::Phase9Results>,
     ) -> TestCoverageReport {
         let total_tests = results.len() as f64;
         let passed_tests = results.iter().filter(|r| r.passed).count() as f64;
@@ -983,6 +1029,7 @@ impl SISTestSuite {
             phase6_coverage: phase6.map(|p| p.overall_score / 100.0).unwrap_or(0.0),
             phase7_coverage: phase7.map(|p| p.overall_score / 100.0).unwrap_or(0.0),
             phase8_coverage: phase8.map(|p| p.overall_score / 100.0).unwrap_or(0.0),
+            phase9_coverage: phase9.map(|p| p.overall_score / 100.0).unwrap_or(0.0),
             overall_coverage: (passed_tests / total_tests) * 100.0,
         }
     }
@@ -1005,6 +1052,7 @@ impl SISTestSuite {
                     "phase6" => r.claim.contains("Phase 6") || r.claim.contains("Web GUI"),
                     "phase7" => r.claim.contains("Phase 7") || r.claim.contains("AI Operations"),
                     "phase8" => r.claim.contains("Phase 8") || r.claim.contains("Performance Optimization"),
+                    "phase9" => r.claim.contains("Phase 9") || r.claim.contains("Agentic Platform"),
                     _ => false
                 }
             })
