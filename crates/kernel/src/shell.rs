@@ -92,6 +92,8 @@ mod mlctl_helpers;
 mod actorctl_helpers;
 #[cfg(feature = "llm")]
 mod llmctl_helpers;
+#[cfg(feature = "agentsys")]
+mod agentsys_helpers;
 #[cfg(any(feature = "demos", feature = "deterministic"))]
 mod demos;
 
@@ -231,6 +233,8 @@ impl Shell {
                 "rtaivalidation" => { self.cmd_realtime_ai_validation(); true },
                 "neuralctl" => { self.cmd_neuralctl(&parts[1..]); true },
                 "agentctl" => { self.agentctl_cmd(&parts[1..]); true },
+                #[cfg(feature = "agentsys")]
+                "agentsys" => { self.cmd_agentsys(&parts[1..]); true },
                 "coordctl" => { self.coordctl_cmd(&parts[1..]); true },
                 "deployctl" => { self.deployctl_cmd(&parts[1..]); true },
                 "driftctl" => { self.driftctl_cmd(&parts[1..]); true },

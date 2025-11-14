@@ -85,7 +85,7 @@ pub mod npu_driver;
 pub mod interrupts;
 pub mod control;
 pub mod neural;
-pub mod agent_bus;
+pub mod internal_agent_bus;
 pub mod meta_agent;
 pub mod autonomy;
 pub mod time;
@@ -132,6 +132,10 @@ pub mod llm;
 // Phase 2: AI Governance & Multi-Agent Coordination (feature-gated)
 #[cfg(feature = "ai-ops")]
 pub mod ai;
+
+// Phase 9: AgentSys - Capability-based system for LLM agents (feature-gated)
+#[cfg(feature = "agentsys")]
+pub mod agent_sys;
 
 // Optional embedded initramfs for models (integration tests)
 #[cfg(all(feature = "initramfs-models", have_initramfs_models, any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "riscv64")))]
@@ -759,6 +763,12 @@ mod bringup {
 
         // 11.5) Print build information (Phase 5 - Production Readiness)
         crate::build_info::print_build_info();
+
+        // 11.6) Initialize AgentSys (Phase 9 - Agentic Platform)
+        #[cfg(feature = "agentsys")]
+        {
+            crate::agent_sys::init();
+        }
 
         // 12) Launch interactive shell
         super::uart_print(b"LAUNCHING SHELL\n");
