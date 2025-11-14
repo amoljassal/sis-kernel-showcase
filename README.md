@@ -1,25 +1,22 @@
-# SIS Kernel - AI-Native Operating System
+# SIS Kernel - AI-Native OS (QEMU)
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/YOUR_USERNAME/sis-kernel/actions)
 [![Rust Version](https://img.shields.io/badge/rust-1.75%2B-orange)](https://www.rust-lang.org)
 [![Architecture](https://img.shields.io/badge/arch-AArch64-blue)](https://en.wikipedia.org/wiki/AArch64)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-QEMU%20%7C%20Hardware-lightgrey)](https://www.qemu.org)
-[![AI Features](https://img.shields.io/badge/AI-8%20Phases%20Complete-purple)](#aiml-features)
-[![Test Suite](https://img.shields.io/badge/tests-75%20cases%20%7C%2053.8%25%20(Phase%203%20%E2%86%92%2080%25!)-yellow)](#-comprehensive-test-suite---industry-grade-validation)
-[![Production Ready](https://img.shields.io/badge/production-ready-success)](#phase-4-production-readiness-complete-)
+[![Platform](https://img.shields.io/badge/platform-QEMU%20(Emulated)-lightgrey)](https://www.qemu.org)
 
-> **A complete AArch64 (ARM64) operating system** with kernel-resident AI/ML capabilities, featuring comprehensive OS foundation (VFS, memory management, process infrastructure, device drivers, network stack, security subsystem, window manager), 8 complete AI/ML phases (dataflow observability, deterministic scheduling, real-time AI, production hardening, UX safety, web GUI, AI operations platform, core OS performance optimization), and enterprise-grade stress testing with chaos engineering.
+> Note: This project currently runs in QEMU (emulated ARM64). All tests, stress results, and metrics reflect QEMU behavior and are not representative of physical hardware.
 
-> **🧪 Testing**: Comprehensive industry-grade test suite with 75 test cases across 8 phases (~6,480 LOC). Core system tests: 100% passing (6/6). Phase tests: 47.8% (69 tests executed, 33 passing). Overall validation score: **53.8%** with Priority 1 scheduler metrics fixes. 🎉 **Phase 3 breakthrough: 0% → 80%** (+80.0%!) 🥇 Phase 3 reaches production threshold (≥75%)! Phase 8 performance optimization: 66.7%. [See detailed results](#-comprehensive-test-suite---industry-grade-validation)
+An AArch64 (ARM64) operating system prototype that boots under UEFI in QEMU with kernel‑resident AI/ML components. It includes foundational OS subsystems (VFS, memory management, processes, device drivers, network stack, basic security, window manager) and experimental AI/ML modules (neural agents, meta‑agent coordination, stress tests, autonomy metrics). Results and examples in this repository are QEMU‑based.
 
 **🎯 Quick Links:** [Try It Now](#quick-start---single-command) | [Architecture](#architecture-overview) | [Test Results](#-comprehensive-test-suite---industry-grade-validation) | [Demo Videos](#demo-videos) | [Contributing](docs/CONTRIBUTING.md) | [Roadmap](#roadmap-near-term)
 
 ---
 
-## 🎬 Demo Videos
+## 🎬 Optional Demos
 
-> **Note:** Adding demo videos dramatically improves portfolio impact. Record these 3 short demos:
+The following demo flows are optional and help illustrate behavior in QEMU:
 
 ### 1. QEMU Boot → Shell Commands → Stress Test (2 min)
 ```bash
@@ -30,7 +27,7 @@ sis> help
 sis> stresstest compare memory --duration 10000
 sis> autoctl status
 ```
-**What to show:** Fast boot, shell commands working, stress test with autonomy comparison, metrics output
+What it shows: boot to shell, basic commands, memory stress with autonomy comparison, metrics output
 
 **Add here:** `![Boot Demo](docs/assets/boot-demo.gif)` or link to YouTube/Vimeo
 
@@ -45,7 +42,7 @@ sis> autoctl status
 # - Autonomy toggle on/off
 # - Stress test execution visualization
 ```
-**What to show:** GUI responsiveness, WebSocket updates, autonomous decision approval workflow
+What it shows: GUI responsiveness, WebSocket updates, autonomous decision approval workflow
 
 **Add here:** `![GUI Demo](docs/assets/gui-demo.gif)` or link to video
 
@@ -59,7 +56,7 @@ sis> shadowctl enable v2
 sis> shadowctl mode compare
 sis> tracectl export-divergences 10
 ```
-**What to show:** Hot model swap, shadow deployment, divergence detection, incident bundle export
+What it shows: hot model swap, shadow deployment, divergence detection, incident bundle export
 
 **Add here:** `![AI Ops Demo](docs/assets/ai-ops-demo.gif)` or link to video
 
@@ -251,11 +248,9 @@ User Command → Shell Parser → Neural Agent → Meta-Agent Coordinator
 
 ## 🎓 Current Status
 
-A complete AArch64 (ARM64) operating system that boots under UEFI in QEMU, featuring Phase A comprehensive OS foundation (VFS, memory management, process infrastructure, device drivers, network stack, security subsystem, and window manager), Phase 1 dataflow observability, Phase 2 deterministic scheduling with signed model capabilities, Phase 3 AI-native real-time scheduling with NPU emulation, **Phase 4 enterprise-grade production readiness** (structured logging, chaos engineering, security hardening, CI/CD, Docker, comprehensive testing infrastructure), Phase 5 UX safety enhancements with approval workflows and explainability features, Phase 6 web-based management interface with real-time monitoring and control, **Phase 7 AI Operations Platform** (model lifecycle management, decision tracing, shadow deployments, OpenTelemetry integration), and **Phase 8 Core OS Performance Optimization** (unified CBS+EDF scheduler, slab allocator, VirtIO zero-copy DMA, fork scaffolding, profiling framework).
+The system boots under UEFI in QEMU and exercises core OS subsystems together with AI/ML components. The “Phase” labels in this repository describe project milestones achieved in QEMU; they are not claims of production readiness. Hardware validation, performance characterization on physical devices, and production hardening remain future work.
 
-This README is intentionally scoped to what is implemented today. Sections marked Planned describe upcoming work with scaffolding present in code.
-
-This README reflects the implemented, verifiable behavior in this repo today. Phase A (OS Foundation) and Phases 1-8 (AI/ML Features & Performance) are COMPLETE. Future work focuses on additional OS features, hardware validation, and performance optimization.
+Sections marked Planned describe upcoming work with scaffolding present in code.
 
 ---
 

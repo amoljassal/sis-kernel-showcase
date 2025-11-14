@@ -213,7 +213,9 @@ impl PerformanceTestFramework {
         let mut deterministic_demo_duration_us: Option<f64> = None;
         let mut deterministic_demo_completed: Option<f64> = None;
 
-        for line in data.lines() {
+        for raw_line in data.lines() {
+            // Strip harness prefix if present
+            let line = if let Some(rest) = raw_line.strip_prefix("[QEMU-OUT] ") { rest } else { raw_line };
             // Parse lines like: METRIC ai_inference_us=1234
             if let Some(rest) = line.strip_prefix("METRIC ") {
                 if let Some((k, v)) = rest.split_once('=') {
