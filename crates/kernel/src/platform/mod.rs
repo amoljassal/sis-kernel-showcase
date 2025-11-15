@@ -52,22 +52,121 @@ pub trait Platform {
 
 pub mod qemu_virt;
 pub mod dt;
+pub mod rpi5;
 
-/// Return the active platform implementation. For now, default to QEMU virt.
+/// Platform type enumeration
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum PlatformType {
+    /// QEMU aarch64 virt machine
+    QemuVirt,
+    /// Raspberry Pi 5 (BCM2712)
+    RaspberryPi5,
+    /// Unknown/generic platform
+    Unknown,
+}
+
+/// Return the active platform implementation
 static mut ACTIVE_OVERRIDE: Option<&'static dyn Platform> = None;
+static mut DETECTED_PLATFORM: PlatformType = PlatformType::Unknown;
 
 #[allow(static_mut_refs)]
 pub fn active() -> &'static dyn Platform {
     unsafe { ACTIVE_OVERRIDE.unwrap_or(&qemu_virt::INSTANCE) }
 }
 
+/// Get the detected platform type
+pub fn detected_type() -> PlatformType {
+    unsafe { DETECTED_PLATFORM }
+}
+
 /// Try to override the active platform by parsing a provided DTB pointer.
 /// Returns true on success. Safe to call multiple times; subsequent calls are ignored once set.
+///
+/// This function:
+/// 1. Parses the FDT to extract device information
+/// 2. Detects the platform type (QEMU virt vs RPi5)
+/// 3. Selects the appropriate platform implementation
+///
+/// # Safety
+/// Must be called with a valid FDT pointer during early boot, before the platform is used.
 #[allow(static_mut_refs)]
 pub unsafe fn override_with_dtb(dtb_ptr: *const u8) -> bool {
     if ACTIVE_OVERRIDE.is_some() { return true; }
+
+    // Parse the FDT first
     if let Some(p) = dt::from_dtb(dtb_ptr) {
-        ACTIVE_OVERRIDE = Some(p);
+        // Detect platform type based on FDT contents
+        let platform_type = detect_platform_from_fdt();
+
+        crate::info!("Platform detected: {:?}", platform_type);
+
+        // Set the detected platform type
+        DETECTED_PLATFORM = platform_type;
+
+        // Select the appropriate platform implementation
+        match platform_type {
+            PlatformType::RaspberryPi5 => {
+                // Use the FDT-based platform for RPi5
+                // This gives us access to all the parsed device information
+                ACTIVE_OVERRIDE = Some(p);
+                rpi5::init_hardware();
+            }
+            PlatformType::QemuVirt => {
+                // Use the FDT-based platform for QEMU as well
+                ACTIVE_OVERRIDE = Some(p);
+            }
+            PlatformType::Unknown => {
+                // Default to FDT-based platform
+                ACTIVE_OVERRIDE = Some(p);
+                crate::warn!("Unknown platform, using FDT-based configuration");
+            }
+        }
+
         true
-    } else { false }
+    } else {
+        crate::warn!("Failed to parse FDT, using default platform");
+        DETECTED_PLATFORM = PlatformType::QemuVirt;
+        false
+    }
+}
+
+/// Detect platform type from FDT device map
+///
+/// This function examines the parsed device map to determine which platform we're running on.
+/// It looks for platform-specific device signatures.
+fn detect_platform_from_fdt() -> PlatformType {
+    if let Some(devmap) = dt::get_device_map() {
+        // Check for RPi5-specific devices
+        // RPi5 has SDHCI, PCIe controller, and specific device addresses
+        if devmap.sdhci.is_some() {
+            // If we have SDHCI with a BCM2712-specific address range, it's likely RPi5
+            if let Some(sdhci) = devmap.sdhci {
+                // RPi5 SDHCI is typically in the RP1 I/O hub region or VC peripheral region
+                if sdhci.base > 0x1000_0000 {
+                    return PlatformType::RaspberryPi5;
+                }
+            }
+        }
+
+        // Check for PCIe - RPi5 has RP1 PCIe
+        if devmap.pcie.is_some() {
+            return PlatformType::RaspberryPi5;
+        }
+
+        // Check UART base address
+        if let Some(uart) = devmap.uart {
+            // QEMU typically has UART at 0x0900_0000
+            // RPi5 has UART at higher addresses (0x107d001000 or similar)
+            if uart.base >= 0x0900_0000 && uart.base < 0x0A00_0000 {
+                // Likely QEMU virt
+                return PlatformType::QemuVirt;
+            } else if uart.base > 0x1000_0000 {
+                // Likely RPi5
+                return PlatformType::RaspberryPi5;
+            }
+        }
+    }
+
+    // Default to QEMU if we can't determine
+    PlatformType::QemuVirt
 }

@@ -4,9 +4,9 @@
 pub mod trap;
 pub mod timer;
 pub mod psci;  // Phase E: SMP CPU bring-up
+pub mod gicv3; // GICv3 interrupt controller
 
 // TODO: Add in later phases:
-// pub mod gicv3;   // Interrupt controller (Phase E)
 // pub mod mmu;     // Page tables, TLB (Phase A1)
 
 pub use trap::*;
