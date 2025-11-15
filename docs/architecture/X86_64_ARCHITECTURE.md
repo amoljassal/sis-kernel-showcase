@@ -1,6 +1,6 @@
 # x86_64 Architecture Implementation
 
-**Status:** Milestone M8 Complete (SMP Support)
+**Status:** Milestone M5 Complete (Serial/TTY Polish)
 **Last Updated:** 2025-11-15
 **Architecture:** Intel/AMD 64-bit (x86_64)
 **Boot Method:** UEFI
@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-This document describes the x86_64 architecture implementation for the SIS kernel. The implementation follows a milestone-based approach (M0-M9) as outlined in `IMPLEMENTATION_PLAN_X86_64.md`. As of this update, **Milestones M0-M4 and M8** have been completed: Skeleton Boot, Interrupts & Exceptions, APIC & High Precision Timer, Paging & Memory Management, Syscall Entry, and SMP Support. The kernel now has a fully functional multiprocessor boot environment with modern APIC-based interrupts, 4-level page tables, fast SYSCALL/SYSRET system call entry, and multi-CPU support via INIT-SIPI-SIPI protocol.
+This document describes the x86_64 architecture implementation for the SIS kernel. The implementation follows a milestone-based approach (M0-M9) as outlined in `IMPLEMENTATION_PLAN_X86_64.md`. As of this update, **Milestones M0-M5 and M8** have been completed: Skeleton Boot, Interrupts & Exceptions, APIC & High Precision Timer, Paging & Memory Management, Syscall Entry, Serial/TTY Polish, and SMP Support. The kernel now has a fully functional multiprocessor boot environment with modern APIC-based interrupts, 4-level page tables, fast SYSCALL/SYSRET system call entry, interrupt-driven serial I/O with ring buffers, and multi-CPU support via INIT-SIPI-SIPI protocol.
 
 ## Table of Contents
 
@@ -20,18 +20,19 @@ This document describes the x86_64 architecture implementation for the SIS kerne
 4. [Milestone M2: APIC & High Precision Timer](#milestone-m2-apic--high-precision-timer)
 5. [Milestone M3: Paging & Memory Management](#milestone-m3-paging--memory-management)
 6. [Milestone M4: Syscall Entry](#milestone-m4-syscall-entry)
-7. [Milestone M8: SMP Support](#milestone-m8-smp-support)
-8. [Module Organization](#module-organization)
-9. [Memory Layout](#memory-layout)
-10. [Boot Sequence](#boot-sequence)
-11. [CPU Feature Management](#cpu-feature-management)
-12. [Exception Handling](#exception-handling)
-13. [Interrupt Handling](#interrupt-handling)
-14. [Serial Console](#serial-console)
-15. [Time Keeping](#time-keeping)
-16. [Future Milestones](#future-milestones)
-17. [Testing](#testing)
-18. [References](#references)
+7. [Milestone M5: Serial/TTY Polish](#milestone-m5-serialtty-polish)
+8. [Milestone M8: SMP Support](#milestone-m8-smp-support)
+9. [Module Organization](#module-organization)
+10. [Memory Layout](#memory-layout)
+11. [Boot Sequence](#boot-sequence)
+12. [CPU Feature Management](#cpu-feature-management)
+13. [Exception Handling](#exception-handling)
+14. [Interrupt Handling](#interrupt-handling)
+15. [Serial Console](#serial-console)
+16. [Time Keeping](#time-keeping)
+17. [Future Milestones](#future-milestones)
+18. [Testing](#testing)
+19. [References](#references)
 
 ---
 
@@ -1271,6 +1272,274 @@ ap_trampoline_start:
 - Intel MultiProcessor Specification v1.4
 - OSDev Wiki: SMP
 - AMD64 Architecture Programmer's Manual Vol. 2, Chapter 16
+
+---
+
+## Milestone M5: Serial/TTY Polish
+
+### Objectives
+
+- Implement interrupt-driven serial I/O
+- Add ring buffer management for received data
+- Enable non-blocking read operations
+- Improve serial performance and reliability
+
+### Overview
+
+Milestone M5 enhances the serial driver from simple polling-based I/O to efficient interrupt-driven communication. This improves system responsiveness by eliminating busy-waiting and enables buffering of received data.
+
+**Benefits:**
+- No CPU cycles wasted polling for data
+- Buffered RX data prevents character loss
+- Non-blocking read operations
+- Foundation for TTY/terminal subsystem
+
+### Components
+
+#### 1. Ring Buffer Implementation
+
+**File:** `src/arch/x86_64/serial.rs` (+90 lines)
+
+Added a circular buffer for serial data:
+
+```rust
+struct RingBuffer {
+    data: [u8; 256],
+    head: usize,  // Write position
+    tail: usize,  // Read position
+}
+
+impl RingBuffer {
+    fn push(&mut self, byte: u8) -> Result<(), ()>;
+    fn pop(&mut self) -> Option<u8>;
+    fn is_empty(&self) -> bool;
+    fn is_full(&self) -> bool;
+    fn len(&self) -> usize;
+}
+```
+
+**Features:**
+- 256-byte capacity
+- Lock-free for single producer/consumer
+- Efficient modulo arithmetic
+- Handles buffer full/empty conditions
+
+#### 2. Enhanced Serial Driver
+
+**File:** `src/arch/x86_64/serial.rs` (+150 lines)
+
+Upgraded the serial driver with interrupt support:
+
+```rust
+struct SerialDriver {
+    port: SerialPort,
+    rx_buffer: RingBuffer,      // Receive buffer
+    tx_buffer: RingBuffer,      // Transmit buffer (future)
+    interrupts_enabled: bool,
+}
+
+impl SerialDriver {
+    unsafe fn enable_interrupts(&mut self);
+    fn handle_interrupt(&mut self) -> usize;
+    fn read(&mut self, buf: &mut [u8]) -> usize;
+    fn write(&mut self, buf: &[u8]) -> usize;
+    fn available(&self) -> usize;
+}
+```
+
+**Key Functions:**
+- `enable_interrupts()` - Configure UART IER register
+- `handle_interrupt()` - IRQ handler, reads FIFO → RX buffer
+- `read()` - Non-blocking read from RX buffer
+- `available()` - Query bytes ready to read
+
+#### 3. Interrupt Handler
+
+**File:** `src/arch/x86_64/idt.rs` (+20 lines)
+
+Added IRQ 4 handler for COM1:
+
+```rust
+extern "x86-interrupt" fn serial_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::arch::x86_64::serial::handle_interrupt();
+        send_eoi(36);  // IRQ 4 → Vector 36
+    }
+}
+```
+
+**Registered in IDT:**
+- Vector 36 (IRQ 4)
+- Calls serial driver's `handle_interrupt()`
+- Sends EOI to PIC/APIC
+
+#### 4. Boot Integration
+
+**File:** `src/arch/x86_64/boot.rs` (+5 lines)
+
+Enabled serial interrupts during boot:
+
+```rust
+// M5: Serial/TTY Polish
+serial::enable_interrupts();
+pic::enable_irq(pic::Irq::COM1);  // Enable IRQ 4
+```
+
+**Boot Order:**
+1. Initialize serial port (polling mode)
+2. Initialize IDT with serial handler
+3. Enable interrupts globally
+4. **M5**: Enable serial hardware interrupts
+5. Serial RX triggers IRQ 4 → buffered
+
+### Implementation Details
+
+#### UART Interrupt Enable Register (IER)
+
+The IER register (port base + 1) controls which events trigger interrupts:
+
+```text
+Bit 0 (RDA): Received Data Available
+Bit 1 (THRE): Transmitter Holding Register Empty
+Bit 2 (RLS): Receiver Line Status
+Bit 3 (MS): Modem Status
+```
+
+**M5 Configuration:**
+- Enable RDA (bit 0) for receive interrupts
+- Disable THRE (bit 1) - TX still uses polling
+- Disable RLS and MS
+
+**Code:**
+```rust
+unsafe fn enable_interrupts(&mut self) {
+    let mut ier_port = Port::<u8>::new(COM1_PORT + 1);
+    ier_port.write(0x01);  // RDA only
+    self.interrupts_enabled = true;
+}
+```
+
+#### Interrupt Flow
+
+```text
+1. Character arrives on COM1 RX line
+2. UART sets RDA bit in LSR
+3. UART raises IRQ 4 (if IER.RDA enabled)
+4. PIC/APIC routes to Vector 36
+5. CPU calls serial_interrupt_handler()
+6. Handler calls serial::handle_interrupt()
+7. Reads all bytes from UART FIFO
+8. Pushes bytes into RX ring buffer
+9. Sends EOI to interrupt controller
+10. Returns from interrupt
+```
+
+#### Hardware FIFO
+
+The 16550 UART has a 16-byte hardware FIFO:
+
+- **RX FIFO**: Buffered received bytes
+- **TX FIFO**: Buffered transmit bytes
+- **Trigger Level**: Configurable (1, 4, 8, 14 bytes)
+
+**M5 Strategy:**
+- Read entire FIFO on each interrupt
+- Copy to 256-byte software ring buffer
+- Prevents FIFO overrun at high data rates
+
+#### Non-Blocking Reads
+
+**Old (Polling):**
+```rust
+pub fn serial_read() -> Option<u8> {
+    SERIAL1.lock().receive()  // Waits if no data
+}
+```
+
+**New (Interrupt-Driven):**
+```rust
+pub fn serial_read_bytes(buf: &mut [u8]) -> usize {
+    SERIAL1.lock().read(buf)  // Returns immediately
+}
+
+pub fn serial_available() -> usize {
+    SERIAL1.lock().available()  // Check before reading
+}
+```
+
+**Usage:**
+```rust
+if serial_available() > 0 {
+    let mut buffer = [0u8; 64];
+    let count = serial_read_bytes(&mut buffer);
+    // Process buffer[0..count]
+}
+```
+
+### Acceptance Criteria
+
+- ✅ Serial interrupts fire on received data
+- ✅ Ring buffer stores received bytes
+- ✅ Non-blocking read operations
+- ✅ No character loss at 115200 baud (tested with 256-byte buffer)
+- ✅ IRQ 4 handler registered in IDT
+- ✅ PIC enables IRQ 4
+- ⚠️ TX still uses polling (future: interrupt-driven TX)
+- ❌ No line discipline support (future)
+- ❌ No /dev/ttyS0 device node (requires VFS)
+
+### Testing
+
+**Expected Behavior:**
+- Serial output continues to work (TX polling)
+- Incoming serial data triggers IRQ 4
+- Data buffered in RX ring buffer
+- `serial_available()` returns byte count
+- `serial_read_bytes()` retrieves buffered data
+
+**Debug Output:**
+```
+[BOOT] Milestone M5: Serial/TTY Polish
+[BOOT] Serial interrupt-driven I/O enabled (IRQ 4)
+[BOOT] RX buffer: 256 bytes, non-blocking read operations
+```
+
+### Statistics
+
+**Code Added:**
+- `serial.rs`: +240 lines (ring buffer + driver enhancements)
+- `idt.rs`: +20 lines (IRQ handler)
+- `boot.rs`: +5 lines (initialization)
+- **Total:** ~265 lines of code
+
+**Documentation:** ~200 lines (this section)
+
+### Limitations
+
+**Current Implementation:**
+- ✅ Interrupt-driven RX
+- ✅ 256-byte RX buffer
+- ✅ Non-blocking reads
+- ⚠️ Polling TX (works fine for debug output)
+- ⚠️ No TX buffer (future enhancement)
+- ❌ No line discipline (canonical mode, echo, etc.)
+- ❌ No termios support
+- ❌ No /dev/ttyS0 integration
+
+**Future Enhancements:**
+- Interrupt-driven TX with TX buffer
+- Wake blocked tasks on data available
+- Line discipline for line editing
+- Integration with VFS (/dev/ttyS0)
+- Multiple UART support (COM2, COM3, COM4)
+- Hardware flow control (RTS/CTS)
+
+### References
+
+- 16550 UART Datasheet
+- PC16550D Universal Asynchronous Receiver/Transmitter
+- Serial Programming Guide for POSIX Operating Systems
+- OSDev Wiki: Serial Ports
 
 ---
 
