@@ -1,9 +1,9 @@
 # M8 Driver Hardening - Implementation Summary
 
-**Status:** In Progress (70% Complete)
+**Status:** In Progress (75% Complete)
 **Target:** Production-ready driver infrastructure
-**Completed:** Framework + GPIO + Mailbox Hardening
-**Remaining:** PMU (optional), Self-tests, Validation suite, Production logging
+**Completed:** Framework + GPIO + Mailbox + PMU Hardening
+**Remaining:** Self-tests, Validation suite, Production logging
 
 ---
 
@@ -330,19 +330,17 @@ sis> gpio blink 42 5
 - **Error Handling:** Timeout tracking, firmware rejection detection
 - **Shell:** Context-aware error messages
 
+### ✅ 5. PMU Driver Hardening
+- **Status:** Complete
+- **Commit:** a653a115
+- **Validation:** Event counter index bounds checking (0-5)
+- **Error Handling:** NotInitialized checks for all operations
+- **Changes:** All 3 public functions return DriverResult<T>
+- **Shell:** Error messages with context and valid ranges
+
 ## Remaining Work
 
-### 1. PMU Driver Hardening (Optional)
-**Status:** Pending
-**Tasks:**
-- Validate event counter indices (0-5)
-- Error handling for uninitialized PMU
-- Return DriverResult from public functions
-
-**Estimated:** 30-60 minutes
-**Priority:** Low (PMU is performance monitoring, less critical)
-
-### 2. Driver Self-Test Framework
+### 1. Driver Self-Test Framework
 **Status:** Pending
 **Tasks:**
 - Create self-test trait for all drivers
@@ -352,7 +350,7 @@ sis> gpio blink 42 5
 
 **Estimated:** 4-6 hours
 
-### 4. M7 Validation Suite
+### 2. M7 Validation Suite
 **Status:** Pending
 **Tasks:**
 - Comprehensive test suite covering M0-M6
@@ -363,7 +361,7 @@ sis> gpio blink 42 5
 
 **Estimated:** 8-12 hours
 
-### 5. Production Logging Cleanup
+### 3. Production Logging Cleanup
 **Status:** Pending
 **Tasks:**
 - Remove verbose debug logs
@@ -406,6 +404,19 @@ sis> gpio blink 42 5
 - 115 insertions
 - 76 deletions
 
+### Commit: a653a115 (M8 PMU)
+**Message:** feat(m8): harden PMU driver with error handling and validation
+
+**Changes:**
+- Hardened pmu.rs (DriverResult return types, counter index validation)
+- Enhanced shell/pmu_helpers.rs (error handling, print_pmu_error helper)
+- Added MAX_EVENT_COUNTER constant (5)
+
+**Stats:**
+- 2 files changed
+- 119 insertions
+- 22 deletions
+
 ---
 
 ## Next Steps
@@ -414,13 +425,14 @@ sis> gpio blink 42 5
 1. ✅ Apply hardening to Mailbox driver
 2. ✅ Update mailbox shell commands for error handling
 3. ✅ Harden PMU driver (basic validation)
-4. Commit M8 mailbox hardening
+4. ✅ Commit M8 mailbox and PMU hardening
+5. Create driver self-test framework
 
 ### Short-term (This Week)
-1. Create driver self-test framework
-2. Implement self-tests for GPIO, Mailbox, PMU
-3. Add `selftest all` shell command
-4. Document self-test usage
+1. Implement self-tests for GPIO, Mailbox, PMU
+2. Add `selftest all` shell command
+3. Document self-test usage
+4. Production logging cleanup
 
 ### Medium-term (Next Week)
 1. Create M7 comprehensive validation suite
@@ -438,14 +450,15 @@ sis> gpio blink 42 5
 
 ## Success Criteria
 
-### M8 Completion: **70%**
+### M8 Completion: **75%**
 - ✅ Timeout framework implemented
 - ✅ Error handling framework implemented
 - ✅ GPIO driver fully hardened
 - ✅ Mailbox driver fully hardened
+- ✅ PMU driver fully hardened
 - ✅ GPIO shell commands handle errors
 - ✅ Mailbox shell commands handle errors
-- ⏳ PMU driver hardened (optional)
+- ✅ PMU shell commands handle errors
 - ⏳ Driver self-tests implemented
 - ⏳ Production logging configured
 
@@ -493,7 +506,7 @@ sis> gpio blink 42 5
 
 ---
 
-**Document Version:** 2.0
+**Document Version:** 3.0
 **Last Updated:** 2025-11-15
 **Author:** M8 Driver Hardening Implementation
-**Status:** 70% Complete (Framework + GPIO + Mailbox done, PMU/Self-tests/M7 remaining)
+**Status:** 75% Complete (Framework + GPIO + Mailbox + PMU done, Self-tests/M7 remaining)
