@@ -639,6 +639,11 @@ mod bringup {
             crate::trace::metric_kv("graph_stats_channels", chans);
         }
 
+        // 5.5) Initialize PSCI for power management (M2)
+        super::uart_print(b"PSCI: INIT\n");
+        crate::arch::psci::init();
+        super::uart_print(b"PSCI: READY\n");
+
         // 6) Initialize GICv3 + timer and enable interrupts
         super::uart_print(b"GIC: INIT\n");
         gicv3_init_qemu();
@@ -684,6 +689,28 @@ mod bringup {
         #[cfg(not(feature = "virtio-console"))]
         {
             super::uart_print(b"DRIVER FRAMEWORK: SKIPPED (virtio-console feature off)\n");
+        }
+
+        // 6.5) Initialize block devices and watchdog (M1, M2)
+        super::uart_print(b"BLOCK: INIT\n");
+        if let Err(e) = crate::drivers::block::init() {
+            super::uart_print(b"BLOCK: INIT FAILED\n");
+        } else {
+            super::uart_print(b"BLOCK: READY\n");
+        }
+
+        super::uart_print(b"WATCHDOG: INIT\n");
+        let wdt_type = crate::drivers::watchdog::init();
+        match wdt_type {
+            crate::drivers::watchdog::WatchdogType::Bcm2712Pm => {
+                super::uart_print(b"WATCHDOG: BCM2712 PM READY\n");
+            }
+            crate::drivers::watchdog::WatchdogType::None => {
+                super::uart_print(b"WATCHDOG: NONE AVAILABLE\n");
+            }
+            _ => {
+                super::uart_print(b"WATCHDOG: READY\n");
+            }
         }
 
         // 7) Initialize AI features if enabled
