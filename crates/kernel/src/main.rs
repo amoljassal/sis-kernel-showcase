@@ -654,6 +654,14 @@ mod bringup {
         // To run benchmark manually: use shell command or call start_irq_latency_bench(64)
         // start_irq_latency_bench(64);
 
+        // 6.1) Initialize SMP - bring up secondary CPUs (M3)
+        super::uart_print(b"SMP: INIT\n");
+        crate::arch::smp::init();
+        let num_cpus = crate::arch::smp::num_cpus();
+        super::uart_print(b"SMP: ");
+        print_number(num_cpus);
+        super::uart_print(b" CPU(S) ONLINE\n");
+
         // 6) Initialize driver framework and discover devices (optional)
         // For bring-up stability, skip VirtIO drivers unless explicitly enabled.
         #[cfg(feature = "virtio-console")]
