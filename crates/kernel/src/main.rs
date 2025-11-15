@@ -170,7 +170,8 @@ pub mod aarch64_context;
 
 #[cfg(target_arch = "x86_64")]
 pub mod arch {
-    // x86_64 implementation would go here
+    pub mod x86_64;
+    pub use x86_64::*;
 }
 
 #[cfg(target_arch = "riscv64")]
@@ -193,6 +194,33 @@ pub extern "C" fn _start() -> ! {
     }
 
     loop {}
+}
+
+#[cfg(target_arch = "x86_64")]
+#[no_mangle]
+pub extern "C" fn _start() -> ! {
+    // Early architecture initialization
+    unsafe {
+        if let Err(e) = arch::boot::early_init() {
+            // Critical error during boot
+            arch::serial::serial_write(b"\n[FATAL] Boot error: ");
+            arch::serial::serial_write(e.as_bytes());
+            arch::serial::serial_write(b"\n");
+            arch::boot::halt_forever();
+        }
+    }
+
+    // Print boot information
+    arch::boot::print_boot_info();
+
+    // TODO: Continue with platform-independent initialization
+    arch::serial::serial_write(b"[BOOT] Kernel initialization complete\n");
+    arch::serial::serial_write(b"[BOOT] Entering idle loop...\n");
+
+    // Idle loop (will be replaced with scheduler in M8)
+    loop {
+        x86_64::instructions::hlt();
+    }
 }
 
 #[panic_handler]
