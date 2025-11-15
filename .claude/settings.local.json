@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(SIS_FEATURES=\"llm,crypto-real\" BRINGUP=1 ./scripts/uefi_run.sh build)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -93,6 +93,35 @@ This section reflects what is implemented today in the codebase when running und
 
 See also “Known Limitations & Feature Status” below for a compact matrix.
 
+### Raspberry Pi 5 Hardware Enablement (WIP)
+
+Implemented toward the plan in `docs/plans/IMPLEMENTATION_PLAN_RPI5_HARDWARE.md` (validated in QEMU unless noted):
+
+- Platform layer and FDT parsing:
+  - `crates/kernel/src/platform/dt.rs`: FDT parser that extracts `UartDesc`, `GicDesc`, `TimerDesc`, plus device info for SDHCI/PCIe/USB/Ethernet into `DeviceMap`.
+  - `crates/kernel/src/platform/mod.rs`: Platform trait with `active()`; `override_with_dtb()` selects FDT‑derived platform and sets detected platform type.
+  - `crates/kernel/src/platform/rpi5.rs`: RPi5 platform descriptor with helpers (`sdhci_info`, `pcie_info`, `usb_info`, `ethernet_info`) and `init_hardware()` logging detected devices. PSCI advertised as available.
+
+- GPIO:
+  - `crates/kernel/src/drivers/gpio/bcm2xxx.rs`: BCM2xxx GPIO driver with input validation, set/clear/toggle/read, pull‑ups, and global wrappers.
+  - `crates/kernel/src/drivers/gpio/mod.rs`: re‑exports convenience helpers for shell/tests; `shell/gpio_helpers.rs` provides CLI.
+
+- Storage:
+  - `crates/kernel/src/drivers/block/sdhci.rs`: Arasan SDHCI 5.1 driver (PIO path, init sequence, command helpers). DT‑driven bring‑up hooks in `drivers/block/mod.rs`. In QEMU virt, SDHCI is absent → clean ENODEV.
+
+- Mailbox/firmware:
+  - `crates/kernel/src/drivers/firmware/mailbox.rs`: Firmware mailbox scaffolding with self‑tests and shell integration.
+
+- Interrupts/Timer:
+  - GICv3 and ARM Generic Timer paths exercised in QEMU; platform layer provides descriptor plumbing. Final RPi5 tuning happens during hardware validation.
+
+Not yet implemented/validated on RPi5 hardware:
+- Dedicated PL011 UART backend (early UART uses platform‑provided base for prints; PL011 driver planned).
+- PCIe/XHCI/Ethernet drivers; AHCI/NVMe storage.
+- Full SMP on RPi5 (SMP is validated only in QEMU path; hardware bring‑up pending).
+
+Note: All RPi5 work is designed to leave QEMU behavior unchanged. Hardware validation comes next.
+
 ### 2. Web GUI Live Dashboard (90 sec)
 ```bash
 # Record this:
@@ -230,7 +259,7 @@ User Command → Shell Parser → Neural Agent → Meta-Agent Coordinator
 | Network Stack | ✅ | — | — | smoltcp TCP/UDP/DHCP |
 | Deterministic Scheduler | ✅ | — | — | CBS+EDF scaffolding; QEMU timing only |
 | Stress/Validation Suites | ✅ | — | — | See “Latest Results”; slow under full load |
-| LLM (kernel) | 🚧 | — | — | Stub operator; no real model weights |
+| LLM (kernel) | 🚧 | — | — | Stub operator; per‑token pacing + adaptive `llmctl pace`; no real model weights |
 | AI‑Ops (governance) | ✅ | — | — | Orchestrator, drift, versioning present |
 | OpenTelemetry | ✅ | — | — | Spans exported to `/otel/spans.json` |
 | AgentSys | ✅ | — | — | Policy + audit; FS uses VFS; IO writes artifacts |
@@ -645,7 +674,7 @@ SIS_FEATURES="llm,crypto-real,demos" BRINGUP=1 ./scripts/uefi_run.sh
 ```bash
 SIS_FEATURES="llm,ai-ops,crypto-real" BRINGUP=1 ./scripts/uefi_run.sh
 ```
-**What it does:** Production-ready kernel without demo commands (smaller binary)
+**What it does:** Lean kernel without demo commands (smaller binary)
 **When to use:** Production deployment, hardware testing, size-constrained environments
 **Features enabled:**
 - ✅ All Phase 1 + Phase 2 AI features
@@ -793,7 +822,7 @@ Phase A implements the foundational OS infrastructure that transforms SIS from a
 - ✅ **Network Stack** with smoltcp TCP/IP and DHCP client
 - ✅ **Security Subsystem** with credentials, permissions, and secure RNG
 - ✅ **Window Manager** with GPU-accelerated graphics and UI framework
-- ✅ **Multimedia** with audio, camera, and voice subsystems
+- ✅ **Multimedia scaffolding**; audio path mocked (no virtio‑snd); camera/voice placeholder
 - ✅ **238 compilation errors fixed** achieving 100% build success
 - ✅ **Complete OS transformation** from kernel to full operating system
 
@@ -853,7 +882,7 @@ The VFS layer provides a unified interface for all filesystem operations with su
    - **Crash recovery**: Automatic journal replay restores filesystem consistency after unclean shutdown
    - **Ordered data mode**: Metadata changes journaled, data written before commit
    - **Deadlock prevention**: Lock-aware helper functions (`write_inode_locked`, `write_block_group_desc_locked`) prevent recursive locking during allocation operations
-   - **Production-ready**: Supports Phase 7 AI Operations (model persistence, incident bundle exports, decision trace storage)
+   - **QEMU validation**: Supports Phase 7 AI Operations flows in QEMU (model persistence, incident bundle exports, decision trace storage)
    - Fixed `MutexGuard` drop-after-use issues and allocation deadlocks
 
 5. **devfs** (`devfs.rs`) - Device filesystem (`/dev`)
@@ -946,7 +975,7 @@ Comprehensive memory management subsystem providing physical and virtual memory 
    - Commit supports multiple chained descriptor blocks; descriptor/data interleaving and device flush after commit
    - **Full write support**: File creation, truncation, data writes with proper on-disk inode updates
    - **Deadlock-free allocation**: Lock-aware helper functions prevent recursive locking during block/inode allocation
-   - **Production-ready**: Powers Phase 7 AI Operations with model persistence and incident bundle exports
+  - **QEMU validation**: Powers Phase 7 AI Operations flows with model persistence and incident bundle exports
    - Optional self‑test at boot (feature `ext4-durability-test`) paired with a host harness script
 
 **Key Fixes:**
@@ -2602,7 +2631,7 @@ Phase 6 delivers a comprehensive web-based management interface for SIS Kernel, 
 - ✅ **Pure web application** (React/TypeScript, no desktop dependencies)
 - ✅ **Real-time WebSocket streaming** for kernel events and metrics
 - ✅ **RESTful HTTP API** via sisctl daemon (Axum/Rust)
-- ✅ **Production-ready build system** (Vite, pnpm workspaces)
+- ✅ **Mature build system** (Vite, pnpm workspaces)
 - ✅ **Industry-standard directory structure** (kernel standards compliant)
 
 **Architecture:**
@@ -4180,9 +4209,11 @@ sis-kernel/
 │   │       ├── platform/               # Hardware abstraction
 │   │       │   ├── mod.rs              # Platform trait
 │   │       │   ├── qemu_virt.rs        # QEMU virt platform
-│   │       │   └── dt.rs               # Device tree parsing
+│   │       │   ├── dt.rs               # Device tree parsing
+│   │       │   └── rpi5.rs             # Raspberry Pi 5 platform descriptor (WIP)
 │   │       │
 │   │       ├── arch/                   # Architecture-specific code
+│   │       │   ├── aarch64/            # ARM64 bring-up (vectors, GICv3, timer)
 │   │       │   └── riscv64/            # RISC-V support (experimental)
 │   │       │       ├── boot.rs
 │   │       │       └── dtb.rs
@@ -4395,9 +4426,14 @@ sis-kernel/
 │   │       │       ├── drift_detector.rs # Performance monitoring (436 lines, 4 tests)
 │   │       │       └── version.rs       # Adapter version control (394 lines, 6 tests)
 │   │       │
-│   │       └── VirtIO Drivers
-│   │           ├── virtio.rs           # VirtIO MMIO framework
-│   │           └── virtio_console.rs   # Console driver
+│   │       └── VirtIO Support
+│   │           └── virtio/             # VirtIO framework helpers
+│   │               └── virtqueue.rs    # VirtIO queue management
+│   │
+│   │       └── Non‑VirtIO Drivers
+│   │           ├── drivers/gpio/bcm2xxx.rs   # RPi GPIO driver (BCM2712)
+│   │           ├── drivers/block/sdhci.rs    # SDHCI 5.1 (Arasan) driver (PIO)
+│   │           └── drivers/firmware/mailbox.rs # Firmware mailbox scaffolding
 │   │
 │   └── testing/                        # Comprehensive testing framework
 │       ├── Cargo.toml
@@ -4506,6 +4542,15 @@ sis-kernel/
 │           ├── dashboard.spec.ts
 │           ├── metrics.spec.ts
 │           └── ... (63 E2E tests)
+│
+├── packages/                           # Shared packages
+│   └── protos/                         # Shared protobuf/type definitions
+│       ├── package.json
+│       └── src/schema.d.ts
+│
+├── fuzz/                               # Fuzz targets (e.g., VFS path)
+│   └── fuzz_targets/
+│       └── vfs_path_lookup.rs
 │
 ├── samples/                            # Sample logs for replay & testing
 │   ├── boot_minimal.log                # Basic boot sequence
@@ -4644,7 +4689,7 @@ sis-kernel/
 - React/TypeScript single-page application (SPA)
 - Real-time dashboards for metrics, graphs, autonomy, and LLM services
 - Direct HTTP/WebSocket communication with sisctl daemon
-- Production-ready build system (Vite, pnpm workspaces)
+- Established build system (Vite, pnpm workspaces)
 - Comprehensive E2E test suite (63 Playwright tests)
 - No desktop dependencies - pure web app architecture
 
@@ -4877,7 +4922,7 @@ These thin helpers live under `crates/kernel/src/shell/` and keep `shell.rs` sma
 - **EU AI Act compliance**: Industry-grade compliance framework with Articles 13-16 coverage (92% compliance score)
 - Commands: `compliance eu-ai-act/audit/transparency/checklist/incidents` - Audit packages, transparency reports, safety checklists
 - **Third-party audit support**: Exportable metrics with safety scoring (100/100), incident tracking, decision rationale logging
-- **Production-ready validation**: 15-item pre-deployment safety checklist (100% pass rate)
+- **Pre-deployment validation**: 15-item safety checklist (QEMU runs)
 
 **Week 9: AI-Driven Scheduling (Implemented)**
 - Neural operator prioritization with dynamic priority adjustment
@@ -8084,7 +8129,7 @@ plot 'data/chaos_p50.txt' with linespoints title 'p50', \
 - **High intervention count ≠ better performance**: v1 had 417 compactions/10s but caused OOM regression
 - **Reactive monitoring is valuable**: 947 predictions provide continuous observability
 - **Gentle proactive action**: 5 well-timed compactions achieve measurable impact without thrashing
-- **Production-ready balance**: Enough impact to matter (-5% peak) without destabilizing (0 OOMs)
+- **Performance balance (QEMU)**: Enough impact to matter (~-5% peak) without destabilizing (0 OOMs in runs)
 
 #### Iteration History (Engineering Process Transparency)
 
