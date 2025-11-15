@@ -82,6 +82,8 @@ mod deployctl_helpers;
 mod driftctl_helpers;
 mod versionctl_helpers;
 mod pmu_helpers;
+mod gpio_helpers;      // M6: GPIO control
+mod mailbox_helpers;   // M6: Firmware mailbox interface
 mod stresstest_helpers;
 mod benchmark_helpers;
 mod fullautodemo_helpers;
@@ -327,6 +329,8 @@ impl Shell {
                     }
                     true
                 },
+                "gpio" => { self.gpio_cmd(&parts[1..]); true },      // M6: GPIO commands
+                "mailbox" => { self.mailbox_cmd(&parts[1..]); true }, // M6: Mailbox commands
                 "mem" => { self.cmd_mem(); true },
                 "regs" => { self.cmd_regs(); true },
                 "dtb" => { self.cmd_dtb(); true },
@@ -443,6 +447,8 @@ impl Shell {
             #[cfg(feature = "virtio-console")]
             crate::uart_print(b"  vconwrite- Send text to host via virtio-console: vconwrite <text>\n");
             crate::uart_print(b"  pmu      - Run PMU demo (cycles/inst/l1d_refill)\n");
+            crate::uart_print(b"  gpio     - GPIO control: set|clear|toggle|read|output|input|blink <pin> [args]\n");
+            crate::uart_print(b"  mailbox  - Firmware interface: temp|info|serial|fw|mem|all\n");
             crate::uart_print(b"  mem      - Show memory information\n");
             crate::uart_print(b"  regs     - Show system registers\n");
             crate::uart_print(b"  dtb      - Show device tree information\n");

@@ -667,6 +667,33 @@ mod bringup {
         crate::pmu::init();
         super::uart_print(b"PMU: READY\n");
 
+        // 6.3) Initialize GPIO (General Purpose I/O) - M6
+        // Note: GPIO base address should be obtained from FDT/device tree
+        // For Raspberry Pi 5: typically 0x107d508500 (verify from FDT)
+        // For now, skip if not on actual RPi5 hardware
+        #[cfg(feature = "rpi5-gpio")]
+        {
+            super::uart_print(b"GPIO: INIT\n");
+            let gpio_base = 0x107d508500usize;  // BCM2712 GPIO base (from FDT)
+            unsafe {
+                crate::drivers::gpio::bcm2xxx::init(gpio_base);
+            }
+            super::uart_print(b"GPIO: READY\n");
+        }
+
+        // 6.4) Initialize Mailbox (Firmware interface) - M6
+        // Note: Mailbox base address should be obtained from FDT/device tree
+        // For Raspberry Pi 5: typically 0x107c013880 (verify from FDT)
+        #[cfg(feature = "rpi5-mailbox")]
+        {
+            super::uart_print(b"MAILBOX: INIT\n");
+            let mailbox_base = 0x107c013880usize;  // BCM2712 mailbox base (from FDT)
+            unsafe {
+                crate::drivers::firmware::mailbox::init(mailbox_base);
+            }
+            super::uart_print(b"MAILBOX: READY\n");
+        }
+
         // 6) Initialize driver framework and discover devices (optional)
         // For bring-up stability, skip VirtIO drivers unless explicitly enabled.
         #[cfg(feature = "virtio-console")]

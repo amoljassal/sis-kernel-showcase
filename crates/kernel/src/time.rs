@@ -108,3 +108,25 @@ pub fn current_time_ns() -> u64 {
 pub fn current_time_us() -> u64 {
     current_time_ns() / 1000
 }
+
+/// Sleep for the specified number of milliseconds
+///
+/// This is a busy-wait implementation and will block the current CPU.
+/// Use sparingly and prefer proper async/await or timer-based solutions
+/// for production code.
+pub fn sleep_ms(ms: u64) {
+    let start = get_timestamp_us();
+    let target = start + (ms * 1000);
+    while get_timestamp_us() < target {
+        core::hint::spin_loop();
+    }
+}
+
+/// Sleep for the specified number of microseconds
+pub fn sleep_us(us: u64) {
+    let start = get_timestamp_us();
+    let target = start + us;
+    while get_timestamp_us() < target {
+        core::hint::spin_loop();
+    }
+}
