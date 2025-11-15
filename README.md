@@ -128,6 +128,8 @@ The kernel now boots successfully on **x86_64** in addition to ARM64, providing 
 
 **✅ Working Features (Validated in QEMU):**
 - **UEFI Boot**: Complete boot flow from OVMF firmware through kernel initialization to idle loop
+  - **Boot Info Passing**: BootInfo structure properly passed from UEFI bootloader with RSDP and framebuffer information
+  - **GOP Framebuffer**: Graphics Output Protocol (GOP) queried for display information (address, resolution, pitch, BPP)
 - **Early Initialization**: GDT, IDT, TSS configuration; CPU feature detection (SSE2/3/4.1/4.2, NX)
 - **Interrupt Handling**:
   - Legacy 8259A PIC initialization (IRQs 0-15 mapped to vectors 32-47)
@@ -140,10 +142,11 @@ The kernel now boots successfully on **x86_64** in addition to ARM64, providing 
   - Complete RSDP/RSDT/XSDT parsing with byte-by-byte memory access
   - Discovery of MADT, HPET, MCFG, FADT, WAET, BGRT tables
   - Identity mapping for ACPI table access in low memory
+  - RSDP address properly passed from UEFI bootloader (no hardcoding)
 - **PCI Express (PCIe)**:
   - ECAM (Enhanced Configuration Access Mechanism) via MCFG table
   - Successfully enumerates all PCI devices on bus 0
-  - Detected 8 devices including VirtIO block (0x1af4:0x1042) and network (0x1af4:0x1000)
+  - Detected 8 devices including VirtIO block (0x1af4:0x1042), network (0x1af4:0x1000), and AHCI (0x8086:0x2922)
   - Memory-mapped configuration space at 0xe0000000
 - **Per-CPU Data**: BSP (Bootstrap Processor) initialization complete
 - **Syscall/Sysret**: SYSCALL/SYSRET mechanism initialized with per-CPU kernel stacks
@@ -162,9 +165,11 @@ OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd \
 - **Heap Allocator**: Cannot allocate large structs (PciDevice) at current boot stage
   - PCI devices are enumerated and counted but not stored in global list
   - VirtIO drivers cannot initialize without device info (pending heap improvements)
-- **Boot Info**: UEFI bootloader not properly passing boot_info structure (RSDP address hardcoded)
+- **Display Output**: Framebuffer info received but no text rendering implemented yet (serial console only)
+- **Disk I/O**: AHCI controller detected but driver not yet implemented
+- **Keyboard Input**: PS/2 keyboard driver not yet implemented
 - **SMP**: Multi-processor support pending (INIT/SIPI sequences not implemented)
-- **Hardware**: No physical x86_64 hardware validation yet—QEMU-only
+- **Hardware**: No physical x86_64 hardware validation yet—QEMU-only (targeting MacBook Pro Mid 2012)
 
 **Architecture Differences:**
 - ARM64 subsystems (SDHCI, BCM GPIO, mailbox) are cfg'd out on x86_64
@@ -172,12 +177,17 @@ OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd \
 - Entropy source: ARM64 uses `cntvct_el0`, x86_64 uses TSC—both feed same PRNG
 - Memory layout preserved across architectures for consistency
 
-**Next Steps:**
-1. Fix heap allocator to support PciDevice allocation
-2. Implement proper boot_info passing from UEFI bootloader
-3. Enable VirtIO block and network device initialization
-4. Implement SMP support (APIC, INIT/SIPI, AP startup)
-5. Hardware validation on physical x86_64 systems
+**Next Steps (Real Hardware Boot Readiness):**
+1. ✅ ~~Implement proper boot_info passing from UEFI bootloader~~ (COMPLETED)
+2. ✅ ~~Query GOP framebuffer information~~ (COMPLETED)
+3. Implement AHCI/SATA controller driver for disk I/O
+4. Implement PS/2 keyboard driver for input
+5. Add framebuffer text rendering for display output
+6. Validate Mac UEFI firmware compatibility
+7. Test on real hardware (MacBook Pro Mid 2012)
+8. Fix heap allocator to support PciDevice allocation
+9. Enable VirtIO block and network device initialization
+10. Implement SMP support (APIC, INIT/SIPI, AP startup)
 
 ### 2. Web GUI Live Dashboard (90 sec)
 ```bash
