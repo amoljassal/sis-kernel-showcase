@@ -340,6 +340,91 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
         }
     }
 
+    // M7: VirtIO Network Driver
+    serial::serial_write(b"\n[BOOT] Milestone M7: VirtIO Network Driver\n");
+
+    // Look for VirtIO network devices (device type 1)
+    let virtio_net_devices = crate::arch::x86_64::pci::find_virtio_devices(1);
+    if !virtio_net_devices.is_empty() {
+        serial::serial_write(b"[BOOT] Found ");
+        print_u64(virtio_net_devices.len() as u64);
+        serial::serial_write(b" VirtIO network device(s)\n");
+
+        // Initialize first VirtIO network device
+        if let Some(dev) = virtio_net_devices.first() {
+            match crate::arch::x86_64::virtio_net::VirtioNetDevice::new(dev.clone()) {
+                Ok(net_dev) => {
+                    let mac = net_dev.mac_address();
+                    serial::serial_write(b"[BOOT] VirtIO network device initialized\n");
+                    serial::serial_write(b"[BOOT]   MAC: ");
+                    for (i, &byte) in mac.iter().enumerate() {
+                        print_hex_u8(byte);
+                        if i < 5 {
+                            serial::serial_write(b":");
+                        }
+                    }
+                    serial::serial_write(b"\n");
+                    serial::serial_write(b"[BOOT]   MTU: ");
+                    print_u64(net_dev.mtu() as u64);
+                    serial::serial_write(b" bytes\n");
+
+                    // Perform test transmission (simple test packet)
+                    serial::serial_write(b"[BOOT] Testing network device - sending test packet...\n");
+
+                    // Create a simple Ethernet frame (broadcast ARP request)
+                    // Destination MAC: FF:FF:FF:FF:FF:FF (broadcast)
+                    // Source MAC: our MAC
+                    // EtherType: 0x0806 (ARP)
+                    // ARP payload (minimal, 28 bytes)
+                    let mut test_packet = [0u8; 64];
+
+                    // Ethernet header (14 bytes)
+                    test_packet[0..6].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]); // Dest MAC (broadcast)
+                    test_packet[6..12].copy_from_slice(&mac); // Source MAC
+                    test_packet[12..14].copy_from_slice(&[0x08, 0x06]); // EtherType: ARP
+
+                    // ARP payload (28 bytes minimum)
+                    test_packet[14..16].copy_from_slice(&[0x00, 0x01]); // Hardware type: Ethernet
+                    test_packet[16..18].copy_from_slice(&[0x08, 0x00]); // Protocol type: IPv4
+                    test_packet[18] = 6;   // Hardware size
+                    test_packet[19] = 4;   // Protocol size
+                    test_packet[20..22].copy_from_slice(&[0x00, 0x01]); // Opcode: request
+                    test_packet[22..28].copy_from_slice(&mac); // Sender MAC
+                    test_packet[28..32].copy_from_slice(&[192, 168, 1, 100]); // Sender IP (example)
+                    test_packet[32..38].copy_from_slice(&[0, 0, 0, 0, 0, 0]); // Target MAC
+                    test_packet[38..42].copy_from_slice(&[192, 168, 1, 1]); // Target IP (example)
+
+                    // Padding to minimum Ethernet frame size (64 bytes)
+                    // Already initialized to 0
+
+                    match net_dev.transmit(&test_packet[..42]) {
+                        Ok(()) => {
+                            serial::serial_write(b"[BOOT] Successfully transmitted test packet (");
+                            print_u64(42);
+                            serial::serial_write(b" bytes)\n");
+                        }
+                        Err(e) => {
+                            serial::serial_write(b"[BOOT] Network transmit test failed: ");
+                            serial::serial_write(e.as_bytes());
+                            serial::serial_write(b"\n");
+                        }
+                    }
+
+                    // Note: In a real system, we would store the net_dev in a global
+                    // or pass it to the network subsystem. For now, we just drop it.
+                    serial::serial_write(b"[BOOT] VirtIO network device test complete\n");
+                }
+                Err(e) => {
+                    serial::serial_write(b"[BOOT] Failed to initialize VirtIO network device: ");
+                    serial::serial_write(e.as_bytes());
+                    serial::serial_write(b"\n");
+                }
+            }
+        }
+    } else {
+        serial::serial_write(b"[BOOT] No VirtIO network devices found\n");
+    }
+
     serial::serial_write(b"\n[BOOT] Early initialization complete\n");
     serial::serial_write(b"\n");
 
