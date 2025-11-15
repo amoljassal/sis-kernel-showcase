@@ -1,4 +1,8 @@
 // Helpers for PMU (Performance Monitoring Unit)
+//
+// M8 Hardening: Error handling for all PMU operations
+
+use crate::drivers::DriverError;
 
 impl super::Shell {
     /// Display current PMU statistics
@@ -8,7 +12,13 @@ impl super::Shell {
             return;
         }
 
-        let snap = crate::pmu::read_snapshot();
+        let snap = match crate::pmu::read_snapshot() {
+            Ok(s) => s,
+            Err(e) => {
+                self.print_pmu_error(e, b"Failed to read PMU snapshot");
+                return;
+            }
+        };
 
         unsafe {
             crate::uart_print(b"[PMU] Performance Monitoring Unit Statistics\n");
@@ -80,7 +90,13 @@ impl super::Shell {
         }
 
         // Take snapshot before
-        let s0 = crate::pmu::read_snapshot();
+        let s0 = match crate::pmu::read_snapshot() {
+            Ok(s) => s,
+            Err(e) => {
+                self.print_pmu_error(e, b"Failed to read initial snapshot");
+                return;
+            }
+        };
 
         // Busy loop with some memory access
         let mut acc: u64 = 0;
@@ -93,7 +109,13 @@ impl super::Shell {
         unsafe { core::ptr::read_volatile(&acc); } // Prevent optimization
 
         // Take snapshot after
-        let s1 = crate::pmu::read_snapshot();
+        let s1 = match crate::pmu::read_snapshot() {
+            Ok(s) => s,
+            Err(e) => {
+                self.print_pmu_error(e, b"Failed to read final snapshot");
+                return;
+            }
+        };
 
         // Calculate deltas
         let d_cycles = s1.cycles.saturating_sub(s0.cycles);
@@ -150,6 +172,27 @@ impl super::Shell {
                 crate::uart_print(b"0");
             }
             self.print_number_simple(fractional_part);
+        }
+    }
+
+    /// Print PMU error message
+    /// M8 Hardening: Comprehensive error reporting for PMU operations
+    fn print_pmu_error(&self, error: DriverError, context: &[u8]) {
+        unsafe {
+            crate::uart_print(b"[PMU ERROR] ");
+            crate::uart_print(context);
+            crate::uart_print(b": ");
+
+            match error {
+                DriverError::NotInitialized => crate::uart_print(b"PMU not initialized\n"),
+                DriverError::InvalidParameter => crate::uart_print(b"Invalid counter index (valid: 0-5)\n"),
+                DriverError::HardwareError => crate::uart_print(b"Hardware error\n"),
+                _ => {
+                    crate::uart_print(b"Error code ");
+                    self.print_number_simple(error.code() as u64);
+                    crate::uart_print(b"\n");
+                }
+            }
         }
     }
 }
