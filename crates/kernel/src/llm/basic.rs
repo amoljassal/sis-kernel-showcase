@@ -15,6 +15,7 @@ extern crate alloc;
 
 use alloc::string::String;
 use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicBool};
 use spin::Mutex;
 #[cfg(feature = "crypto-real")]
 use sha2::{Digest, Sha256};
@@ -79,6 +80,39 @@ impl LlmState {
 
 static STATE: Mutex<LlmState> = Mutex::new(LlmState::new());
 static INFER_ID: AtomicUsize = AtomicUsize::new(1);
+
+// Global pacing scale (percent). 100 = nominal, >100 slows pacing.
+static PACE_SCALE: AtomicU32 = AtomicU32::new(100);
+static AUTO_PACE: AtomicBool = AtomicBool::new(false);
+static PACE_MIN: AtomicU32 = AtomicU32::new(50);   // 50% (faster) lower bound
+static PACE_MAX: AtomicU32 = AtomicU32::new(500);  // 5x slower upper bound
+static PACE_STEP_UP: AtomicU32 = AtomicU32::new(10);   // +10% on pressure
+static PACE_STEP_DOWN: AtomicU32 = AtomicU32::new(5);  // -5% on slack
+
+/// Set pacing scale in percent (10..=1000). Larger = slower, more slack.
+pub fn set_pace_scale(percent: u32) {
+    let min = PACE_MIN.load(Ordering::Relaxed);
+    let max = PACE_MAX.load(Ordering::Relaxed);
+    let lower = core::cmp::max(10, min);
+    let upper = core::cmp::max(lower, max);
+    let clamped = percent.clamp(lower, upper);
+    PACE_SCALE.store(clamped, Ordering::Relaxed);
+}
+
+/// Get current pacing scale percent.
+pub fn get_pace_scale() -> u32 {
+    PACE_SCALE.load(Ordering::Relaxed)
+}
+
+/// Enable/disable adaptive pacing.
+pub fn set_auto_pace(on: bool) {
+    AUTO_PACE.store(on, Ordering::Relaxed);
+}
+
+/// Query adaptive pacing state.
+pub fn is_auto_pace() -> bool {
+    AUTO_PACE.load(Ordering::Relaxed)
+}
 
 // --- Simple control-plane polling state (last inference only) ---
 pub struct LastInferState {
@@ -356,6 +390,7 @@ pub fn infer(prompt: &str, max_tokens: Option<usize>) -> LlmResult {
 
     // Start timing
     let t0 = crate::graph::now_cycles();
+    let start_ns = crate::graph::cycles_to_ns(t0);
 
     // Very small, deterministic generation: split words, cap by max_tokens
     let cap = max_tokens.unwrap_or(st.cfg.default_max_tokens);
@@ -365,6 +400,19 @@ pub fn infer(prompt: &str, max_tokens: Option<usize>) -> LlmResult {
     let mut i = 0;
     // Capture tokens for control-plane polling
     let mut captured: heapless::Vec<heapless::String<32>, 128> = heapless::Vec::new();
+    // Precompute pacing based on WCET to stabilize timing under load
+    let start_ns = crate::graph::cycles_to_ns(t0);
+    let mut frq: u64; unsafe { core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq); }
+    let wcet_ns = if frq > 0 { (st.cfg.wcet_cycles.saturating_mul(1_000_000_000)) / frq } else { 0 };
+    let mut per_token_ns: u64 = if cap > 0 && wcet_ns > 0 { wcet_ns / (cap as u64) } else { 0 };
+    // Apply pacing scale (percent)
+    if per_token_ns > 0 {
+        let scale = PACE_SCALE.load(Ordering::Relaxed) as u64;
+        per_token_ns = per_token_ns.saturating_mul(scale).saturating_div(100);
+    }
+
+    // (streaming-only pacing vars not needed here)
+
     while i < bytes.len() && tokens < cap {
         // find next space (simple token)
         let mut j = i;
@@ -392,6 +440,17 @@ pub fn infer(prompt: &str, max_tokens: Option<usize>) -> LlmResult {
                 let _ = t.push(c);
             }
             let _ = captured.push(t);
+
+            // pacing: aim for per-token budget to reduce CPU spikes in QEMU
+            if per_token_ns > 0 {
+                let target_ns = start_ns.saturating_add(per_token_ns.saturating_mul(tokens as u64));
+                loop {
+                    let now_ns = crate::graph::cycles_to_ns(crate::graph::now_cycles());
+                    if now_ns >= target_ns { break; }
+                    crate::process::scheduler::yield_now();
+                    core::hint::spin_loop();
+                }
+            }
         }
         // skip spaces
         while j < bytes.len() && bytes[j] <= b' ' { j += 1; }
@@ -403,9 +462,7 @@ pub fn infer(prompt: &str, max_tokens: Option<usize>) -> LlmResult {
     let us = (ns / 1000) as usize;
 
     // Deadline check against wcet_cycles (converted to ns)
-    let mut frq: u64; unsafe { core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq); }
     if frq > 0 {
-        let wcet_ns = (st.cfg.wcet_cycles.saturating_mul(1_000_000_000)) / frq;
         if ns > wcet_ns { st.deadline_miss_count = st.deadline_miss_count.saturating_add(1); }
     }
 
@@ -413,6 +470,8 @@ pub fn infer(prompt: &str, max_tokens: Option<usize>) -> LlmResult {
     st.total_tokens = st.total_tokens.saturating_add(tokens);
     st.last_latency_us = us;
     metric_kv("llm_infer_us", us);
+    metric_kv("llm_actual_ns", ns as usize);
+    if wcet_ns > 0 { metric_kv("llm_expected_ns", wcet_ns as usize); }
     metric_kv("llm_tokens_out", tokens);
     metric_kv("llm_queue_depth_max", st.queue_depth_max);
     metric_kv("llm_deadline_miss_count", st.deadline_miss_count);
@@ -425,7 +484,7 @@ pub fn infer(prompt: &str, max_tokens: Option<usize>) -> LlmResult {
     // Deterministic scheduler accounting (optional)
     #[cfg(feature = "deterministic")]
     {
-        let expected_ns = if frq > 0 { (st.cfg.wcet_cycles.saturating_mul(1_000_000_000)) / frq } else { ns };
+        let expected_ns = if frq > 0 { wcet_ns } else { ns };
         crate::deterministic::llm_on_infer_complete(ns, expected_ns);
     }
 
@@ -437,6 +496,26 @@ pub fn infer(prompt: &str, max_tokens: Option<usize>) -> LlmResult {
     // Release lock before recording to avoid deadlock
     drop(st);
     audit(3, prompt.len(), tokens, wcet_cycles, period_ns, status);
+
+    // Clearer deadline logging (one line per infer)
+    unsafe { crate::uart_print(b"[LLM][DEADLINE] "); }
+    if wcet_ns > 0 {
+        if ns > wcet_ns {
+            unsafe { crate::uart_print(b"miss "); }
+        } else {
+            unsafe { crate::uart_print(b"ok "); }
+        }
+        unsafe { crate::uart_print(b"actual="); }
+        crate::shell::print_number_simple(ns as u64);
+        unsafe { crate::uart_print(b"ns expected="); }
+        crate::shell::print_number_simple(wcet_ns as u64);
+        unsafe { crate::uart_print(b"ns slack="); }
+        let slack = if ns > wcet_ns { 0 } else { wcet_ns - ns };
+        crate::shell::print_number_simple(slack as u64);
+        unsafe { crate::uart_print(b"ns\n"); }
+    } else {
+        unsafe { crate::uart_print(b"no_wcet\n"); }
+    }
 
     // Publish state (last + table) without locking STATE again
     record_infer_state(id, captured, cur_model_id, prompt.len());
@@ -488,6 +567,15 @@ pub fn infer_stream(prompt: &str, max_tokens: Option<usize>, chunk_tokens: usize
     let t0 = crate::graph::now_cycles();
 
     let cap = max_tokens.unwrap_or(st.cfg.default_max_tokens);
+    // Precompute per-token pacing for streaming
+    let start_ns = crate::graph::cycles_to_ns(t0);
+    let mut frq_tok: u64; unsafe { core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq_tok); }
+    let wcet_ns_tok = if frq_tok > 0 { (st.cfg.wcet_cycles.saturating_mul(1_000_000_000)) / frq_tok } else { 0 };
+    let mut per_token_ns_tok: u64 = if cap > 0 && wcet_ns_tok > 0 { wcet_ns_tok / (cap as u64) } else { 0 };
+    if per_token_ns_tok > 0 {
+        let scale = PACE_SCALE.load(core::sync::atomic::Ordering::Relaxed) as u64;
+        per_token_ns_tok = per_token_ns_tok.saturating_mul(scale).saturating_div(100);
+    }
     let bytes = prompt.as_bytes();
     let mut i = 0usize;
     let mut tokens = 0usize;
@@ -537,6 +625,17 @@ pub fn infer_stream(prompt: &str, max_tokens: Option<usize>, chunk_tokens: usize
                 metric_kv("llm_stream_chunk_tokens", chunk_tokens.min(tokens));
                 chunk_buf.clear();
             }
+
+            // pacing per token to stabilize streaming under load
+            if per_token_ns_tok > 0 {
+                let target_ns = start_ns.saturating_add(per_token_ns_tok.saturating_mul(tokens as u64));
+                loop {
+                    let now_ns = crate::graph::cycles_to_ns(crate::graph::now_cycles());
+                    if now_ns >= target_ns { break; }
+                    crate::process::scheduler::yield_now();
+                    core::hint::spin_loop();
+                }
+            }
         }
         while j < bytes.len() && bytes[j] <= b' ' { j += 1; }
         i = j;
@@ -555,8 +654,27 @@ pub fn infer_stream(prompt: &str, max_tokens: Option<usize>, chunk_tokens: usize
     metric_kv("llm_deadline_miss_count", st.deadline_miss_count);
     metric_kv("llm_rejects", st.rejects);
     metric_kv("llm_stream_chunks", chunks);
+    metric_kv("llm_pace_scale_percent", PACE_SCALE.load(core::sync::atomic::Ordering::Relaxed) as usize);
 
     st.queue_depth = st.queue_depth.saturating_sub(1);
+
+    // Adaptive auto-pacing in streaming path as well
+    if AUTO_PACE.load(core::sync::atomic::Ordering::Relaxed) {
+        // Estimate WCET ns from configuration
+        let mut frq: u64; unsafe { core::arch::asm!("mrs {x}, cntfrq_el0", x = out(reg) frq); }
+        let wcet_ns = if frq > 0 { (st.cfg.wcet_cycles.saturating_mul(1_000_000_000)) / frq } else { 0 };
+        let miss = wcet_ns > 0 && ns > wcet_ns;
+        let pressure = miss || st.queue_depth > 0;
+        use core::sync::atomic::Ordering::Relaxed;
+        let cur = PACE_SCALE.load(Relaxed);
+        let min = PACE_MIN.load(Relaxed);
+        let max = PACE_MAX.load(Relaxed);
+        let up = PACE_STEP_UP.load(Relaxed);
+        let down = PACE_STEP_DOWN.load(Relaxed);
+        let new_scale = if pressure { cur.saturating_add(up) } else { cur.saturating_sub(down) };
+        let clamped = new_scale.clamp(core::cmp::max(10, min), core::cmp::max(min, max));
+        if clamped != cur { PACE_SCALE.store(clamped, Relaxed); }
+    }
 
     #[cfg(feature = "deterministic")]
     {

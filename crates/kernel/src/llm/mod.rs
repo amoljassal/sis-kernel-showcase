@@ -24,6 +24,10 @@ pub use basic::{
     LlmConfig,
     LlmResult,
     // Functions
+    set_pace_scale,
+    get_pace_scale,
+    set_auto_pace,
+    is_auto_pace,
     audit,
     audit_print,
     audit_print_json,

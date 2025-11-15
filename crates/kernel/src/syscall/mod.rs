@@ -162,8 +162,10 @@ pub fn reset_syscall_metrics() {
 /// Read cycle counter
 #[allow(dead_code)]
 pub fn read_cycle_counter() -> u64 {
-    // Stub implementation for now
-    0
+    #[cfg(target_arch = "aarch64")]
+    { return crate::time::read_cycle_counter(); }
+    #[cfg(not(target_arch = "aarch64"))]
+    { 0 }
 }
 
 /// Syscall dispatcher - routes syscall number to appropriate handler

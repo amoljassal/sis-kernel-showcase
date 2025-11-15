@@ -32,6 +32,35 @@ impl super::Shell {
                 crate::llm::configure_budget(wcet, period, max_per);
                 unsafe { crate::uart_print(b"[LLM] budget configured\n"); }
             }
+            "pace" => {
+                // llmctl pace --scale PERCENT | auto on|off|status
+                if args.len() >= 2 && args[1] == "--scale" {
+                    if args.len() >= 3 { if let Ok(p) = args[2].parse::<u32>() { crate::llm::set_pace_scale(p); } }
+                    unsafe { crate::uart_print(b"[LLM][PACE] scale="); }
+                    self.print_number_simple(crate::llm::get_pace_scale() as u64);
+                    unsafe { crate::uart_print(b"%\n"); }
+                } else if args.len() >= 2 && args[1] == "auto" {
+                    if args.len() >= 3 {
+                        match args[2] {
+                            "on" => { crate::llm::set_auto_pace(true); unsafe { crate::uart_print(b"[LLM][PACE] auto=ON\n"); } },
+                            "off" => { crate::llm::set_auto_pace(false); unsafe { crate::uart_print(b"[LLM][PACE] auto=OFF\n"); } },
+                            "status" => {
+                                unsafe { crate::uart_print(b"[LLM][PACE] auto="); }
+                                if crate::llm::is_auto_pace() { unsafe { crate::uart_print(b"ON\n"); } } else { unsafe { crate::uart_print(b"OFF\n"); } }
+                            }
+                            _ => unsafe { crate::uart_print(b"Usage: llmctl pace auto on|off|status\n"); }
+                        }
+                    } else {
+                        unsafe { crate::uart_print(b"Usage: llmctl pace auto on|off|status\n"); }
+                    }
+                } else {
+                    unsafe { crate::uart_print(b"[LLM][PACE] scale="); }
+                    self.print_number_simple(crate::llm::get_pace_scale() as u64);
+                    unsafe { crate::uart_print(b"% "); }
+                    unsafe { crate::uart_print(b"auto="); }
+                    if crate::llm::is_auto_pace() { unsafe { crate::uart_print(b"ON\n"); } } else { unsafe { crate::uart_print(b"OFF\n"); } }
+                }
+            }
             "status" => {
                 #[cfg(feature = "deterministic")]
                 {

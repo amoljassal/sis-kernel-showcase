@@ -68,9 +68,7 @@ These results are from QEMU (ARM64, stdio serial). They reflect recent runs with
 - Phase 8 – Performance Optimization: 33.3% (2/6 subsystems passed)
   - Stress Comparison: 1/3 passed (performance delta OK; other subtests pending)
   - Overall indicates deterministic/performance tuning needed; to be improved later.
-- Phase 9 – Agentic Platform: 88.9% (8/9 tests passed)
-  - Protocol, Capability Enforcement, Audit Validation suites mostly passed
-  - Note: Kernel changes have been added to include an "assistant" agent in status output and to print `allowed=` in audit dumps; next run is expected to reach 100%.
+- Phase 9 – Agentic Platform: recent changes include real VFS-backed FS handlers and enriched audit output. Re-run Phase 9 to refresh results with these changes.
 
 Artifacts for the latest runs are in `target/testing/` (JSON report, dashboard HTML).
 
@@ -84,10 +82,13 @@ This section reflects what is implemented today in the codebase when running und
 - Deterministic scheduler: CBS+EDF scaffolding with admission control, jitter/metrics, and AI inference server accounting. Not hardware‑validated; not a hard real‑time claim.
 - LLM service: kernel‑resident control‑plane stub (deterministic tokenization/streaming, budgets, audit). No real transformer weights or external models.
 - AI‑Ops (governance): orchestrator, drift detector, and versioning code paths exist; exercised in QEMU tests; some heavy paths simulate behavior.
-- OpenTelemetry: span building implemented; file sink/write path is stubbed.
-- AgentSys: capability policy and audit logger implemented; FS/audio/doc/screenshot/record handlers simulate I/O to serial (no VFS/device effects).
+- OpenTelemetry: span building implemented; exporter flushes JSON batches to `/otel/spans.json` (simple rotation).
+- AgentSys: capability policy and audit logger implemented; FS handlers perform real VFS I/O; screenshot/record/audio handlers create observable placeholder files under `/tmp/agentsys/`.
+- Shadow rollback: automatic rollback integrates with model lifecycle registry; events are appended to `/var/log/rollback.json`.
+- Syscalls: `readlinkat` implemented via VFS; `clock_gettime`/`nanosleep` and scheduler share a unified time base.
+- LLM: kernel‑resident control‑plane stub with budgets; per‑token pacing; adaptive auto‑pacing mode; deadline logging and metrics.
 - GUI + daemon: present and functional against a live QEMU instance; still evolving; not production‑grade.
-- Devices: virtio‑console path exists; virtio‑snd is declared but not implemented; NPU is emulated via MMIO.
+- Devices: virtio‑console path exists; audio output uses mock/placeholder; NPU is emulated via MMIO.
 - Hardware: no physical ARM64 validation yet; everything here is based on QEMU.
 
 See also “Known Limitations & Feature Status” below for a compact matrix.
@@ -231,10 +232,10 @@ User Command → Shell Parser → Neural Agent → Meta-Agent Coordinator
 | Stress/Validation Suites | ✅ | — | — | See “Latest Results”; slow under full load |
 | LLM (kernel) | 🚧 | — | — | Stub operator; no real model weights |
 | AI‑Ops (governance) | ✅ | — | — | Orchestrator, drift, versioning present |
-| OpenTelemetry | 🚧 | — | — | Spans built; sink write stubbed |
-| AgentSys | ✅ | — | — | Policy + audit; handlers simulate I/O |
+| OpenTelemetry | ✅ | — | — | Spans exported to `/otel/spans.json` |
+| AgentSys | ✅ | — | — | Policy + audit; FS uses VFS; IO writes artifacts |
 | Web GUI + Daemon | ✅ | — | — | Live QEMU control; still evolving |
-| Audio (virtio‑snd) | ❌ | — | — | Feature declared; driver not implemented |
+| Audio output | 🚧 | — | — | Mock/placeholder only; no virtio‑snd driver |
 
 **Legend:**
 ✅ Implemented and exercised in QEMU | 🚧 Partial/In Progress | — Not claimed | ❌ Not implemented
@@ -768,7 +769,7 @@ VIRTIO=1 SIS_FEATURES="llm,virtio-console,crypto-real" BRINGUP=1 ./scripts/uefi_
 Build-time feature hygiene:
 - `bringup`: Enable AArch64 bring‑up markers and relaxed warning gate (suppressed when `strict` is set).
 - `strict`: Deny warnings for CI/hardening; use once the bring‑up cycle is stable.
-- `hardware`, `virtio-snd`: Optional flags to gate hardware‑specific code paths and silence `cfg` warnings (placeholders for future work).
+- `hardware`: Optional flag to gate hardware‑specific code paths (placeholder for future work). The `virtio-snd` feature is not available.
 
 Runtime toggles:
 - `metricsctl on|off|status`: Controls UART metric emission at runtime (default: on). Snapshot functions currently return 0 entries until capture is re-enabled in a future phase.
@@ -3298,7 +3299,7 @@ See also: docs/guides/AI-OPS-QUICKSTART.md
 **Divergence Detection:**
 - Compares shadow vs production predictions (L2 distance for vectors, threshold for scalars)
 - Tracks divergence rate over sliding window (100 decisions)
-- Automatic rollback if divergence >20% for 10 consecutive decisions
+- Automatic rollback when divergence rate exceeds 20% or divergence count exceeds a threshold (defaults in code: 20% rate or 50 events)
 - Alerts on divergence >10% (warning threshold)
 
 **Verification:**
@@ -3309,30 +3310,19 @@ See also: docs/guides/AI-OPS-QUICKSTART.md
 
 ### 7.4 OpenTelemetry Integration & Drift Monitoring
 
-The OTel subsystem provides industry-standard observability and model drift detection.
+The OTel subsystem provides observability for decision traces. In QEMU, spans are exported to a JSON file on the VFS.
 
 **Core Features:**
-- **OTel Exporter** - Converts DecisionTraces to OpenTelemetry spans (crates/kernel/src/otel/exporter.rs:1-180)
-- **Drift Monitor** - Detects model drift from baseline accuracy (crates/kernel/src/otel/drift.rs:1-150)
-- **Automatic Safe Mode** - Disables autonomy on excessive drift (>15%)
-- **Span Attributes** - Rich metadata: model version, confidence, latency, policy status
+- **OTel Exporter** - Converts DecisionTraces to OpenTelemetry spans and flushes batches to `/otel/spans.json`.
+- **Drift Monitor** - Detects model drift from baseline accuracy (crates/kernel/src/otel/drift.rs).
+- **Automatic Safe Mode** - Disables autonomy on excessive drift (thresholds in code; QEMU‑only).
+- **Span Attributes** - Rich metadata: model version, action, confidence, memory pressure, deadline misses.
 
-**Shell Interface (integrated with `tracectl`):**
-```bash
-# Enable OTel export
-tracectl otel enable
+**Artifacts:**
+- `/otel/spans.json` — current batch of spans (rotated when size exceeds a small limit).
+- `/var/log/decisions.json` — recent decision trace JSON lines.
 
-# Configure OTel endpoint
-tracectl otel endpoint http://collector:4318
-
-# Check drift status
-tracectl drift status
-
-# Reset drift baseline
-tracectl drift reset
-```
-
-**OTel Span Structure:**
+**OTel Span Structure (example):**
 ```
 Span: ai.decision
 ├─ trace_id: <random 128-bit>
@@ -3353,10 +3343,9 @@ Span: ai.decision
 ```
 
 **Drift Detection:**
-- Baseline: Average accuracy over first 1000 decisions
-- Current: Rolling average over last 100 decisions
-- Drift = |Baseline - Current| / Baseline * 100%
-- Thresholds: >10% warning, >15% safe mode trigger
+- Baseline: average accuracy over an initial window
+- Current: rolling average over recent decisions
+- Thresholds: configured in code; used for warnings and safe‑mode triggers
 
 **Verification:**
 - ✅ OTel spans exported in OTLP/HTTP format
@@ -3782,12 +3771,11 @@ Phase 9 introduces **AgentSys**, a secure, capability-gated interface that enabl
 - ✅ **Shell Integration** with `llmjson` command for audit log inspection
 - ✅ **Zero-Copy Message Routing** using static dispatch for minimal overhead
 
-**Implementation Statistics:**
-- New files: 15 (agent_sys/, security/, handlers/)
-- Lines of code: ~2,500
-- Compilation errors fixed: 124
-- Test coverage: 100% for Phase 9 tests
-- Performance overhead: <2% for capability checks
+**Runtime Behavior (QEMU):**
+- FS operations (`list/read/write/stat/create/delete`) act on the real VFS.
+- Screenshot/record/audio handlers create small placeholder files under `/tmp/agentsys/`.
+- Audit logs include `ALLOW`/`DENY` and can be observed on serial as `[AUDIT] ...`.
+- Shell prints concise result lines for each operation.
 
 ### 9.1 Capability-Based Security Model
 
@@ -3829,6 +3817,7 @@ AgentToken {
 - `AGENT_ID_SYSTEM` (0): System agent with all capabilities
 - `AGENT_ID_AGENTD` (1): Agent daemon with broad permissions
 - `AGENT_ID_TEST` (0xFFFF): Test agent for validation
+ - `assistant` (5): Default assistant agent included in the policy by default
 
 ### 9.2 TLV Protocol & Message Routing
 
@@ -4971,7 +4960,7 @@ Verification (local):
 - LLM Service (`crates/kernel/src/llm.rs`, feature: `llm`)
   - Purpose: Kernel‑resident inference with budgets, audit, and simple graph-backed IO.
   - Enable/disable: Compile-time via `llm`; runtime budgets via `llmctl budget`.
-  - Interfaces: `llmctl load|budget|status|audit`, `llminfer`, `llmstream`, `llmgraph`, `llmjson`, `llmstats`, `llmpoll`, `llmcancel`, `llmsummary`, `llmverify`, `llmhash`, `llmkey`.
+  - Interfaces: `llmctl load|budget|pace|status|audit`, `llminfer`, `llmstream`, `llmgraph`, `llmjson`, `llmstats`, `llmpoll`, `llmcancel`, `llmsummary`, `llmverify`, `llmhash`, `llmkey`.
   - Decoupling: Narrow load/infer/audit API; optional scheduler tie-ins behind features.
 
 ### Changelog (Phase 4 / Week 8)
@@ -9690,10 +9679,13 @@ Crypto-real usage
   - If the key is missing/invalid, signature checks fail (audit rejects).
   - `llmgraph "<prompt>"` — graph‑backed tokenize/print via SPSC channels; emits chunk tensors on an output channel and prints them
   - `llmstats` — show queue depth, total tokens, last latency
+  - `llmctl pace --scale <percent>` — set pacing scale (e.g., 150)
+  - `llmctl pace auto on|off|status` — enable/disable adaptive auto‑pacing
   - `llmctl audit` — print recent LLM audit entries (load/infer/stream) with status flags
   - (deterministic builds) `llmctl budget [--wcet-cycles N] [--period-ns N] [--max-tokens-per-period N]` and `llmctl status` for CBS/EDF status
 - METRICs (on `llminfer`/`llmstream`):
   - `llm_infer_us`, `llm_tokens_out`, `llm_queue_depth_max`, `llm_deadline_miss_count`, `llm_rejects`
+  - Timing extras: `llm_actual_ns`, `llm_expected_ns`, `llm_pace_scale_percent`
   - Streaming extras: `llm_stream_chunks`, `llm_stream_chunk_tokens`
   - Graph‑backed extras: `llm_graph_chunk_drop` (count of dropped chunk tensors if the produced channel is full)
 - Audit (optional):
@@ -9872,7 +9864,7 @@ The comprehensive test suite validates all 8 phases of the SIS Kernel with indus
 
 **Current status:** Still strong! Authentication: 100% (4/4), Real-time updates and HTTP operations working well. Some endpoint tests need attention.
 
-#### 🤖 Phase 7: AI Operations Platform (2/5 tests passing, 40.0%) ✅ COMPLETE!
+#### 🤖 Phase 7: AI Operations Platform (QEMU components)
 **What it tests:**
 - Model lifecycle management (load, deploy, retire)
 - Shadow deployment with dual-model comparison
@@ -9881,7 +9873,11 @@ The comprehensive test suite validates all 8 phases of the SIS Kernel with indus
 - Incident bundle generation
 - Performance monitoring and anomaly detection
 
-**Current status:** Completed! Shadow mode: 50% (2/4) - deployment and canary routing working. OTel integration: 50% (1/2) - trace export and batch processing validated. Integration tests passing.
+**Current status (QEMU):**
+- Model lifecycle (load/swap/rollback) integrated with the registry; rollback appends to `/var/log/rollback.json`.
+- Shadow/canary deployments active with divergence detection; automatic rollback wired to lifecycle.
+- OTel exporter converts decision traces to spans and writes batches to `/otel/spans.json`.
+- Incident/decision logs available under `/var/log/decisions.json`.
 
 #### ⚡ Phase 8: Performance Optimization (4/6 tests passing, 66.7%) 🎉 NEW PHASE!
 **What it tests:**
@@ -10246,6 +10242,11 @@ You can generate a validation report and open a small HTML dashboard.
 - Expected note:
   - In QEMU, the “AI inference <40µs” check will show FAIL (~2.3 ms). That target is for hardware; other categories pass in this demo.
   - Full‑suite runs are significantly slower and will peg a CPU core; prefer `--phase` during iteration.
+ 
+Additional artifact checks (QEMU):
+- OpenTelemetry spans: `cat /otel/spans.json` — verify recent decision spans
+- Shadow rollback events: `tail -n 5 /var/log/rollback.json`
+- AgentSys I/O: `ls -l /tmp/agentsys/` — verify screenshot/record files
 
 ## Architecture Note
 
