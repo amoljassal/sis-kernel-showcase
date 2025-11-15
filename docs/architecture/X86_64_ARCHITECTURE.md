@@ -1,6 +1,6 @@
 # x86_64 Architecture Implementation
 
-**Status:** Milestone M1 Complete (Interrupts & Exceptions)
+**Status:** Milestone M2 Complete (APIC & High Precision Timer)
 **Last Updated:** 2025-11-15
 **Architecture:** Intel/AMD 64-bit (x86_64)
 **Boot Method:** UEFI
@@ -10,24 +10,25 @@
 
 ## Executive Summary
 
-This document describes the x86_64 architecture implementation for the SIS kernel. The implementation follows a milestone-based approach (M0-M9) as outlined in `IMPLEMENTATION_PLAN_X86_64.md`. As of this update, **Milestones M0 (Skeleton Boot) and M1 (Interrupts & Exceptions)** have been completed, providing a fully functional boot environment with hardware interrupt support, timer interrupts, and exception handling.
+This document describes the x86_64 architecture implementation for the SIS kernel. The implementation follows a milestone-based approach (M0-M9) as outlined in `IMPLEMENTATION_PLAN_X86_64.md`. As of this update, **Milestones M0 (Skeleton Boot), M1 (Interrupts & Exceptions), and M2 (APIC & High Precision Timer)** have been completed, providing a fully functional boot environment with modern APIC-based interrupt handling, high-precision timing via HPET, and improved TSC calibration.
 
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)
 2. [Milestone M0: Skeleton Boot](#milestone-m0-skeleton-boot)
 3. [Milestone M1: Interrupts & Exceptions](#milestone-m1-interrupts--exceptions)
-4. [Module Organization](#module-organization)
-5. [Memory Layout](#memory-layout)
-6. [Boot Sequence](#boot-sequence)
-7. [CPU Feature Management](#cpu-feature-management)
-8. [Exception Handling](#exception-handling)
-9. [Interrupt Handling](#interrupt-handling)
-10. [Serial Console](#serial-console)
-11. [Time Keeping](#time-keeping)
-12. [Future Milestones](#future-milestones)
-13. [Testing](#testing)
-14. [References](#references)
+4. [Milestone M2: APIC & High Precision Timer](#milestone-m2-apic--high-precision-timer)
+5. [Module Organization](#module-organization)
+6. [Memory Layout](#memory-layout)
+7. [Boot Sequence](#boot-sequence)
+8. [CPU Feature Management](#cpu-feature-management)
+9. [Exception Handling](#exception-handling)
+10. [Interrupt Handling](#interrupt-handling)
+11. [Serial Console](#serial-console)
+12. [Time Keeping](#time-keeping)
+13. [Future Milestones](#future-milestones)
+14. [Testing](#testing)
+15. [References](#references)
 
 ---
 
@@ -289,6 +290,239 @@ All M0 acceptance criteria have been met:
 
 ---
 
+## Milestone M1: Interrupts & Exceptions
+
+**Status:** ✅ **COMPLETE**
+**Duration:** 2 days (estimated)
+**Completion Date:** 2025-11-15
+
+### Objectives
+
+Milestone M1 implements hardware interrupt support and timer-based interrupts:
+
+- ✅ Legacy PIC (8259A) initialization and configuration
+- ✅ PIT (Programmable Interval Timer) driver
+- ✅ Timer interrupt handling (IRQ 0)
+- ✅ Keyboard interrupt stub (IRQ 1)
+- ✅ EOI (End of Interrupt) handling
+- ✅ Spurious interrupt detection
+
+### Components Implemented
+
+#### 1. Legacy PIC (8259A)
+
+**File:** `crates/kernel/src/arch/x86_64/pic.rs`
+
+The Programmable Interrupt Controller manages hardware interrupts (IRQs) in cascaded dual-PIC configuration.
+
+**Features:**
+- Vector remapping: IRQ 0-15 → vectors 32-47 (avoids conflict with CPU exceptions)
+- Master PIC: IRQ 0-7 (vectors 32-39)
+- Slave PIC: IRQ 8-15 (vectors 40-47)
+- Individual IRQ masking
+- EOI acknowledgment
+- Spurious interrupt detection
+
+**Key Functions:**
+- `init()`: Initialize and remap PIC
+- `enable_irq(irq)`: Unmask specific IRQ
+- `disable_irq(irq)`: Mask specific IRQ
+- `end_of_interrupt(vector)`: Send EOI
+
+#### 2. PIT (Programmable Interval Timer)
+
+**File:** `crates/kernel/src/arch/x86_64/pit.rs`
+
+The 8253/8254 PIT provides timer interrupts at configurable frequencies.
+
+**Features:**
+- Configured for 1000 Hz (1 ms per tick)
+- Atomic tick counter for uptime tracking
+- TSC calibration support
+- Microsecond-precision busy-wait delays
+
+**Key Functions:**
+- `init(freq_hz)`: Initialize PIT to specified frequency
+- `tick()`: Increment tick counter (called from IRQ handler)
+- `ticks()`: Get current tick count
+- `uptime_secs()`: Get uptime in seconds
+- `calibrate_tsc(duration_ms)`: Calibrate TSC using PIT
+- `udelay(us)`: Busy-wait microsecond delay
+
+#### 3. IDT Interrupt Handlers
+
+**File:** `crates/kernel/src/arch/x86_64/idt.rs` (updated)
+
+Added hardware interrupt handlers for:
+- **Timer (IRQ 0 / Vector 32)**: Increments PIT tick counter, sends EOI
+- **Keyboard (IRQ 1 / Vector 33)**: Reads scancode from port 0x60, sends EOI
+- **Serial (IRQ 4 / Vector 36)**: Stub for future serial driver
+- **Spurious (IRQ 7/15 / Vectors 39/47)**: Handles spurious PIC interrupts
+
+#### 4. Boot Sequence Integration
+
+**File:** `crates/kernel/src/arch/x86_64/boot.rs` (updated)
+
+Added M1 initialization steps:
+1. Initialize PIC and remap to vectors 32-47
+2. Initialize PIT at 1000 Hz
+3. Enable timer interrupt (IRQ 0)
+4. Enable interrupts globally (STI)
+
+### Acceptance Criteria
+
+All M1 acceptance criteria have been met:
+
+- ✅ PIC initialized and remapped correctly
+- ✅ PIT generates timer interrupts at 1000 Hz
+- ✅ Timer interrupt handler executes successfully
+- ✅ Tick counter increments accurately
+- ✅ EOI sent correctly to PIC
+- ✅ No spurious interrupts or interrupt storms
+- ✅ Keyboard interrupts acknowledged (scancode read)
+- ✅ System remains stable with interrupts enabled
+
+---
+
+## Milestone M2: APIC & High Precision Timer
+
+**Status:** ✅ **COMPLETE**
+**Duration:** 2 days (estimated)
+**Completion Date:** 2025-11-15
+
+### Objectives
+
+Milestone M2 implements modern APIC-based interrupt handling and high-precision timing:
+
+- ✅ Local APIC (xAPIC and x2APIC) detection and initialization
+- ✅ HPET (High Precision Event Timer) driver
+- ✅ Improved TSC calibration using HPET
+- ✅ Dynamic EOI routing (APIC or PIC)
+- ✅ Boot sequence integration
+
+### Components Implemented
+
+#### 1. Local APIC (Advanced Programmable Interrupt Controller)
+
+**File:** `crates/kernel/src/arch/x86_64/apic.rs`
+
+The Local APIC is the modern replacement for the legacy PIC, providing per-CPU interrupt control.
+
+**Supported Modes:**
+- **xAPIC**: Memory-mapped I/O at physical address 0xFEE00000
+- **x2APIC**: MSR-based (faster, supports more CPUs)
+
+**Features:**
+- APIC detection via CPUID
+- Mode selection (xAPIC vs x2APIC)
+- APIC initialization and enabling
+- Software enable/disable
+- EOI handling
+- IPI (Inter-Processor Interrupt) support (for future SMP)
+- Timer configuration support (for future use)
+
+**Key Functions:**
+- `init()`: Detect and initialize Local APIC
+- `get()`: Get reference to global APIC instance
+- `eoi()`: Send End-of-Interrupt signal
+- `send_ipi()`: Send IPI to other CPUs (future SMP)
+
+**APIC Registers:**
+- APIC ID: CPU identification
+- Task Priority Register (TPR): Interrupt priority
+- EOI Register: Acknowledge interrupts
+- Spurious Interrupt Vector Register: APIC enable/disable
+- Interrupt Command Register (ICR): Send IPIs
+
+#### 2. HPET (High Precision Event Timer)
+
+**File:** `crates/kernel/src/arch/x86_64/hpet.rs`
+
+The HPET is a high-resolution hardware timer that replaces the legacy PIT for precise timing.
+
+**Features:**
+- 64-bit counter with femtosecond precision
+- Frequency specified in ACPI (no calibration needed)
+- Multiple timer comparators (typically 3-32)
+- Memory-mapped registers
+- TSC calibration support
+
+**Key Functions:**
+- `init()`: Initialize HPET at default address (0xFED00000)
+- `get()`: Get reference to global HPET instance
+- `read_counter()`: Read current 64-bit counter value
+- `frequency()`: Get HPET frequency in Hz
+- `ns_to_ticks()`: Convert nanoseconds to HPET ticks
+- `ticks_to_ns()`: Convert HPET ticks to nanoseconds
+- `calibrate_tsc()`: Calibrate TSC using HPET
+- `delay_ns()`: Busy-wait nanosecond delay
+
+**HPET Characteristics:**
+- Default base address: 0xFED00000 (standard location)
+- Typical frequency: ~14.3 MHz
+- Counter period: Specified in capabilities register (femtoseconds)
+- Never overflows (64-bit counter takes ~58,000 years at 14 MHz)
+
+#### 3. Improved TSC Calibration
+
+**File:** `crates/kernel/src/arch/x86_64/tsc.rs` (updated)
+
+Enhanced TSC calibration with multi-tier fallback strategy:
+
+**Calibration Priority:**
+1. **CPUID.15H**: TSC frequency from CPUID (most accurate, if available)
+2. **MSR 0xCE**: Intel IA32_PLATFORM_INFO (Intel CPUs only)
+3. **HPET**: Calibrate against HPET (NEW in M2, accurate)
+4. **PIT**: Calibrate against PIT (M1, less accurate)
+5. **Fallback**: Assume 1 GHz (very inaccurate)
+
+The HPET-based calibration provides significantly better accuracy than PIT while being more widely available than CPUID-based methods.
+
+#### 4. Dynamic EOI Handling
+
+**File:** `crates/kernel/src/arch/x86_64/idt.rs` (updated)
+
+Implemented `send_eoi()` helper function that automatically routes EOI to the correct interrupt controller:
+
+```rust
+unsafe fn send_eoi(vector: u8) {
+    if let Some(_apic) = apic::get() {
+        apic::eoi();  // Use APIC EOI
+    } else {
+        pic::end_of_interrupt(vector);  // Fall back to PIC
+    }
+}
+```
+
+All interrupt handlers updated to use `send_eoi()` instead of calling PIC directly.
+
+#### 5. Boot Sequence Integration
+
+**File:** `crates/kernel/src/arch/x86_64/boot.rs` (updated)
+
+Added M2 initialization steps:
+1. Initialize HPET (before TSC calibration)
+2. Initialize TSC (now uses HPET if available)
+3. Initialize Local APIC (after PIC, before enabling interrupts)
+4. Enable interrupts globally
+
+The system gracefully falls back to PIC/PIT if APIC/HPET are not available.
+
+### Acceptance Criteria
+
+All M2 acceptance criteria have been met:
+
+- ✅ APIC detected and initialized correctly (xAPIC or x2APIC)
+- ✅ HPET detected and initialized at 0xFED00000
+- ✅ TSC calibration uses HPET (if available) or falls back to PIT
+- ✅ EOI routing works with both APIC and PIC
+- ✅ Timer interrupts still work after APIC initialization
+- ✅ System boots successfully with APIC enabled
+- ✅ System falls back gracefully if APIC/HPET unavailable
+- ✅ No interrupt delivery issues or system hangs
+
+---
+
 ## Module Organization
 
 ```
@@ -300,17 +534,18 @@ crates/kernel/src/arch/x86_64/
 ├── idt.rs          # Interrupt Descriptor Table
 ├── tss.rs          # Task State Segment
 ├── serial.rs       # 16550 UART serial driver
-└── tsc.rs          # Time Stamp Counter
+├── tsc.rs          # Time Stamp Counter
+├── pic.rs          # Legacy 8259A PIC (M1) ✅
+├── pit.rs          # Programmable Interval Timer (M1) ✅
+├── apic.rs         # Local APIC (M2) ✅
+└── hpet.rs         # High Precision Event Timer (M2) ✅
 
-Future modules (M1-M9):
-├── pic.rs          # Legacy 8259A PIC (M1)
-├── pit.rs          # Programmable Interval Timer (M1)
-├── apic.rs         # Local APIC and I/O APIC (M2)
-├── hpet.rs         # High Precision Event Timer (M2)
+Future modules (M3-M9):
 ├── paging.rs       # 4-level page tables (M3)
 ├── syscall.rs      # SYSCALL/SYSRET entry (M4)
 ├── smp.rs          # SMP support (M8)
 ├── percpu.rs       # Per-CPU data (M8)
+├── ioapic.rs       # I/O APIC (M2/M8)
 ├── acpi.rs         # ACPI tables (M9)
 └── power.rs        # Power management (M9)
 ```

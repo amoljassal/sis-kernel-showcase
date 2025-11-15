@@ -141,6 +141,28 @@ pub unsafe fn init_idt_early() {
     IDT.load();
 }
 
+/// Send End-of-Interrupt signal
+///
+/// Sends EOI to either APIC (if available) or PIC (legacy).
+/// This must be called at the end of every hardware interrupt handler.
+///
+/// # Arguments
+///
+/// * `vector` - Interrupt vector number (32-255 for hardware interrupts)
+///
+/// # Safety
+///
+/// Must only be called from interrupt handlers, after the interrupt has been handled.
+unsafe fn send_eoi(vector: u8) {
+    // Try to use APIC first
+    if let Some(_apic) = crate::arch::x86_64::apic::get() {
+        crate::arch::x86_64::apic::eoi();
+    } else {
+        // Fall back to PIC
+        crate::arch::x86_64::pic::end_of_interrupt(vector);
+    }
+}
+
 //
 // Exception Handlers
 //
@@ -401,14 +423,14 @@ extern "x86-interrupt" fn virtualization_handler(stack_frame: InterruptStackFram
 /// Responsibilities:
 /// - Increment tick counter
 /// - Trigger scheduler (future)
-/// - Send EOI to PIC
+/// - Send EOI to interrupt controller (APIC or PIC)
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
     // Increment PIT tick counter
     crate::arch::x86_64::pit::tick();
 
-    // Send End of Interrupt to PIC
+    // Send End of Interrupt
     unsafe {
-        crate::arch::x86_64::pic::end_of_interrupt(32);
+        send_eoi(32);
     }
 }
 
@@ -429,9 +451,9 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
         // TODO: Process scancode in keyboard driver
     }
 
-    // Send EOI to PIC
+    // Send End of Interrupt
     unsafe {
-        crate::arch::x86_64::pic::end_of_interrupt(33);
+        send_eoi(33);
     }
 }
 
@@ -446,9 +468,9 @@ extern "x86-interrupt" fn serial_interrupt_handler(_stack_frame: InterruptStackF
     // TODO: Read data from serial port FIFO
     // For now, just acknowledge the interrupt
 
-    // Send EOI to PIC
+    // Send End of Interrupt
     unsafe {
-        crate::arch::x86_64::pic::end_of_interrupt(36);
+        send_eoi(36);
     }
 }
 

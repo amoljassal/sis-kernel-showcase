@@ -163,10 +163,9 @@ pub mod boot;     // Boot sequence and early init
 pub mod pic;      // Legacy 8259A PIC
 pub mod pit;      // Programmable Interval Timer
 
-#[cfg(feature = "m2-complete")]
-pub mod apic;     // Local APIC and I/O APIC (M2: APIC)
-#[cfg(feature = "m2-complete")]
-pub mod hpet;     // High Precision Event Timer (M2: APIC)
+// M2: APIC & High Precision Timer (COMPLETE)
+pub mod apic;     // Local APIC (xAPIC/x2APIC)
+pub mod hpet;     // High Precision Event Timer
 
 #[cfg(feature = "m3-complete")]
 pub mod paging;   // 4-level page tables (M3: Paging)
