@@ -55,7 +55,7 @@ pub trait FileSystem: Send + Sync {
 
 use crate::lib::error::Errno;
 use alloc::sync::Arc;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 /// File mode bits

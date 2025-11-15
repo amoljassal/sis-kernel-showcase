@@ -78,7 +78,7 @@ pub fn auto_rollback_if_needed() -> crate::lib::error::Result<()> {
             // REAL MODEL LIFECYCLE ROLLBACK
             #[cfg(feature = "model-lifecycle")]
             {
-                if let Some(lifecycle_mutex) = crate::model_lifecycle::get_model_lifecycle() {
+                if let Some(lifecycle_mutex) = crate::model_lifecycle::lifecycle::get_model_lifecycle() {
                     if let Some(ref mut lifecycle) = *lifecycle_mutex.lock() {
                         // Get current shadow version before rollback
                         let shadow_version = lifecycle.get_shadow()
@@ -102,12 +102,7 @@ pub fn auto_rollback_if_needed() -> crate::lib::error::Result<()> {
                                 // Write rollback event to log
                                 write_rollback_event(&shadow_version, &stable_version, &reason);
 
-                                // Log to audit (if available)
-                                #[cfg(feature = "agentsys")]
-                                {
-                                    crate::security::agent_audit::audit()
-                                        .log_system_event("shadow_rollback", true);
-                                }
+                                // TODO: Log to audit when log_system_event is implemented
 
                                 crate::uart::print_str("[Shadow] Rollback complete\n");
                             }
