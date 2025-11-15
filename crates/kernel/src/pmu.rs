@@ -18,7 +18,7 @@
 //! unsafe { crate::pmu::init(); }
 //!
 //! // Read performance snapshot
-//! let snap = unsafe { crate::pmu::read_snapshot() };
+//! let snap = crate::pmu::read_snapshot()?;
 //! println!("Cycles: {}, Instructions: {}", snap.cycles, snap.inst);
 //! ```
 //!
@@ -26,8 +26,17 @@
 //!
 //! - ARM Architecture Reference Manual (PMU chapter)
 //! - ARM Cortex-A76 Core Technical Reference Manual
+//!
+//! # M8 Hardening
+//!
+//! All public functions return DriverResult for proper error handling.
+//! Counter indices are validated (0-5 for event counters).
 
 use core::sync::atomic::{AtomicBool, Ordering};
+use crate::drivers::{DriverError, DriverResult, Validator};
+
+/// Maximum event counter index (counters 0-5)
+const MAX_EVENT_COUNTER: u64 = 5;
 
 /// PMU initialization state
 static PMU_INITIALIZED: AtomicBool = AtomicBool::new(false);
@@ -241,9 +250,13 @@ pub mod aarch64 {
     /// # Safety
     ///
     /// PMU must be initialized before calling this function.
-    pub unsafe fn read_snapshot() -> Snapshot {
+    ///
+    /// # M8 Hardening
+    ///
+    /// Returns DriverError::NotInitialized if PMU is not initialized.
+    pub unsafe fn read_snapshot() -> DriverResult<Snapshot> {
         if !PMU_INITIALIZED.load(Ordering::Acquire) {
-            return Snapshot::default();
+            return Err(DriverError::NotInitialized);
         }
 
         // Read cycle counter (PMCCNTR_EL0)
@@ -268,7 +281,7 @@ pub mod aarch64 {
         write_pmselelr(5);
         let exc_taken = read_pmxevcntr();
 
-        Snapshot {
+        Ok(Snapshot {
             cycles,
             inst,
             l1d_refill,
@@ -276,15 +289,19 @@ pub mod aarch64 {
             l2d_cache,
             l1i_refill,
             exc_taken,
-        }
+        })
     }
 
     /// Read cycle counter only (faster than full snapshot)
-    pub unsafe fn read_cycles() -> u64 {
+    ///
+    /// # M8 Hardening
+    ///
+    /// Returns DriverError::NotInitialized if PMU is not initialized.
+    pub unsafe fn read_cycles() -> DriverResult<u64> {
         if !PMU_INITIALIZED.load(Ordering::Acquire) {
-            return 0;
+            return Err(DriverError::NotInitialized);
         }
-        read_pmccntr()
+        Ok(read_pmccntr())
     }
 
     /// Read a specific event counter
@@ -292,19 +309,28 @@ pub mod aarch64 {
     /// # Arguments
     ///
     /// * `counter_idx` - Counter index (0-5)
-    pub unsafe fn read_event_counter(counter_idx: u64) -> u64 {
-        if !PMU_INITIALIZED.load(Ordering::Acquire) || counter_idx >= 6 {
-            return 0;
+    ///
+    /// # M8 Hardening
+    ///
+    /// Returns DriverError::NotInitialized if PMU is not initialized.
+    /// Returns DriverError::InvalidParameter if counter_idx > 5.
+    pub unsafe fn read_event_counter(counter_idx: u64) -> DriverResult<u64> {
+        if !PMU_INITIALIZED.load(Ordering::Acquire) {
+            return Err(DriverError::NotInitialized);
         }
 
+        // M8: Validate counter index (0-5)
+        Validator::check_bounds(counter_idx, 0, super::MAX_EVENT_COUNTER)?;
+
         write_pmselelr(counter_idx);
-        read_pmxevcntr()
+        Ok(read_pmxevcntr())
     }
 }
 
 #[cfg(not(target_arch = "aarch64"))]
 pub mod aarch64 {
     use super::PMU_INITIALIZED;
+    use crate::drivers::{DriverError, DriverResult, Validator};
     use core::sync::atomic::Ordering;
 
     #[derive(Copy, Clone, Default, Debug)]
@@ -328,12 +354,27 @@ pub mod aarch64 {
         PMU_INITIALIZED.store(true, Ordering::Release);
     }
 
-    pub unsafe fn read_snapshot() -> Snapshot {
-        Snapshot::default()
+    pub unsafe fn read_snapshot() -> DriverResult<Snapshot> {
+        if !PMU_INITIALIZED.load(Ordering::Acquire) {
+            return Err(DriverError::NotInitialized);
+        }
+        Ok(Snapshot::default())
     }
 
-    pub unsafe fn read_cycles() -> u64 { 0 }
-    pub unsafe fn read_event_counter(_: u64) -> u64 { 0 }
+    pub unsafe fn read_cycles() -> DriverResult<u64> {
+        if !PMU_INITIALIZED.load(Ordering::Acquire) {
+            return Err(DriverError::NotInitialized);
+        }
+        Ok(0)
+    }
+
+    pub unsafe fn read_event_counter(counter_idx: u64) -> DriverResult<u64> {
+        if !PMU_INITIALIZED.load(Ordering::Acquire) {
+            return Err(DriverError::NotInitialized);
+        }
+        Validator::check_bounds(counter_idx, 0, super::MAX_EVENT_COUNTER)?;
+        Ok(0)
+    }
 }
 
 // Public API (re-export from aarch64 module)
@@ -353,14 +394,22 @@ pub unsafe fn init() {
 /// Read a complete performance snapshot
 ///
 /// Returns counters for cycles, instructions, cache misses, etc.
-pub fn read_snapshot() -> Snapshot {
+///
+/// # M8 Hardening
+///
+/// Returns DriverError::NotInitialized if PMU is not initialized.
+pub fn read_snapshot() -> DriverResult<Snapshot> {
     unsafe { aarch64::read_snapshot() }
 }
 
 /// Read cycle counter only
 ///
 /// Faster than reading a full snapshot when only cycle count is needed.
-pub fn read_cycles() -> u64 {
+///
+/// # M8 Hardening
+///
+/// Returns DriverError::NotInitialized if PMU is not initialized.
+pub fn read_cycles() -> DriverResult<u64> {
     unsafe { aarch64::read_cycles() }
 }
 
@@ -369,7 +418,12 @@ pub fn read_cycles() -> u64 {
 /// # Arguments
 ///
 /// * `counter_idx` - Counter index (0-5)
-pub fn read_event_counter(counter_idx: u64) -> u64 {
+///
+/// # M8 Hardening
+///
+/// Returns DriverError::NotInitialized if PMU is not initialized.
+/// Returns DriverError::InvalidParameter if counter_idx > 5.
+pub fn read_event_counter(counter_idx: u64) -> DriverResult<u64> {
     unsafe { aarch64::read_event_counter(counter_idx) }
 }
 
