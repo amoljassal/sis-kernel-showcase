@@ -90,6 +90,7 @@ pub mod meta_agent;
 pub mod autonomy;
 pub mod time;
 pub mod log;  // M8: Production logging framework
+pub mod validation;  // M7: Comprehensive validation suite
 pub mod prediction_tracker;
 pub mod stress_test;
 pub mod prng;
