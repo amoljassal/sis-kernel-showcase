@@ -167,7 +167,7 @@ pub mod pit;      // Programmable Interval Timer
 pub mod apic;     // Local APIC (xAPIC/x2APIC)
 pub mod hpet;     // High Precision Event Timer
 
-#[cfg(feature = "m3-complete")]
+// M3: Paging & Memory Management (COMPLETE)
 pub mod paging;   // 4-level page tables (M3: Paging)
 
 #[cfg(feature = "m4-complete")]

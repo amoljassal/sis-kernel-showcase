@@ -356,13 +356,95 @@ extern "x86-interrupt" fn page_fault_handler(
     // CR2 contains the virtual address that caused the page fault
     let fault_addr = Cr2::read();
 
+    // Decode error code bits
+    let present = error_code.contains(PageFaultErrorCode::PROTECTION_VIOLATION);
+    let write = error_code.contains(PageFaultErrorCode::CAUSED_BY_WRITE);
+    let user = error_code.contains(PageFaultErrorCode::USER_MODE);
+    let reserved = error_code.contains(PageFaultErrorCode::MALFORMED_TABLE);
+    let instruction = error_code.contains(PageFaultErrorCode::INSTRUCTION_FETCH);
+
+    // Attempt to translate the faulting address (M3)
+    let translation = unsafe {
+        crate::arch::x86_64::paging::PageTableManager::new()
+            .ok()
+            .and_then(|ptm| ptm.translate(fault_addr))
+    };
+
+    crate::arch::x86_64::serial::serial_write(b"\n==================== PAGE FAULT ====================\n");
+    crate::arch::x86_64::serial::serial_write(b"Virtual Address:  ");
+    print_hex_u64(fault_addr.as_u64());
+    crate::arch::x86_64::serial::serial_write(b"\n");
+
+    if let Some(phys) = translation {
+        crate::arch::x86_64::serial::serial_write(b"Physical Address: ");
+        print_hex_u64(phys.as_u64());
+        crate::arch::x86_64::serial::serial_write(b" (mapped)\n");
+    } else {
+        crate::arch::x86_64::serial::serial_write(b"Physical Address: NOT MAPPED\n");
+    }
+
+    crate::arch::x86_64::serial::serial_write(b"\nFault Type:\n");
+    crate::arch::x86_64::serial::serial_write(if present {
+        b"  - PROTECTION VIOLATION (page was present)\n"
+    } else {
+        b"  - PAGE NOT PRESENT\n"
+    });
+
+    crate::arch::x86_64::serial::serial_write(if write {
+        b"  - WRITE ACCESS\n"
+    } else {
+        b"  - READ ACCESS\n"
+    });
+
+    crate::arch::x86_64::serial::serial_write(if user {
+        b"  - USER MODE\n"
+    } else {
+        b"  - KERNEL MODE\n"
+    });
+
+    if reserved {
+        crate::arch::x86_64::serial::serial_write(b"  - RESERVED BIT VIOLATION\n");
+    }
+
+    if instruction {
+        crate::arch::x86_64::serial::serial_write(b"  - INSTRUCTION FETCH\n");
+    }
+
+    crate::arch::x86_64::serial::serial_write(b"\nInstruction Pointer: ");
+    print_hex_u64(stack_frame.instruction_pointer.as_u64());
+    crate::arch::x86_64::serial::serial_write(b"\n");
+
+    crate::arch::x86_64::serial::serial_write(b"Stack Pointer:       ");
+    print_hex_u64(stack_frame.stack_pointer.as_u64());
+    crate::arch::x86_64::serial::serial_write(b"\n");
+
+    crate::arch::x86_64::serial::serial_write(b"====================================================\n\n");
+
     panic!(
-        "EXCEPTION: PAGE FAULT\n\
-         Accessed Address: {:#x}\n\
-         Error Code: {:?}\n\
-         {:#?}",
-        fault_addr, error_code, stack_frame
+        "EXCEPTION: PAGE FAULT at {:#x} ({})",
+        fault_addr,
+        if present { "protection violation" } else { "not present" }
     );
+}
+
+/// Helper to print u64 in hexadecimal
+fn print_hex_u64(n: u64) {
+    crate::arch::x86_64::serial::serial_write(b"0x");
+    let mut buf = [0u8; 16];
+    let mut i = 0;
+
+    for byte_idx in (0..8).rev() {
+        let byte = ((n >> (byte_idx * 8)) & 0xFF) as u8;
+        let high = (byte >> 4) & 0xF;
+        let low = byte & 0xF;
+
+        buf[i] = if high < 10 { b'0' + high } else { b'A' + (high - 10) };
+        i += 1;
+        buf[i] = if low < 10 { b'0' + low } else { b'A' + (low - 10) };
+        i += 1;
+    }
+
+    crate::arch::x86_64::serial::serial_write(&buf);
 }
 
 /// x87 FPU Error (#MF) - Vector 16

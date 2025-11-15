@@ -223,7 +223,16 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
     x86_64::instructions::interrupts::enable();
 
     serial::serial_write(b"[BOOT] Interrupts enabled\n");
-    serial::serial_write(b"[BOOT] Early initialization complete\n");
+
+    // M3: Paging & Memory Management
+    // NOTE: Basic paging is already set up by the bootloader (identity mapping).
+    // The PageTableManager in arch::x86_64::paging provides advanced page table
+    // management for future use (user processes, demand paging, etc.).
+    // Full paging initialization will be added when integrating with userspace (M4+).
+    serial::serial_write(b"\n[BOOT] Milestone M3: Paging infrastructure available\n");
+    serial::serial_write(b"[BOOT] Page fault handler enhanced with diagnostics\n");
+
+    serial::serial_write(b"\n[BOOT] Early initialization complete\n");
     serial::serial_write(b"\n");
 
     Ok(())
