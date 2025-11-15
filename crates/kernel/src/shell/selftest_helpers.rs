@@ -53,9 +53,9 @@ impl super::Shell {
             crate::uart_print(b"\n========================================\n");
 
             if total_failed == 0 {
-                crate::uart_print(b"\n✓ All tests PASSED\n\n");
+                crate::uart_print(b"\n\xE2\x9C\x93 All tests PASSED\n\n");
             } else {
-                crate::uart_print(b"\n✗ Some tests FAILED\n\n");
+                crate::uart_print(b"\n\xE2\x9C\x97 Some tests FAILED\n\n");
             }
         }
     }
@@ -359,7 +359,7 @@ impl super::Shell {
 
             if let TestResult::Fail(failure) = result {
                 crate::uart_print(b" (");
-                self.print_failure_reason(*failure);
+                self.print_selftest_failure_reason(*failure);
                 crate::uart_print(b")");
             }
 
@@ -367,7 +367,7 @@ impl super::Shell {
         }
     }
 
-    fn print_failure_reason(&self, failure: TestFailure) {
+    fn print_selftest_failure_reason(&self, failure: TestFailure) {
         unsafe {
             match failure {
                 TestFailure::NotInitialized => crate::uart_print(b"not initialized"),
