@@ -485,6 +485,7 @@ impl VirtIOConsoleDriver {
                         crate::control::CtrlError::NoGraph => 0x03,
                         crate::control::CtrlError::Oversize => { crate::trace::metric_kv("ctl_oversize", 1); 0x04 },
                         crate::control::CtrlError::AuthFailed => 0x05,
+                        crate::control::CtrlError::IoError => 0x06,
                     };
                     let _ = self.send_ack_code(code);
                     // Periodically emit counters

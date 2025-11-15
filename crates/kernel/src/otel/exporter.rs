@@ -10,7 +10,7 @@ use spin::Mutex;
 use crate::lib::error::Result;
 
 #[cfg(feature = "decision-traces")]
-use crate::trace_decision::DecisionTrace;
+use crate::trace::DecisionTrace;
 
 /// OpenTelemetry span
 #[derive(Debug, Serialize, Deserialize)]
@@ -171,8 +171,8 @@ impl OTelExporter {
         let json = serde_json::to_string(&spans)
             .map_err(|_| crate::lib::error::Errno::EINVAL)?;
 
-        // TODO: Write to ext4 via VFS
-        let _ = self.write_file(self.export_endpoint, json.as_bytes());
+        // Write to VFS
+        self.write_file(self.export_endpoint, json.as_bytes())?;
 
         // Clear batch
         spans.clear();
@@ -180,9 +180,35 @@ impl OTelExporter {
         Ok(())
     }
 
-    fn write_file(&self, _path: &str, _data: &[u8]) -> Result<()> {
-        // TODO: Implement VFS write
-        Ok(())
+    fn write_file(&self, path: &str, contents: &[u8]) -> Result<()> {
+        const MAX_FILE_SIZE: usize = 64 * 1024;  // 64KB before rotation
+        const BACKUP_PATH: &str = "/otel/spans.old.json";
+
+        // Create /otel directory if not exists
+        if let Err(_) = crate::vfs::open("/otel", crate::vfs::OpenFlags::O_RDONLY | crate::vfs::OpenFlags::O_DIRECTORY) {
+            let _ = crate::vfs::mkdir("/otel", 0o755);
+        }
+
+        // Check if rotation needed
+        if let Ok(file) = crate::vfs::open(path, crate::vfs::OpenFlags::O_RDONLY) {
+            if let Ok(meta) = file.getattr() {
+                if meta.size as usize + contents.len() > MAX_FILE_SIZE {
+                    // Rotate: current -> backup
+                    let _ = crate::vfs::unlink(BACKUP_PATH);
+                    // Note: VFS doesn't have rename yet, so we'll just delete and create new
+                    let _ = crate::vfs::unlink(path);
+                }
+            }
+        }
+
+        // Append to file
+        match crate::vfs::open(path, crate::vfs::OpenFlags::O_WRONLY | crate::vfs::OpenFlags::O_APPEND | crate::vfs::OpenFlags::O_CREAT) {
+            Ok(file) => {
+                file.write(contents)?;
+                Ok(())
+            }
+            Err(e) => Err(e)
+        }
     }
 
     /// Force flush all pending spans

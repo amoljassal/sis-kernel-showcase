@@ -70,18 +70,93 @@ pub fn auto_rollback_if_needed() -> crate::lib::error::Result<()> {
     match trigger.check(&stats) {
         RollbackDecision::Continue => Ok(()),
         RollbackDecision::Rollback { reason, metric } => {
-            crate::kprintln!("[ROLLBACK] Triggered: {} ({})", reason, metric);
+            crate::kprintln!("[Shadow] Auto-rollback triggered: {} ({})", reason, metric);
 
             // Disable shadow
             SHADOW_AGENT.disable();
 
-            // TODO: Trigger model lifecycle rollback
-            // let mut lifecycle = MODEL_LIFECYCLE.lock();
-            // lifecycle.rollback()?;
+            // REAL MODEL LIFECYCLE ROLLBACK
+            #[cfg(feature = "model-lifecycle")]
+            {
+                if let Some(lifecycle_mutex) = crate::model_lifecycle::lifecycle::get_model_lifecycle() {
+                    if let Some(ref mut lifecycle) = *lifecycle_mutex.lock() {
+                        // Get current shadow version before rollback
+                        let shadow_version = lifecycle.get_shadow()
+                            .map(|m| m.version.clone())
+                            .unwrap_or_else(|| String::from("unknown"));
+
+                        // Get stable version (active model)
+                        let stable_version = lifecycle.get_active()
+                            .map(|m| m.version.clone())
+                            .unwrap_or_else(|| String::from("unknown"));
+
+                        crate::uart::print_str("[Shadow] Rolling back: ");
+                        crate::uart::print_str(&shadow_version);
+                        crate::uart::print_str(" -> ");
+                        crate::uart::print_str(&stable_version);
+                        crate::uart::print_str("\n");
+
+                        // Perform rollback
+                        match lifecycle.rollback() {
+                            Ok(_) => {
+                                // Write rollback event to log
+                                write_rollback_event(&shadow_version, &stable_version, &reason);
+
+                                // TODO: Log to audit when log_system_event is implemented
+
+                                crate::uart::print_str("[Shadow] Rollback complete\n");
+                            }
+                            Err(e) => {
+                                crate::uart::print_str("[Shadow] Rollback failed: ");
+                                crate::uart::print_str(e.description());
+                                crate::uart::print_str("\n");
+                                return Err(e);
+                            }
+                        }
+                    }
+                }
+            }
 
             crate::kprintln!("[ROLLBACK] Complete - reverted to production model");
 
             Err(Errno::ECANCELED)
+        }
+    }
+}
+
+/// Write rollback event to JSON log
+fn write_rollback_event(from: &str, to: &str, reason: &str) {
+    use alloc::format;
+
+    let timestamp = crate::time::get_uptime_ms();
+
+    let mut json = String::from("{\"event\":\"rollback\",");
+    json.push_str("\"from\":\"");
+    json.push_str(from);
+    json.push_str("\",\"to\":\"");
+    json.push_str(to);
+    json.push_str("\",\"time\":");
+    json.push_str(&format!("{}", timestamp));
+    json.push_str(",\"reason\":\"");
+    json.push_str(reason);
+    json.push_str("\"}\n");
+
+    // Append to rollback log
+    if let Ok(fd) = crate::vfs::open(
+        "/var/log/rollback.json",
+        crate::vfs::OpenFlags::O_WRONLY | crate::vfs::OpenFlags::O_APPEND | crate::vfs::OpenFlags::O_CREAT
+    ) {
+        let _ = fd.write(json.as_bytes());
+    } else {
+        // Try to create directory first
+        let _ = crate::vfs::mkdir("/var", 0o755);
+        let _ = crate::vfs::mkdir("/var/log", 0o755);
+
+        if let Ok(fd) = crate::vfs::open(
+            "/var/log/rollback.json",
+            crate::vfs::OpenFlags::O_WRONLY | crate::vfs::OpenFlags::O_APPEND | crate::vfs::OpenFlags::O_CREAT
+        ) {
+            let _ = fd.write(json.as_bytes());
         }
     }
 }
