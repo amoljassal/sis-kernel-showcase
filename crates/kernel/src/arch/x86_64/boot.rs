@@ -232,6 +232,12 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
     serial::serial_write(b"\n[BOOT] Milestone M3: Paging infrastructure available\n");
     serial::serial_write(b"[BOOT] Page fault handler enhanced with diagnostics\n");
 
+    // M4: Syscall Entry
+    serial::serial_write(b"\n[BOOT] Milestone M4: Syscall Entry\n");
+    crate::arch::x86_64::syscall::init_stack();
+    crate::arch::x86_64::syscall::init();
+    serial::serial_write(b"[BOOT] SYSCALL/SYSRET enabled\n");
+
     serial::serial_write(b"\n[BOOT] Early initialization complete\n");
     serial::serial_write(b"\n");
 

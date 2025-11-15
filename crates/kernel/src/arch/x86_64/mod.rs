@@ -170,7 +170,7 @@ pub mod hpet;     // High Precision Event Timer
 // M3: Paging & Memory Management (COMPLETE)
 pub mod paging;   // 4-level page tables (M3: Paging)
 
-#[cfg(feature = "m4-complete")]
+// M4: Syscall Entry (COMPLETE)
 pub mod syscall;  // SYSCALL/SYSRET entry (M4: Syscalls)
 
 #[cfg(feature = "m8-complete")]
