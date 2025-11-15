@@ -173,6 +173,13 @@ pub mod paging;   // 4-level page tables (M3: Paging)
 // M4: Syscall Entry (COMPLETE)
 pub mod syscall;  // SYSCALL/SYSRET entry (M4: Syscalls)
 
+// M5: Serial/TTY Polish (COMPLETE)
+// (serial module already declared above in base modules)
+
+// M6: VirtIO Block Driver (IN PROGRESS)
+pub mod pci;          // PCI bus enumeration and device access
+pub mod virtio_pci;   // VirtIO PCI transport layer
+
 // M8: SMP & Per-CPU (COMPLETE)
 pub mod percpu;   // Per-CPU data structures (M8 Part 1: Per-CPU)
 pub mod smp;      // Full SMP support with AP boot (M8 Part 2: AP Startup)
