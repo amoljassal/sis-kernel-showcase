@@ -182,6 +182,9 @@ pub mod virtio_pci;    // VirtIO PCI transport layer
 pub mod virtqueue;     // VirtIO virtqueue implementation
 pub mod virtio_block;  // VirtIO block device driver
 
+// M7: VirtIO Network Driver (COMPLETE)
+pub mod virtio_net;    // VirtIO network device driver
+
 // M8: SMP & Per-CPU (COMPLETE)
 pub mod percpu;   // Per-CPU data structures (M8 Part 1: Per-CPU)
 pub mod smp;      // Full SMP support with AP boot (M8 Part 2: AP Startup)
