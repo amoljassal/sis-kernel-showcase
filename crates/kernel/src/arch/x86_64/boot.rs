@@ -256,6 +256,13 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
         }
     }
 
+    // M5: Serial/TTY Polish - Enable interrupt-driven I/O
+    serial::serial_write(b"\n[BOOT] Milestone M5: Serial/TTY Polish\n");
+    crate::arch::x86_64::serial::enable_interrupts();
+    crate::arch::x86_64::pic::enable_irq(crate::arch::x86_64::pic::Irq::COM1);
+    serial::serial_write(b"[BOOT] Serial interrupt-driven I/O enabled (IRQ 4)\n");
+    serial::serial_write(b"[BOOT] RX buffer: 256 bytes, non-blocking read operations\n");
+
     serial::serial_write(b"\n[BOOT] Early initialization complete\n");
     serial::serial_write(b"\n");
 

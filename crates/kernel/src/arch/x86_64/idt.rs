@@ -539,20 +539,28 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
     }
 }
 
-/// Serial Interrupt Handler - IRQ 4 (Vector 36)
+/// Serial Port Interrupt Handler - IRQ 4 (Vector 36)
 ///
-/// Called when data is received on COM1 serial port.
+/// Handles serial port (COM1) interrupts for received data.
 ///
-/// # Note
+/// IRQ 4 is triggered by:
+/// - Received Data Available (RDA) - character received
+/// - Transmitter Holding Register Empty (THRE) - ready to send (if enabled)
+/// - Line Status Change
+/// - Modem Status Change
 ///
-/// For M1, serial port uses polling (no interrupts). This is a stub for future use.
+/// This handler delegates to the serial driver to read data from the
+/// hardware FIFO into the RX ring buffer.
 extern "x86-interrupt" fn serial_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    // TODO: Read data from serial port FIFO
-    // For now, just acknowledge the interrupt
+    // Handle serial interrupt - read all available data
+    unsafe {
+        let _bytes_read = crate::arch::x86_64::serial::handle_interrupt();
+        // TODO: Wake any tasks waiting for serial data
+    }
 
     // Send End of Interrupt
     unsafe {
-        send_eoi(36);
+        send_eoi(36);  // IRQ 4 = Vector 36
     }
 }
 
