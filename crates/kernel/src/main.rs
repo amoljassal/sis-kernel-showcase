@@ -89,6 +89,8 @@ pub mod internal_agent_bus;
 pub mod meta_agent;
 pub mod autonomy;
 pub mod time;
+pub mod log;  // M8: Production logging framework
+pub mod validation;  // M7: Comprehensive validation suite
 pub mod prediction_tracker;
 pub mod stress_test;
 pub mod prng;
@@ -639,6 +641,11 @@ mod bringup {
             crate::trace::metric_kv("graph_stats_channels", chans);
         }
 
+        // 5.5) Initialize PSCI for power management (M2)
+        super::uart_print(b"PSCI: INIT\n");
+        crate::arch::psci::init();
+        super::uart_print(b"PSCI: READY\n");
+
         // 6) Initialize GICv3 + timer and enable interrupts
         super::uart_print(b"GIC: INIT\n");
         gicv3_init_qemu();
@@ -648,6 +655,46 @@ mod bringup {
         // NOTE: IRQ latency benchmark disabled - was causing rapid timer firing issues
         // To run benchmark manually: use shell command or call start_irq_latency_bench(64)
         // start_irq_latency_bench(64);
+
+        // 6.1) Initialize SMP - bring up secondary CPUs (M3)
+        super::uart_print(b"SMP: INIT\n");
+        crate::arch::smp::init();
+        let num_cpus = crate::arch::smp::num_cpus();
+        super::uart_print(b"SMP: ");
+        print_number(num_cpus);
+        super::uart_print(b" CPU(S) ONLINE\n");
+
+        // 6.2) Initialize PMU (Performance Monitoring Unit) - M5
+        super::uart_print(b"PMU: INIT\n");
+        crate::pmu::init();
+        super::uart_print(b"PMU: READY\n");
+
+        // 6.3) Initialize GPIO (General Purpose I/O) - M6
+        // Note: GPIO base address should be obtained from FDT/device tree
+        // For Raspberry Pi 5: typically 0x107d508500 (verify from FDT)
+        // For now, skip if not on actual RPi5 hardware
+        #[cfg(feature = "rpi5-gpio")]
+        {
+            super::uart_print(b"GPIO: INIT\n");
+            let gpio_base = 0x107d508500usize;  // BCM2712 GPIO base (from FDT)
+            unsafe {
+                crate::drivers::gpio::bcm2xxx::init(gpio_base);
+            }
+            super::uart_print(b"GPIO: READY\n");
+        }
+
+        // 6.4) Initialize Mailbox (Firmware interface) - M6
+        // Note: Mailbox base address should be obtained from FDT/device tree
+        // For Raspberry Pi 5: typically 0x107c013880 (verify from FDT)
+        #[cfg(feature = "rpi5-mailbox")]
+        {
+            super::uart_print(b"MAILBOX: INIT\n");
+            let mailbox_base = 0x107c013880usize;  // BCM2712 mailbox base (from FDT)
+            unsafe {
+                crate::drivers::firmware::mailbox::init(mailbox_base);
+            }
+            super::uart_print(b"MAILBOX: READY\n");
+        }
 
         // 6) Initialize driver framework and discover devices (optional)
         // For bring-up stability, skip VirtIO drivers unless explicitly enabled.
@@ -684,6 +731,28 @@ mod bringup {
         #[cfg(not(feature = "virtio-console"))]
         {
             super::uart_print(b"DRIVER FRAMEWORK: SKIPPED (virtio-console feature off)\n");
+        }
+
+        // 6.5) Initialize block devices and watchdog (M1, M2)
+        super::uart_print(b"BLOCK: INIT\n");
+        if let Err(e) = crate::drivers::block::init() {
+            super::uart_print(b"BLOCK: INIT FAILED\n");
+        } else {
+            super::uart_print(b"BLOCK: READY\n");
+        }
+
+        super::uart_print(b"WATCHDOG: INIT\n");
+        let wdt_type = crate::drivers::watchdog::init();
+        match wdt_type {
+            crate::drivers::watchdog::WatchdogType::Bcm2712Pm => {
+                super::uart_print(b"WATCHDOG: BCM2712 PM READY\n");
+            }
+            crate::drivers::watchdog::WatchdogType::None => {
+                super::uart_print(b"WATCHDOG: NONE AVAILABLE\n");
+            }
+            _ => {
+                super::uart_print(b"WATCHDOG: READY\n");
+            }
         }
 
         // 7) Initialize AI features if enabled

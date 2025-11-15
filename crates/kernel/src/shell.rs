@@ -82,6 +82,11 @@ mod deployctl_helpers;
 mod driftctl_helpers;
 mod versionctl_helpers;
 mod pmu_helpers;
+mod gpio_helpers;      // M6: GPIO control
+mod mailbox_helpers;   // M6: Firmware mailbox interface
+mod selftest_helpers;  // M8: Driver self-test framework
+mod logctl_helpers;    // M8: Production logging control
+mod validation_helpers;  // M7: Comprehensive validation suite
 mod stresstest_helpers;
 mod benchmark_helpers;
 mod fullautodemo_helpers;
@@ -314,7 +319,38 @@ impl Shell {
                 "ctlhex" => { self.ctlhex_cmd(&parts[1..]); true },
                 #[cfg(feature = "virtio-console")]
                 "vconwrite" => { self.cmd_vconwrite(&parts[1..]); true },
-                "pmu" => { self.pmu_demo_cmd(); true },
+                "pmu" => {
+                    if parts.len() > 1 {
+                        match parts[1] {
+                            "stats" => self.pmu_stats_cmd(),
+                            "bench" | "demo" => self.pmu_demo_cmd(),
+                            _ => unsafe { crate::uart_print(b"Usage: pmu [stats|bench]\n"); },
+                        }
+                    } else {
+                        // Default: show stats
+                        self.pmu_stats_cmd();
+                    }
+                    true
+                },
+                "gpio" => { self.gpio_cmd(&parts[1..]); true },      // M6: GPIO commands
+                "mailbox" => { self.mailbox_cmd(&parts[1..]); true }, // M6: Mailbox commands
+                "selftest" => {                                       // M8: Driver self-tests
+                    if parts.len() > 1 {
+                        match parts[1] {
+                            "all" => self.selftest_all_cmd(),
+                            "gpio" => self.selftest_gpio_cmd(),
+                            "mailbox" => self.selftest_mailbox_cmd(),
+                            "pmu" => self.selftest_pmu_cmd(),
+                            _ => unsafe { crate::uart_print(b"Usage: selftest [all|gpio|mailbox|pmu]\n"); },
+                        }
+                    } else {
+                        // Default: run all tests
+                        self.selftest_all_cmd();
+                    }
+                    true
+                },
+                "logctl" => { self.logctl_cmd(&parts[1..]); true },      // M8: Logging control
+                "validate" => { self.validate_cmd(&parts[1..]); true },  // M7: Validation suite
                 "mem" => { self.cmd_mem(); true },
                 "regs" => { self.cmd_regs(); true },
                 "dtb" => { self.cmd_dtb(); true },
@@ -431,6 +467,11 @@ impl Shell {
             #[cfg(feature = "virtio-console")]
             crate::uart_print(b"  vconwrite- Send text to host via virtio-console: vconwrite <text>\n");
             crate::uart_print(b"  pmu      - Run PMU demo (cycles/inst/l1d_refill)\n");
+            crate::uart_print(b"  gpio     - GPIO control: set|clear|toggle|read|output|input|blink <pin> [args]\n");
+            crate::uart_print(b"  mailbox  - Firmware interface: temp|info|serial|fw|mem|all\n");
+            crate::uart_print(b"  selftest - Run driver self-tests: all|gpio|mailbox|pmu (M8 hardening)\n");
+            crate::uart_print(b"  logctl   - Logging control: status|level <LEVEL>|production|development|testing|demo\n");
+            crate::uart_print(b"  validate - Production validation: all|stress|perf|integration|hardware|quick (M7)\n");
             crate::uart_print(b"  mem      - Show memory information\n");
             crate::uart_print(b"  regs     - Show system registers\n");
             crate::uart_print(b"  dtb      - Show device tree information\n");
