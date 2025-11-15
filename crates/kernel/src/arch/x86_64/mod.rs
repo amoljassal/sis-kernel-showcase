@@ -189,10 +189,9 @@ pub mod virtio_net;    // VirtIO network device driver
 pub mod percpu;   // Per-CPU data structures (M8 Part 1: Per-CPU)
 pub mod smp;      // Full SMP support with AP boot (M8 Part 2: AP Startup)
 
-#[cfg(feature = "m9-complete")]
-pub mod acpi;     // ACPI tables (M9: ACPI)
-#[cfg(feature = "m9-complete")]
-pub mod power;    // Power management (M9: ACPI)
+// M9: ACPI & Power Management (COMPLETE)
+pub mod acpi;     // ACPI table parsing
+pub mod power;    // Power management (reset/shutdown)
 
 // Always compile TSC support (used for timekeeping)
 pub mod tsc;      // Time Stamp Counter

@@ -425,10 +425,100 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
         serial::serial_write(b"[BOOT] No VirtIO network devices found\n");
     }
 
+    // M9: ACPI & Power Management
+    serial::serial_write(b"\n[BOOT] Milestone M9: ACPI & Power Management\n");
+
+    // Search for RSDP in EBDA and BIOS ROM area
+    match find_rsdp() {
+        Some(rsdp_addr) => {
+            serial::serial_write(b"[BOOT] RSDP found at: 0x");
+            print_hex_u64(rsdp_addr.as_u64());
+            serial::serial_write(b"\n");
+
+            // Initialize ACPI table parsing
+            match crate::arch::x86_64::acpi::init(rsdp_addr) {
+                Ok(()) => {
+                    serial::serial_write(b"[BOOT] ACPI tables parsed successfully\n");
+
+                    // Initialize power management
+                    match crate::arch::x86_64::power::init() {
+                        Ok(()) => {
+                            serial::serial_write(b"[BOOT] Power management initialized\n");
+                            serial::serial_write(b"[BOOT] System reset/shutdown support enabled\n");
+                        }
+                        Err(e) => {
+                            serial::serial_write(b"[BOOT] Power management init failed: ");
+                            serial::serial_write(e.as_bytes());
+                            serial::serial_write(b"\n");
+                        }
+                    }
+                }
+                Err(e) => {
+                    serial::serial_write(b"[BOOT] ACPI initialization failed: ");
+                    serial::serial_write(e.as_bytes());
+                    serial::serial_write(b"\n");
+                }
+            }
+        }
+        None => {
+            serial::serial_write(b"[BOOT] RSDP not found, ACPI unavailable\n");
+            serial::serial_write(b"[BOOT] Power management will use fallback methods\n");
+        }
+    }
+
     serial::serial_write(b"\n[BOOT] Early initialization complete\n");
     serial::serial_write(b"\n");
 
     Ok(())
+}
+
+/// Find the RSDP (Root System Description Pointer) in memory
+///
+/// Searches in two locations:
+/// 1. Extended BIOS Data Area (EBDA) - first 1KB
+/// 2. BIOS ROM area (0xE0000 - 0xFFFFF)
+///
+/// Returns the physical address of the RSDP if found.
+fn find_rsdp() -> Option<x86_64::PhysAddr> {
+    use x86_64::PhysAddr;
+
+    const PHYS_OFFSET: u64 = 0xFFFF_FFFF_8000_0000;
+
+    // RSDP signature: "RSD PTR "
+    const RSDP_SIGNATURE: &[u8; 8] = b"RSD PTR ";
+
+    // Search in EBDA (first 1KB of EBDA)
+    // EBDA base address is at 0x40E (stored as segment)
+    unsafe {
+        let ebda_ptr = (0x40E + PHYS_OFFSET) as *const u16;
+        let ebda_segment = core::ptr::read_volatile(ebda_ptr);
+        let ebda_base = (ebda_segment as u64) << 4;
+
+        // Search first 1KB of EBDA on 16-byte boundaries
+        for offset in (0..1024).step_by(16) {
+            let addr = ebda_base + offset;
+            let virt_addr = (addr + PHYS_OFFSET) as *const [u8; 8];
+            let signature = core::ptr::read_volatile(virt_addr);
+
+            if &signature == RSDP_SIGNATURE {
+                return Some(PhysAddr::new(addr));
+            }
+        }
+    }
+
+    // Search in BIOS ROM area (0xE0000 - 0xFFFFF)
+    unsafe {
+        for addr in (0xE0000..0x100000).step_by(16) {
+            let virt_addr = (addr + PHYS_OFFSET) as *const [u8; 8];
+            let signature = core::ptr::read_volatile(virt_addr);
+
+            if &signature == RSDP_SIGNATURE {
+                return Some(PhysAddr::new(addr));
+            }
+        }
+    }
+
+    None
 }
 
 /// Validate hardware compatibility
