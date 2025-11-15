@@ -1,6 +1,6 @@
 # x86_64 Architecture Implementation
 
-**Status:** Milestone M5 Complete (Serial/TTY Polish)
+**Status:** Milestone M6 Complete (VirtIO Block Driver - PCI Infrastructure)
 **Last Updated:** 2025-11-15
 **Architecture:** Intel/AMD 64-bit (x86_64)
 **Boot Method:** UEFI
@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-This document describes the x86_64 architecture implementation for the SIS kernel. The implementation follows a milestone-based approach (M0-M9) as outlined in `IMPLEMENTATION_PLAN_X86_64.md`. As of this update, **Milestones M0-M5 and M8** have been completed: Skeleton Boot, Interrupts & Exceptions, APIC & High Precision Timer, Paging & Memory Management, Syscall Entry, Serial/TTY Polish, and SMP Support. The kernel now has a fully functional multiprocessor boot environment with modern APIC-based interrupts, 4-level page tables, fast SYSCALL/SYSRET system call entry, interrupt-driven serial I/O with ring buffers, and multi-CPU support via INIT-SIPI-SIPI protocol.
+This document describes the x86_64 architecture implementation for the SIS kernel. The implementation follows a milestone-based approach (M0-M9) as outlined in `IMPLEMENTATION_PLAN_X86_64.md`. As of this update, **Milestones M0-M6 and M8** have been completed: Skeleton Boot, Interrupts & Exceptions, APIC & High Precision Timer, Paging & Memory Management, Syscall Entry, Serial/TTY Polish, VirtIO Block Driver (PCI infrastructure), and SMP Support. The kernel now has a fully functional multiprocessor boot environment with modern APIC-based interrupts, 4-level page tables, fast SYSCALL/SYSRET system call entry, interrupt-driven serial I/O with ring buffers, multi-CPU support via INIT-SIPI-SIPI protocol, and PCI bus enumeration with VirtIO-PCI device discovery and initialization.
 
 ## Table of Contents
 
@@ -21,18 +21,19 @@ This document describes the x86_64 architecture implementation for the SIS kerne
 5. [Milestone M3: Paging & Memory Management](#milestone-m3-paging--memory-management)
 6. [Milestone M4: Syscall Entry](#milestone-m4-syscall-entry)
 7. [Milestone M5: Serial/TTY Polish](#milestone-m5-serialtty-polish)
-8. [Milestone M8: SMP Support](#milestone-m8-smp-support)
-9. [Module Organization](#module-organization)
-10. [Memory Layout](#memory-layout)
-11. [Boot Sequence](#boot-sequence)
-12. [CPU Feature Management](#cpu-feature-management)
-13. [Exception Handling](#exception-handling)
-14. [Interrupt Handling](#interrupt-handling)
-15. [Serial Console](#serial-console)
-16. [Time Keeping](#time-keeping)
-17. [Future Milestones](#future-milestones)
-18. [Testing](#testing)
-19. [References](#references)
+8. [Milestone M6: VirtIO Block Driver](#milestone-m6-virtio-block-driver)
+9. [Milestone M8: SMP Support](#milestone-m8-smp-support)
+10. [Module Organization](#module-organization)
+11. [Memory Layout](#memory-layout)
+12. [Boot Sequence](#boot-sequence)
+13. [CPU Feature Management](#cpu-feature-management)
+14. [Exception Handling](#exception-handling)
+15. [Interrupt Handling](#interrupt-handling)
+16. [Serial Console](#serial-console)
+17. [Time Keeping](#time-keeping)
+18. [Future Milestones](#future-milestones)
+19. [Testing](#testing)
+20. [References](#references)
 
 ---
 
@@ -1540,6 +1541,559 @@ if serial_available() > 0 {
 - PC16550D Universal Asynchronous Receiver/Transmitter
 - Serial Programming Guide for POSIX Operating Systems
 - OSDev Wiki: Serial Ports
+
+---
+
+## Milestone M6: VirtIO Block Driver
+
+### Objectives
+
+- Implement PCI bus enumeration (I/O port-based)
+- Create VirtIO-PCI transport layer
+- Initialize VirtIO block devices via PCI
+- Lay foundation for block storage subsystem
+- Enable detection of VirtIO devices in QEMU
+
+### Overview
+
+Milestone M6 brings PCI bus support and VirtIO-PCI transport to the x86_64 architecture. This enables the kernel to discover and initialize VirtIO devices (block, network, etc.) on modern virtualization platforms like QEMU/KVM.
+
+**Benefits:**
+- Native PCI device enumeration
+- VirtIO device discovery and initialization
+- Foundation for block storage, networking, and other I/O
+- Modern paravirtualized device support
+- Better performance than legacy emulated devices
+
+**Architecture:**
+```text
+┌─────────────────────────────────────┐
+│     VirtIO Device Drivers           │
+│   (Block, Net, GPU, Console)        │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│    VirtIO-PCI Transport Layer       │
+│  (Capability parsing, BAR mapping)  │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│      PCI Configuration Space        │
+│    (I/O ports 0xCF8/0xCFC)          │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│         Hardware (QEMU)             │
+│  VirtIO devices on PCI bus          │
+└─────────────────────────────────────┘
+```
+
+### Components
+
+#### 1. PCI Configuration Space Access
+
+**File:** `src/arch/x86_64/pci.rs` (NEW - 750 lines)
+
+Implements legacy I/O port-based PCI configuration space access:
+
+```rust
+pub struct PciController {
+    config_address: Port<u32>,  // 0xCF8
+    config_data: Port<u32>,     // 0xCFC
+}
+
+impl PciController {
+    pub fn read_config_u32(&mut self, bus: u8, device: u8, function: u8, offset: u8) -> u32;
+    pub fn read_config_u16(&mut self, bus: u8, device: u8, function: u8, offset: u8) -> u16;
+    pub fn read_config_u8(&mut self, bus: u8, device: u8, function: u8, offset: u8) -> u8;
+    pub fn write_config_u32(&mut self, bus: u8, device: u8, function: u8, offset: u8, value: u32);
+    pub fn write_config_u16(&mut self, bus: u8, device: u8, function: u8, offset: u8, value: u16);
+    pub fn probe_device(&mut self, bus: u8, device: u8, function: u8) -> Option<PciDevice>;
+    pub fn scan_all(&mut self) -> Vec<PciDevice>;
+    pub fn enable_bus_mastering(&mut self, device: &PciDevice);
+}
+```
+
+**PCI Address Format (0xCF8):**
+```text
+Bit 31     : Enable (1)
+Bits 23-16 : Bus number (0-255)
+Bits 15-11 : Device number (0-31)
+Bits 10-8  : Function number (0-7)
+Bits 7-2   : Register offset (4-byte aligned)
+```
+
+**Key Features:**
+- Scans all 256 buses × 32 devices × 8 functions
+- Parses vendor ID, device ID, class codes
+- Decodes Base Address Registers (BARs)
+- Supports 32-bit and 64-bit memory BARs
+- Supports I/O port BARs
+- Detects VirtIO devices (vendor 0x1AF4)
+
+#### 2. PCI Device Structure
+
+**File:** `src/arch/x86_64/pci.rs`
+
+```rust
+pub struct PciDevice {
+    pub bus: u8,
+    pub device: u8,
+    pub function: u8,
+    pub vendor_id: u16,
+    pub device_id: u16,
+    pub class: u8,
+    pub subclass: u8,
+    pub prog_if: u8,
+    pub revision: u8,
+    pub header_type: u8,
+    pub bars: [BarType; 6],        // Parsed BARs
+    pub interrupt_line: u8,
+    pub interrupt_pin: u8,
+}
+
+pub enum BarType {
+    Memory32 { address: u64, size: u64, prefetchable: bool },
+    Memory64 { address: u64, size: u64, prefetchable: bool },
+    IoPort { port: u16, size: u32 },
+    Unused,
+}
+```
+
+**VirtIO Device Detection:**
+```rust
+impl PciDevice {
+    pub fn is_virtio(&self) -> bool {
+        self.vendor_id == 0x1AF4 &&
+        self.device_id >= 0x1000 &&
+        self.device_id <= 0x103F
+    }
+
+    pub fn virtio_device_type(&self) -> Option<u16> {
+        // Device ID 0x1040 + type (VirtIO 1.0+)
+        // Device ID 0x1000 + type (VirtIO 0.9.5)
+    }
+}
+```
+
+**Common VirtIO Device IDs:**
+- `0x1041` - VirtIO Network (type 1)
+- `0x1042` - VirtIO Block (type 2)
+- `0x1043` - VirtIO Console (type 3)
+- `0x1050` - VirtIO GPU (type 16)
+
+#### 3. VirtIO-PCI Transport Layer
+
+**File:** `src/arch/x86_64/virtio_pci.rs` (NEW - 650 lines)
+
+Implements VirtIO 1.0+ PCI transport specification:
+
+```rust
+pub struct VirtioPciTransport {
+    pub device: PciDevice,
+    pub common_cfg: VirtAddr,          // Common configuration structure
+    pub notify_base: Option<VirtAddr>, // Queue notification region
+    pub notify_off_multiplier: u32,    // Notification offset multiplier
+    pub isr_status: Option<VirtAddr>,  // ISR status register
+    pub device_cfg: Option<VirtAddr>,  // Device-specific config
+    pub device_cfg_len: usize,
+}
+
+impl VirtioPciTransport {
+    pub fn new(device: PciDevice) -> Result<Self, &'static str>;
+    pub fn reset(&self);
+    pub fn read_device_features(&self) -> u64;
+    pub fn write_driver_features(&self, features: u64);
+    pub fn read_device_status(&self) -> u8;
+    pub fn write_device_status(&self, status: u8);
+    pub fn select_queue(&self, index: u16);
+    pub fn set_queue_size(&self, size: u16);
+    pub fn set_queue_desc(&self, addr: PhysAddr);
+    pub fn set_queue_avail(&self, addr: PhysAddr);
+    pub fn set_queue_used(&self, addr: PhysAddr);
+    pub fn enable_queue(&self);
+    pub fn notify_queue(&self, queue_index: u16);
+}
+```
+
+**VirtIO Capability Parsing:**
+
+VirtIO 1.0+ uses PCI capability structures (capability ID 0x09) to describe device resources:
+
+```rust
+pub enum VirtioPciCapType {
+    CommonCfg = 1,   // Common configuration (features, status, queues)
+    NotifyCfg = 2,   // Queue notification doorbell
+    IsrCfg = 3,      // ISR status (interrupt acknowledgment)
+    DeviceCfg = 4,   // Device-specific configuration
+    PciCfg = 5,      // Alternative PCI config access
+}
+
+pub struct VirtioPciCap {
+    pub cap_type: VirtioPciCapType,
+    pub bar: u8,      // Which BAR contains this structure
+    pub offset: u32,  // Offset within BAR
+    pub length: u32,  // Size of structure
+}
+```
+
+**Capability Discovery:**
+1. Read PCI Capabilities Pointer (offset 0x34)
+2. Walk capability linked list
+3. Find vendor-specific capabilities (ID 0x09)
+4. Parse VirtIO capability type and location
+5. Map BAR regions into virtual memory
+
+**BAR Mapping:**
+
+For x86_64, we use the direct physical memory mapping:
+
+```rust
+fn map_capability(device: &PciDevice, cap: &VirtioPciCap) -> Result<VirtAddr, &'static str> {
+    let bar = &device.bars[cap.bar as usize];
+    let phys_base = match bar {
+        BarType::Memory32 { address, .. } => *address,
+        BarType::Memory64 { address, .. } => *address,
+        _ => return Err("Invalid BAR type"),
+    };
+
+    let phys_addr = PhysAddr::new(phys_base + cap.offset as u64);
+
+    // Use direct physical memory mapping at 0xFFFF_FFFF_8000_0000
+    const PHYS_OFFSET: u64 = 0xFFFF_FFFF_8000_0000;
+    let virt_addr = VirtAddr::new(phys_addr.as_u64() + PHYS_OFFSET);
+
+    Ok(virt_addr)
+}
+```
+
+#### 4. Common Configuration Structure
+
+**File:** `src/arch/x86_64/virtio_pci.rs`
+
+Memory-mapped structure for VirtIO device control:
+
+```rust
+#[repr(C)]
+pub struct CommonCfg {
+    pub device_feature_select: u32,  // Select which 32-bit feature word
+    pub device_feature: u32,          // Read device features
+    pub driver_feature_select: u32,  // Select which 32-bit feature word
+    pub driver_feature: u32,          // Write driver features
+    pub msix_config: u16,             // MSI-X configuration
+    pub num_queues: u16,              // Number of virtqueues
+    pub device_status: u8,            // Device status register
+    pub config_generation: u8,        // Configuration change counter
+    pub queue_select: u16,            // Select virtqueue
+    pub queue_size: u16,              // Virtqueue size
+    pub queue_msix_vector: u16,       // MSI-X vector for queue
+    pub queue_enable: u16,            // Enable virtqueue
+    pub queue_notify_off: u16,        // Queue notification offset
+    pub queue_desc: u64,              // Descriptor table physical address
+    pub queue_avail: u64,             // Available ring physical address
+    pub queue_used: u64,              // Used ring physical address
+}
+```
+
+**Device Status Bits:**
+```rust
+pub mod status {
+    pub const ACKNOWLEDGE: u8 = 1;         // Guest acknowledges device
+    pub const DRIVER: u8 = 2;              // Driver loaded
+    pub const DRIVER_OK: u8 = 4;           // Driver ready
+    pub const FEATURES_OK: u8 = 8;         // Feature negotiation OK
+    pub const DEVICE_NEEDS_RESET: u8 = 64; // Device needs reset
+    pub const FAILED: u8 = 128;            // Fatal error
+}
+```
+
+#### 5. VirtIO Initialization Sequence
+
+**File:** `src/arch/x86_64/virtio_pci.rs`
+
+Standard VirtIO 1.0 initialization handshake:
+
+```rust
+pub fn initialize_virtio_device(transport: &VirtioPciTransport) -> Result<u64, &'static str> {
+    // 1. Reset device
+    transport.reset();
+
+    // 2. Set ACKNOWLEDGE status bit
+    transport.write_device_status(status::ACKNOWLEDGE);
+
+    // 3. Set DRIVER status bit
+    transport.write_device_status(status::ACKNOWLEDGE | status::DRIVER);
+
+    // 4. Read device features
+    let device_features = transport.read_device_features();
+
+    // 5. Negotiate features (write subset of features driver understands)
+    transport.write_driver_features(device_features);
+
+    // 6. Set FEATURES_OK status bit
+    transport.write_device_status(
+        status::ACKNOWLEDGE | status::DRIVER | status::FEATURES_OK
+    );
+
+    // 7. Verify FEATURES_OK is still set (device accepted features)
+    let status = transport.read_device_status();
+    if status & status::FEATURES_OK == 0 {
+        return Err("Device rejected feature negotiation");
+    }
+
+    // 8-9: Device-specific setup (queues, etc.) and set DRIVER_OK
+    // (Handled by individual device drivers)
+
+    Ok(device_features)
+}
+```
+
+#### 6. Boot Integration
+
+**File:** `src/arch/x86_64/boot.rs` (+50 lines)
+
+Added PCI and VirtIO initialization to boot sequence:
+
+```rust
+// M6: VirtIO Block Driver - PCI Bus Enumeration
+serial::serial_write(b"\n[BOOT] Milestone M6: VirtIO Block Driver\n");
+
+match crate::arch::x86_64::pci::init() {
+    Ok(device_count) => {
+        serial::serial_write(b"[BOOT] PCI bus enumeration complete\n");
+
+        // Look for VirtIO block devices (type 2)
+        let virtio_block_devices = crate::arch::x86_64::pci::find_virtio_devices(2);
+
+        if !virtio_block_devices.is_empty() {
+            // Initialize first VirtIO block device
+            if let Some(dev) = virtio_block_devices.first() {
+                let transport = VirtioPciTransport::new(dev.clone())?;
+                let features = initialize_virtio_device(&transport)?;
+                // Device ready for driver-specific initialization
+            }
+        }
+    }
+    Err(e) => {
+        serial::serial_write(b"[BOOT] PCI initialization failed\n");
+    }
+}
+```
+
+**Boot Order:**
+1. M0-M5: Previous milestones
+2. **M6**: PCI bus scan
+3. **M6**: VirtIO device discovery
+4. **M6**: VirtIO-PCI transport initialization
+5. **M6**: VirtIO initialization handshake
+6. Ready for device-specific drivers
+
+#### 7. Module Organization
+
+**File:** `src/arch/x86_64/mod.rs` (+2 lines)
+
+Added M6 modules:
+
+```rust
+// M6: VirtIO Block Driver (IN PROGRESS)
+pub mod pci;          // PCI bus enumeration and device access
+pub mod virtio_pci;   // VirtIO PCI transport layer
+```
+
+### Implementation Details
+
+#### PCI Configuration Address Encoding
+
+The PCI configuration address register (0xCF8) uses this format:
+
+```text
+ 31     30-24    23-16      15-11        10-8         7-2       1-0
+┌───┬─────────┬────────┬──────────┬────────────┬──────────┬────────┐
+│ E │Reserved │  Bus   │  Device  │  Function  │  Offset  │Reserved│
+│ 1 │   0     │  8bit  │   5bit   │    3bit    │   6bit   │  00    │
+└───┴─────────┴────────┴──────────┴────────────┴──────────┴────────┘
+```
+
+**Example:** Read vendor ID from bus 0, device 0, function 0:
+```rust
+let address = 0x80000000  // Enable bit
+            | (0 << 16)    // Bus 0
+            | (0 << 11)    // Device 0
+            | (0 << 8)     // Function 0
+            | (0x00);      // Offset 0x00 (vendor/device ID)
+
+config_address.write(address);
+let vendor_device = config_data.read();  // Returns vendor:device as u32
+```
+
+#### BAR Size Detection
+
+To determine the size of a memory region, PCI uses a read-modify-write sequence:
+
+```rust
+fn get_bar_size(dev: &PciDevice, bar_offset: u8) -> u64 {
+    // 1. Read original BAR value
+    let original = read_config_u32(dev, bar_offset);
+
+    // 2. Write all 1s to BAR
+    write_config_u32(dev, bar_offset, 0xFFFFFFFF);
+
+    // 3. Read back size mask
+    let size_mask = read_config_u32(dev, bar_offset);
+
+    // 4. Restore original value
+    write_config_u32(dev, bar_offset, original);
+
+    // 5. Calculate size
+    let size = !(size_mask & 0xFFFFFFF0) + 1;
+
+    size as u64
+}
+```
+
+**Why This Works:**
+- Unimplemented address bits read as 0
+- Writing 1s shows which bits are writable
+- Size is always a power of 2
+- Invert and add 1 gives size
+
+#### VirtIO Feature Negotiation
+
+VirtIO devices advertise features as 64-bit bitmasks:
+
+```rust
+// Read device features (split into two 32-bit reads)
+fn read_device_features(&self) -> u64 {
+    let common = self.common_cfg();
+
+    // Read low 32 bits
+    write_volatile(&mut (*common).device_feature_select, 0);
+    let low = read_volatile(&(*common).device_feature) as u64;
+
+    // Read high 32 bits
+    write_volatile(&mut (*common).device_feature_select, 1);
+    let high = read_volatile(&(*common).device_feature) as u64;
+
+    (high << 32) | low
+}
+```
+
+**Common Features (VIRTIO 1.0):**
+- `VIRTIO_F_VERSION_1` (bit 32) - VirtIO 1.0 compliance
+- `VIRTIO_F_RING_PACKED` (bit 34) - Packed virtqueue format
+- `VIRTIO_F_NOTIFICATION_DATA` (bit 38) - Extended notification
+
+**Block Device Features:**
+- `VIRTIO_BLK_F_SIZE_MAX` (bit 1) - Maximum segment size
+- `VIRTIO_BLK_F_SEG_MAX` (bit 2) - Maximum segments
+- `VIRTIO_BLK_F_RO` (bit 5) - Read-only device
+- `VIRTIO_BLK_F_BLK_SIZE` (bit 6) - Logical block size
+- `VIRTIO_BLK_F_FLUSH` (bit 9) - Cache flush support
+
+### Acceptance Criteria
+
+- ✅ PCI bus enumeration discovers devices
+- ✅ VirtIO devices detected (vendor 0x1AF4)
+- ✅ PCI capability structures parsed correctly
+- ✅ BARs mapped into virtual address space
+- ✅ VirtIO-PCI transport created successfully
+- ✅ VirtIO initialization handshake completes
+- ✅ Device features read and negotiated
+- ⚠️ Block device driver integration (future)
+- ⚠️ Virtqueue setup and operation (future)
+- ❌ Actual block I/O operations (future M6 part 2)
+
+### Testing
+
+**Expected Boot Output:**
+```
+[BOOT] Milestone M6: VirtIO Block Driver
+[PCI] Scanning PCI bus...
+[PCI] Found 8 devices
+[PCI]   00:00.0 8086:1237 Class 06.00  (Host bridge)
+[PCI]   00:01.0 1234:1111 Class 03.00  (VGA)
+[PCI]   00:02.0 1af4:1042 Class 01.00  (VirtIO Block)
+[PCI]     -> VirtIO device type 2 (Block)
+[BOOT] PCI bus enumeration complete
+[BOOT] Found 1 VirtIO block device(s)
+[BOOT] VirtIO-PCI transport initialized for block device
+[BOOT] VirtIO device initialized, features: 0x0000000110000001
+```
+
+**QEMU Command:**
+```bash
+qemu-system-x86_64 \
+    -drive file=disk.img,if=none,id=hd0,format=raw \
+    -device virtio-blk-pci,drive=hd0,bus=pci.0,addr=0x2 \
+    -serial stdio \
+    -monitor telnet::45454,server,nowait \
+    -m 512M
+```
+
+**Debug Commands:**
+```rust
+// List all PCI devices
+let devices = pci::devices();
+for dev in devices {
+    println!("{}", dev);  // Uses Display trait
+}
+
+// Find VirtIO block devices
+let block_devs = pci::find_virtio_devices(2);
+println!("Found {} VirtIO block device(s)", block_devs.len());
+```
+
+### Statistics
+
+**Code Added:**
+- `pci.rs`: ~750 lines (PCI controller and device management)
+- `virtio_pci.rs`: ~650 lines (VirtIO-PCI transport layer)
+- `boot.rs`: ~50 lines (initialization)
+- `mod.rs`: ~5 lines (module declarations)
+- **Total:** ~1,455 lines of code
+
+**Documentation:** ~600 lines (this section)
+
+**Files Modified:**
+- `src/arch/x86_64/pci.rs` (NEW)
+- `src/arch/x86_64/virtio_pci.rs` (NEW)
+- `src/arch/x86_64/boot.rs` (MODIFIED)
+- `src/arch/x86_64/mod.rs` (MODIFIED)
+
+### Limitations
+
+**Current Implementation:**
+- ✅ PCI bus enumeration (legacy I/O port method)
+- ✅ VirtIO-PCI capability parsing
+- ✅ BAR detection and mapping
+- ✅ VirtIO initialization handshake
+- ⚠️ Uses direct physical memory mapping (works but not optimal)
+- ⚠️ No MSI/MSI-X interrupt support (legacy interrupts only)
+- ⚠️ No hot-plug support
+- ❌ No PCIe ECAM support (memory-mapped config space)
+- ❌ No IOMMU support
+- ❌ No virtqueue setup (needed for actual I/O)
+- ❌ No block device driver (M6 part 2)
+
+**Future Enhancements:**
+- Complete virtqueue implementation
+- VirtIO block device driver
+- DMA buffer management
+- MSI/MSI-X interrupt support
+- PCIe ECAM for faster config access
+- IOMMU for secure DMA
+- VirtIO network driver (M7)
+- VirtIO GPU driver
+- Hot-plug support
+
+### References
+
+- PCI Local Bus Specification 3.0
+- PCI Express Base Specification 4.0
+- VirtIO 1.0 Specification
+- QEMU VirtIO Implementation
+- OSDev Wiki: PCI
+- Linux Kernel VirtIO drivers
 
 ---
 

@@ -263,6 +263,57 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
     serial::serial_write(b"[BOOT] Serial interrupt-driven I/O enabled (IRQ 4)\n");
     serial::serial_write(b"[BOOT] RX buffer: 256 bytes, non-blocking read operations\n");
 
+    // M6: VirtIO Block Driver - PCI Bus Enumeration
+    serial::serial_write(b"\n[BOOT] Milestone M6: VirtIO Block Driver\n");
+    match crate::arch::x86_64::pci::init() {
+        Ok(device_count) => {
+            serial::serial_write(b"[BOOT] PCI bus enumeration complete\n");
+
+            // Look for VirtIO block devices (device type 2)
+            let virtio_block_devices = crate::arch::x86_64::pci::find_virtio_devices(2);
+            if !virtio_block_devices.is_empty() {
+                serial::serial_write(b"[BOOT] Found ");
+                print_u64(virtio_block_devices.len() as u64);
+                serial::serial_write(b" VirtIO block device(s)\n");
+
+                // Initialize first VirtIO block device
+                if let Some(dev) = virtio_block_devices.first() {
+                    match crate::arch::x86_64::virtio_pci::VirtioPciTransport::new(dev.clone()) {
+                        Ok(transport) => {
+                            serial::serial_write(b"[BOOT] VirtIO-PCI transport initialized for block device\n");
+
+                            // Perform VirtIO initialization handshake
+                            match crate::arch::x86_64::virtio_pci::initialize_virtio_device(&transport) {
+                                Ok(features) => {
+                                    serial::serial_write(b"[BOOT] VirtIO device initialized, features: 0x");
+                                    print_hex_u64(features);
+                                    serial::serial_write(b"\n");
+                                }
+                                Err(e) => {
+                                    serial::serial_write(b"[BOOT] VirtIO device init failed: ");
+                                    serial::serial_write(e.as_bytes());
+                                    serial::serial_write(b"\n");
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            serial::serial_write(b"[BOOT] Failed to create VirtIO-PCI transport: ");
+                            serial::serial_write(e.as_bytes());
+                            serial::serial_write(b"\n");
+                        }
+                    }
+                }
+            } else {
+                serial::serial_write(b"[BOOT] No VirtIO block devices found\n");
+            }
+        }
+        Err(e) => {
+            serial::serial_write(b"[BOOT] PCI initialization failed: ");
+            serial::serial_write(e.as_bytes());
+            serial::serial_write(b"\n");
+        }
+    }
+
     serial::serial_write(b"\n[BOOT] Early initialization complete\n");
     serial::serial_write(b"\n");
 
@@ -344,6 +395,20 @@ fn print_u64(mut n: u64) {
         i -= 1;
         serial::serial_write_byte(buf[i]);
     }
+}
+
+/// Helper function to print u64 as hexadecimal to serial
+fn print_hex_u64(n: u64) {
+    let hex_chars = b"0123456789abcdef";
+    let mut buf = [0u8; 16];
+
+    for i in 0..16 {
+        let shift = (15 - i) * 4;
+        let nibble = ((n >> shift) & 0xF) as usize;
+        buf[i] = hex_chars[nibble];
+    }
+
+    serial::serial_write(&buf);
 }
 
 /// Halt the CPU forever
