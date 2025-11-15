@@ -86,6 +86,7 @@ mod gpio_helpers;      // M6: GPIO control
 mod mailbox_helpers;   // M6: Firmware mailbox interface
 mod selftest_helpers;  // M8: Driver self-test framework
 mod logctl_helpers;    // M8: Production logging control
+mod validation_helpers;  // M7: Comprehensive validation suite
 mod stresstest_helpers;
 mod benchmark_helpers;
 mod fullautodemo_helpers;
@@ -349,6 +350,7 @@ impl Shell {
                     true
                 },
                 "logctl" => { self.logctl_cmd(&parts[1..]); true },      // M8: Logging control
+                "validate" => { self.validate_cmd(&parts[1..]); true },  // M7: Validation suite
                 "mem" => { self.cmd_mem(); true },
                 "regs" => { self.cmd_regs(); true },
                 "dtb" => { self.cmd_dtb(); true },
@@ -469,6 +471,7 @@ impl Shell {
             crate::uart_print(b"  mailbox  - Firmware interface: temp|info|serial|fw|mem|all\n");
             crate::uart_print(b"  selftest - Run driver self-tests: all|gpio|mailbox|pmu (M8 hardening)\n");
             crate::uart_print(b"  logctl   - Logging control: status|level <LEVEL>|production|development|testing|demo\n");
+            crate::uart_print(b"  validate - Production validation: all|stress|perf|integration|hardware|quick (M7)\n");
             crate::uart_print(b"  mem      - Show memory information\n");
             crate::uart_print(b"  regs     - Show system registers\n");
             crate::uart_print(b"  dtb      - Show device tree information\n");
