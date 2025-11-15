@@ -256,7 +256,7 @@ impl SdhciController {
         // Check card presence
         if !self.is_card_present() {
             crate::warn!("SDHCI: No card detected");
-            return Err(Errno::NoDevice);
+            return Err(Errno::ENODEV);
         }
 
         crate::info!("SDHCI: Card detected");
@@ -299,7 +299,7 @@ impl SdhciController {
             }
         }
 
-        Err(Errno::TimedOut)
+        Err(Errno::ETIMEDOUT)
     }
 
     /// Set SD clock frequency
@@ -336,7 +336,7 @@ impl SdhciController {
             }
 
             if timeout == 0 {
-                return Err(Errno::TimedOut);
+                return Err(Errno::ETIMEDOUT);
             }
 
             // Enable SD clock
@@ -373,13 +373,13 @@ impl SdhciController {
                                    COMMAND_CRC_CHECK_ENABLE | COMMAND_INDEX_CHECK_ENABLE) {
                 Ok(resp) => {
                     if (resp[0] & 0xFFF) != cmd8_arg {
-                        return Err(Errno::InvalidArgument);
+                        return Err(Errno::EINVAL);
                     }
                     crate::info!("SDHCI: SD Card Version 2.0+");
                 }
                 Err(_) => {
                     crate::info!("SDHCI: SD Card Version 1.x");
-                    return Err(Errno::NotSupported);
+                    return Err(Errno::ENOTSUP);
                 }
             }
 
@@ -401,9 +401,9 @@ impl SdhciController {
                     break;
                 }
 
-                if timeout == 0 {
-                    return Err(Errno::TimedOut);
-                }
+            if timeout == 0 {
+                return Err(Errno::ETIMEDOUT);
+            }
                 self.delay_ms(10);
                 timeout -= 10;
             }
@@ -541,7 +541,7 @@ impl SdhciController {
                 timeout -= 1;
             }
         }
-        Err(Errno::TimedOut)
+        Err(Errno::ETIMEDOUT)
     }
 
     /// Wait for specific interrupt status
@@ -556,7 +556,7 @@ impl SdhciController {
                     let errors = status & 0xFFFF_0000;
                     crate::warn!("SDHCI: Error interrupt {:#x}", errors);
                     self.write_u32(SDHCI_INT_STATUS, errors);
-                    return Err(Errno::IOError);
+                    return Err(Errno::EIO);
                 }
 
                 // Check for desired interrupt
@@ -568,13 +568,13 @@ impl SdhciController {
                 timeout -= 1;
             }
         }
-        Err(Errno::TimedOut)
+        Err(Errno::ETIMEDOUT)
     }
 
     /// Read a single block from the SD card
     fn read_block_pio(&self, block: u64, buf: &mut [u8]) -> Result<()> {
         if buf.len() < SD_BLOCK_SIZE {
-            return Err(Errno::InvalidArgument);
+            return Err(Errno::EINVAL);
         }
 
         unsafe {
@@ -614,7 +614,7 @@ impl SdhciController {
     /// Write a single block to the SD card
     fn write_block_pio(&self, block: u64, buf: &[u8]) -> Result<()> {
         if buf.len() < SD_BLOCK_SIZE {
-            return Err(Errno::InvalidArgument);
+            return Err(Errno::EINVAL);
         }
 
         unsafe {
@@ -697,15 +697,15 @@ impl SdhciController {
 impl BlockDevice for SdhciController {
     fn read(&self, block: u64, buf: &mut [u8]) -> Result<()> {
         if !self.initialized.load(Ordering::Acquire) {
-            return Err(Errno::NotReady);
+            return Err(Errno::EBUSY);
         }
 
         if !self.card_present.load(Ordering::Acquire) {
-            return Err(Errno::NoDevice);
+            return Err(Errno::ENODEV);
         }
 
         if block >= self.card_capacity {
-            return Err(Errno::InvalidArgument);
+            return Err(Errno::EINVAL);
         }
 
         self.read_block_pio(block, buf)
@@ -713,15 +713,15 @@ impl BlockDevice for SdhciController {
 
     fn write(&self, block: u64, buf: &[u8]) -> Result<()> {
         if !self.initialized.load(Ordering::Acquire) {
-            return Err(Errno::NotReady);
+            return Err(Errno::EBUSY);
         }
 
         if !self.card_present.load(Ordering::Acquire) {
-            return Err(Errno::NoDevice);
+            return Err(Errno::ENODEV);
         }
 
         if block >= self.card_capacity {
-            return Err(Errno::InvalidArgument);
+            return Err(Errno::EINVAL);
         }
 
         self.write_block_pio(block, buf)

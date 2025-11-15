@@ -6,4 +6,15 @@
 pub mod bcm2xxx;
 
 // Re-export common types and functions
-pub use bcm2xxx::{BcmGpio, GpioFunction, GpioPull};
+pub use bcm2xxx::{
+    BcmGpio,
+    GpioFunction,
+    GpioPull,
+    is_initialized,
+    set_function,
+    set_pin,
+    clear_pin,
+    toggle_pin,
+    read_pin,
+    set_pull,
+};

@@ -41,7 +41,7 @@ impl super::Shell {
                     match crate::drivers::gpio::set_pin(pin as u32) {
                         Ok(()) => unsafe {
                             crate::uart_print(b"[GPIO] Pin ");
-                            self.print_number_simple(pin);
+                            self.print_number_simple(pin as u64);
                             crate::uart_print(b" set HIGH\n");
                         },
                         Err(e) => self.print_gpio_error(e),
@@ -57,7 +57,7 @@ impl super::Shell {
                     match crate::drivers::gpio::clear_pin(pin as u32) {
                         Ok(()) => unsafe {
                             crate::uart_print(b"[GPIO] Pin ");
-                            self.print_number_simple(pin);
+                            self.print_number_simple(pin as u64);
                             crate::uart_print(b" set LOW\n");
                         },
                         Err(e) => self.print_gpio_error(e),
@@ -73,7 +73,7 @@ impl super::Shell {
                     match crate::drivers::gpio::toggle_pin(pin as u32) {
                         Ok(()) => unsafe {
                             crate::uart_print(b"[GPIO] Pin ");
-                            self.print_number_simple(pin);
+                            self.print_number_simple(pin as u64);
                             crate::uart_print(b" toggled\n");
                         },
                         Err(e) => self.print_gpio_error(e),
@@ -89,7 +89,7 @@ impl super::Shell {
                     match crate::drivers::gpio::read_pin(pin as u32) {
                         Ok(level) => unsafe {
                             crate::uart_print(b"[GPIO] Pin ");
-                            self.print_number_simple(pin);
+                            self.print_number_simple(pin as u64);
                             crate::uart_print(b" = ");
                             if level {
                                 crate::uart_print(b"HIGH\n");
@@ -110,7 +110,7 @@ impl super::Shell {
                     match crate::drivers::gpio::set_function(pin as u32, GpioFunction::Output) {
                         Ok(()) => unsafe {
                             crate::uart_print(b"[GPIO] Pin ");
-                            self.print_number_simple(pin);
+                            self.print_number_simple(pin as u64);
                             crate::uart_print(b" configured as OUTPUT\n");
                         },
                         Err(e) => self.print_gpio_error(e),
@@ -126,7 +126,7 @@ impl super::Shell {
                     match crate::drivers::gpio::set_function(pin as u32, GpioFunction::Input) {
                         Ok(()) => unsafe {
                             crate::uart_print(b"[GPIO] Pin ");
-                            self.print_number_simple(pin);
+                            self.print_number_simple(pin as u64);
                             crate::uart_print(b" configured as INPUT\n");
                         },
                         Err(e) => self.print_gpio_error(e),
@@ -148,9 +148,9 @@ impl super::Shell {
 
                     unsafe {
                         crate::uart_print(b"[GPIO] Blinking pin ");
-                        self.print_number_simple(pin);
+                        self.print_number_simple(pin as u64);
                         crate::uart_print(b" ");
-                        self.print_number_simple(count);
+                        self.print_number_simple(count as u64);
                         crate::uart_print(b" times...\n");
                     }
 

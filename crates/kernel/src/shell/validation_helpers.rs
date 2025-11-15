@@ -110,9 +110,9 @@ impl super::Shell {
             crate::uart_print(b" failed\n\n");
 
             if failed == 0 {
-                crate::uart_print(b"✓ Quick validation PASSED\n\n");
+                crate::uart_print(b"\xE2\x9C\x93 Quick validation PASSED\n\n");
             } else {
-                crate::uart_print(b"✗ Quick validation FAILED\n\n");
+                crate::uart_print(b"\xE2\x9C\x97 Quick validation FAILED\n\n");
             }
         }
     }
@@ -459,11 +459,11 @@ impl super::Shell {
             crate::uart_print(b"\n========================================\n");
 
             if failed == 0 {
-                crate::uart_print(b"\n✓ All validation tests PASSED\n");
-                crate::uart_print(b"✓ Kernel is PRODUCTION READY\n\n");
+                crate::uart_print(b"\n\xE2\x9C\x93 All validation tests PASSED\n");
+                crate::uart_print(b"\xE2\x9C\x93 Kernel validation suite PASSED (QEMU)\n\n");
             } else {
-                crate::uart_print(b"\n✗ Some validation tests FAILED\n");
-                crate::uart_print(b"✗ Please review failed tests before production deployment\n\n");
+                crate::uart_print(b"\n\xE2\x9C\x97 Some validation tests FAILED\n");
+                crate::uart_print(b"\xE2\x9C\x97 Please review failed tests before production deployment\n\n");
             }
         }
     }

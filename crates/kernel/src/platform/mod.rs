@@ -4,21 +4,21 @@
 #![allow(dead_code)]
 
 /// UART descriptor
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct UartDesc {
     pub base: usize,
     pub clock_hz: u32,
 }
 
 /// GICv3 descriptor
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct GicDesc {
     pub gicd: usize,
     pub gicr: usize,
 }
 
 /// Generic timer descriptor
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct TimerDesc {
     pub freq_hz: u64,
 }
