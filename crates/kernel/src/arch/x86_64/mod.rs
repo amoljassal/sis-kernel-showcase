@@ -176,9 +176,11 @@ pub mod syscall;  // SYSCALL/SYSRET entry (M4: Syscalls)
 // M5: Serial/TTY Polish (COMPLETE)
 // (serial module already declared above in base modules)
 
-// M6: VirtIO Block Driver (IN PROGRESS)
-pub mod pci;          // PCI bus enumeration and device access
-pub mod virtio_pci;   // VirtIO PCI transport layer
+// M6: VirtIO Block Driver (COMPLETE)
+pub mod pci;           // PCI bus enumeration and device access
+pub mod virtio_pci;    // VirtIO PCI transport layer
+pub mod virtqueue;     // VirtIO virtqueue implementation
+pub mod virtio_block;  // VirtIO block device driver
 
 // M8: SMP & Per-CPU (COMPLETE)
 pub mod percpu;   // Per-CPU data structures (M8 Part 1: Per-CPU)

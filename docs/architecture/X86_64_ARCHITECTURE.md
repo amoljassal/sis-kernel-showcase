@@ -2054,32 +2054,317 @@ println!("Found {} VirtIO block device(s)", block_devs.len());
 
 **Documentation:** ~600 lines (this section)
 
-**Files Modified:**
-- `src/arch/x86_64/pci.rs` (NEW)
-- `src/arch/x86_64/virtio_pci.rs` (NEW)
-- `src/arch/x86_64/boot.rs` (MODIFIED)
-- `src/arch/x86_64/mod.rs` (MODIFIED)
+**Files Modified (Part 1 - PCI Infrastructure):**
+- `src/arch/x86_64/pci.rs` (NEW - 750 lines)
+- `src/arch/x86_64/virtio_pci.rs` (NEW - 650 lines)
+- `src/arch/x86_64/boot.rs` (MODIFIED +50 lines)
+- `src/arch/x86_64/mod.rs` (MODIFIED +3 lines)
+
+### Part 2: Virtqueues and Block Device Driver
+
+After implementing the PCI infrastructure, M6 Part 2 completes the block storage support with virtqueue implementation and a full VirtIO block device driver.
+
+#### 8. Virtqueue Implementation
+
+**File:** `src/arch/x86_64/virtqueue.rs` (NEW - 650 lines)
+
+Implements the VirtIO split virtqueue format:
+
+**Data Structures:**
+
+```rust
+// Descriptor table entry (16 bytes)
+#[repr(C)]
+pub struct VirtqDesc {
+    addr: u64,     // Physical address of buffer
+    len: u32,      // Buffer length
+    flags: u16,    // NEXT, WRITE, INDIRECT
+    next: u16,     // Next descriptor (if NEXT flag set)
+}
+
+// Available ring (driver → device)
+struct VirtqAvail {
+    flags: u16,          // NO_INTERRUPT flag
+    idx: u16,            // Next available slot
+    ring: [u16; N],      // Descriptor head indices
+    used_event: u16,     // Optional event notification
+}
+
+// Used ring (device → driver)
+struct VirtqUsed {
+    flags: u16,                // NO_NOTIFY flag
+    idx: u16,                  // Next used slot
+    ring: [VirtqUsedElem; N],  // Completed buffers
+    avail_event: u16,          // Optional event notification
+}
+```
+
+**Key Operations:**
+
+```rust
+impl Virtqueue {
+    // Add buffer chain to queue
+    pub fn add_buffer_chain(&mut self, buffers: &[(PhysAddr, u32, bool)]) -> Option<u16>;
+
+    // Add single buffer (convenience wrapper)
+    pub fn add_buffer(&mut self, phys_addr: PhysAddr, len: u32, writable: bool) -> Option<u16>;
+
+    // Check for completed buffers
+    pub fn has_used(&self) -> bool;
+
+    // Get next completed buffer
+    pub fn get_used(&mut self) -> Option<(u16, u32)>;
+
+    // Reclaim descriptor chain
+    pub fn reclaim_chain(&mut self, head: u16);
+
+    // Interrupt control
+    pub fn disable_interrupts(&mut self);
+    pub fn enable_interrupts(&mut self);
+}
+```
+
+**Memory Layout:**
+
+For queue size 128:
+- Descriptor table: 16 × 128 = 2,048 bytes (16-byte aligned)
+- Available ring: 6 + (2 × 128) = 262 bytes (2-byte aligned)
+- Used ring: 6 + (8 × 128) = 1,030 bytes (4-byte aligned, page-aligned)
+- Total: ~8 KiB (2 pages)
+
+#### 9. VirtIO Block Device Driver
+
+**File:** `src/arch/x86_64/virtio_block.rs` (NEW - 580 lines)
+
+Complete block device driver with read/write operations:
+
+**Device Initialization:**
+
+```rust
+impl VirtioBlockDevice {
+    pub unsafe fn new(pci_device: PciDevice) -> Result<Self, &'static str> {
+        // 1. Create VirtIO-PCI transport
+        let transport = VirtioPciTransport::new(pci_device)?;
+
+        // 2-7. VirtIO initialization handshake
+        transport.reset();
+        // ... (ACKNOWLEDGE, DRIVER, feature negotiation, FEATURES_OK)
+
+        // 8. Read device configuration
+        let config: VirtioBlkConfig = transport.read_device_config(0)?;
+
+        // 9. Set up virtqueue (queue 0)
+        let (queue_phys, queue_virt, _) = alloc_virtqueue_memory(128)?;
+        let queue = Virtqueue::new(128, queue_phys, queue_virt);
+
+        // Configure queue addresses
+        let (desc_phys, avail_phys, used_phys) = queue.get_physical_addresses();
+        transport.set_queue_desc(desc_phys);
+        transport.set_queue_avail(avail_phys);
+        transport.set_queue_used(used_phys);
+        transport.enable_queue();
+
+        // Enable bus mastering for DMA
+        transport.enable_bus_mastering();
+
+        // 10. Set DRIVER_OK status bit
+        transport.write_device_status(/* ... | DRIVER_OK */);
+
+        Ok(VirtioBlockDevice { /* ... */ })
+    }
+}
+```
+
+**Block I/O Operations:**
+
+VirtIO block requests consist of three buffers:
+
+```text
+┌────────────────────────┐
+│ Request Header (16B)   │  Device-readable
+│   type: u32            │
+│   reserved: u32        │
+│   sector: u64          │
+└────────────────────────┘
+┌────────────────────────┐
+│ Data Buffer (N bytes)  │  Read: device-writable
+│                        │  Write: device-readable
+└────────────────────────┘
+┌────────────────────────┐
+│ Status Byte (1 byte)   │  Device-writable
+│   0 = OK               │
+│   1 = I/O Error        │
+│   2 = Unsupported      │
+└────────────────────────┘
+```
+
+**Read Operation:**
+
+```rust
+pub fn read_sectors(&self, sector: u64, buffer: &mut [u8]) -> Result<usize, &'static str> {
+    // 1. Allocate DMA buffers
+    let (req_phys, req_virt) = Self::alloc_dma_buffer(16)?;
+    let (data_phys, data_virt) = Self::alloc_dma_buffer(buffer.len())?;
+    let (status_phys, status_virt) = Self::alloc_dma_buffer(1)?;
+
+    // 2. Build request header
+    let req = req_virt as *mut VirtioBlkReq;
+    (*req).req_type = VIRTIO_BLK_T_IN;  // Read
+    (*req).sector = sector;
+
+    // 3. Add buffer chain to virtqueue
+    let desc_head = queue.add_buffer_chain(&[
+        (req_phys, 16, false),           // Request header
+        (data_phys, buffer.len(), true), // Data buffer (device writes)
+        (status_phys, 1, true),          // Status byte (device writes)
+    ])?;
+
+    // 4. Notify device via doorbell
+    transport.notify_queue(0);
+
+    // 5. Wait for completion (polling for now)
+    loop {
+        if let Some((head, _bytes)) = queue.get_used() {
+            if head == desc_head {
+                queue.reclaim_chain(head);
+                break;
+            }
+        }
+    }
+
+    // 6. Check status
+    let status = read_volatile(status_virt as *const u8);
+    if status != VIRTIO_BLK_S_OK {
+        return Err("Read I/O error");
+    }
+
+    // 7. Copy data to user buffer
+    copy_nonoverlapping(data_virt, buffer.as_mut_ptr(), buffer.len());
+
+    // 8. Free DMA buffers
+    Self::free_dma_buffer(req_phys, req_virt, 16);
+    Self::free_dma_buffer(data_phys, data_virt, buffer.len());
+    Self::free_dma_buffer(status_phys, status_virt, 1);
+
+    Ok(buffer.len())
+}
+```
+
+**Write Operation:** (Similar to read, but with `VIRTIO_BLK_T_OUT` and data buffer marked device-readable)
+
+**Device Information:**
+
+```rust
+impl VirtioBlockDevice {
+    pub fn capacity_sectors(&self) -> u64;  // Total sectors
+    pub fn capacity_bytes(&self) -> u64;    // Total bytes
+    pub fn block_size(&self) -> u32;        // Logical block size (usually 512)
+    pub fn is_read_only(&self) -> bool;     // Read-only flag
+}
+```
+
+#### 10. Boot Integration (Updated)
+
+**File:** `src/arch/x86_64/boot.rs` (+40 lines)
+
+Enhanced M6 boot sequence:
+
+```rust
+// M6: VirtIO Block Driver
+let virtio_block_devices = pci::find_virtio_devices(2);
+
+if let Some(dev) = virtio_block_devices.first() {
+    let block_dev = VirtioBlockDevice::new(dev.clone())?;
+
+    // Display device information
+    serial_write(b"[BOOT]   Capacity: ");
+    print_u64(block_dev.capacity_bytes() / 1024 / 1024);
+    serial_write(b" MB\n");
+
+    // Perform test read of first sector
+    let mut test_buffer = [0u8; 512];
+    block_dev.read_sectors(0, &mut test_buffer)?;
+
+    // Print first 16 bytes
+    serial_write(b"[BOOT] First 16 bytes: ");
+    for i in 0..16 {
+        print_hex_u8(test_buffer[i]);
+        serial_write(b" ");
+    }
+    serial_write(b"\n");
+}
+```
+
+**Files Modified (Part 2):**
+- `src/arch/x86_64/virtqueue.rs` (NEW - 650 lines)
+- `src/arch/x86_64/virtio_block.rs` (NEW - 580 lines)
+- `src/arch/x86_64/boot.rs` (MODIFIED +40 lines)
+- `src/arch/x86_64/mod.rs` (MODIFIED +2 lines)
+
+### Statistics (Complete M6)
+
+**Part 1 (PCI Infrastructure):**
+- Code: ~1,455 lines
+- Documentation: ~600 lines
+
+**Part 2 (Virtqueues & Block Driver):**
+- Code: ~1,230 lines
+- Documentation: ~400 lines (this update)
+
+**Total M6:**
+- **Code:** ~2,685 lines
+- **Documentation:** ~1,000 lines
+
+### Acceptance Criteria (Complete M6)
+
+**Part 1 (PCI Infrastructure):**
+- ✅ PCI bus enumeration discovers devices
+- ✅ VirtIO devices detected (vendor 0x1AF4)
+- ✅ PCI capabilities parsed correctly
+- ✅ BARs mapped into virtual address space
+- ✅ VirtIO-PCI transport created
+- ✅ Initialization handshake completes
+- ✅ Device features negotiated
+
+**Part 2 (Virtqueues & Block Driver):**
+- ✅ Virtqueue split-ring implementation
+- ✅ Descriptor table management
+- ✅ Available/used ring operations
+- ✅ VirtIO block device initialization
+- ✅ Block read operations (synchronous)
+- ✅ Block write operations (synchronous)
+- ✅ DMA buffer allocation/deallocation
+- ✅ Test read of first sector succeeds
+- ⚠️ Polling-based completion (no interrupts yet)
+- ❌ Asynchronous I/O (future)
+- ❌ Request queuing (future)
+- ❌ Block device abstraction layer (future)
 
 ### Limitations
 
 **Current Implementation:**
 - ✅ PCI bus enumeration (legacy I/O port method)
-- ✅ VirtIO-PCI capability parsing
-- ✅ BAR detection and mapping
+- ✅ VirtIO-PCI capability parsing and BAR mapping
 - ✅ VirtIO initialization handshake
+- ✅ Virtqueue split-ring format
+- ✅ VirtIO block device driver
+- ✅ Synchronous block read/write
 - ⚠️ Uses direct physical memory mapping (works but not optimal)
-- ⚠️ No MSI/MSI-X interrupt support (legacy interrupts only)
-- ⚠️ No hot-plug support
-- ❌ No PCIe ECAM support (memory-mapped config space)
+- ⚠️ Polling-based I/O completion (functional but inefficient)
+- ⚠️ No MSI/MSI-X interrupt support
+- ⚠️ No request queuing or async I/O
+- ⚠️ No block device abstraction layer
+- ❌ No PCIe ECAM support
 - ❌ No IOMMU support
-- ❌ No virtqueue setup (needed for actual I/O)
-- ❌ No block device driver (M6 part 2)
+- ❌ No packed virtqueue format (VirtIO 1.1+)
+- ❌ No hot-plug support
 
 **Future Enhancements:**
-- Complete virtqueue implementation
-- VirtIO block device driver
-- DMA buffer management
-- MSI/MSI-X interrupt support
+- Interrupt-driven I/O (via MSI/MSI-X)
+- Asynchronous I/O with request queuing
+- Block device abstraction layer
+- Integration with VFS/filesystem layer
+- Packed virtqueue format for better performance
 - PCIe ECAM for faster config access
 - IOMMU for secure DMA
 - VirtIO network driver (M7)

@@ -278,26 +278,52 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
 
                 // Initialize first VirtIO block device
                 if let Some(dev) = virtio_block_devices.first() {
-                    match crate::arch::x86_64::virtio_pci::VirtioPciTransport::new(dev.clone()) {
-                        Ok(transport) => {
-                            serial::serial_write(b"[BOOT] VirtIO-PCI transport initialized for block device\n");
+                    match crate::arch::x86_64::virtio_block::VirtioBlockDevice::new(dev.clone()) {
+                        Ok(block_dev) => {
+                            serial::serial_write(b"[BOOT] VirtIO block device initialized\n");
+                            serial::serial_write(b"[BOOT]   Capacity: ");
+                            print_u64(block_dev.capacity_bytes() / 1024 / 1024);
+                            serial::serial_write(b" MB\n");
+                            serial::serial_write(b"[BOOT]   Block size: ");
+                            print_u64(block_dev.block_size() as u64);
+                            serial::serial_write(b" bytes\n");
+                            serial::serial_write(b"[BOOT]   Read-only: ");
+                            if block_dev.is_read_only() {
+                                serial::serial_write(b"yes\n");
+                            } else {
+                                serial::serial_write(b"no\n");
+                            }
 
-                            // Perform VirtIO initialization handshake
-                            match crate::arch::x86_64::virtio_pci::initialize_virtio_device(&transport) {
-                                Ok(features) => {
-                                    serial::serial_write(b"[BOOT] VirtIO device initialized, features: 0x");
-                                    print_hex_u64(features);
+                            // Perform test read of first sector
+                            serial::serial_write(b"[BOOT] Testing block device - reading first sector...\n");
+                            let mut test_buffer = [0u8; 512];
+                            match block_dev.read_sectors(0, &mut test_buffer) {
+                                Ok(bytes_read) => {
+                                    serial::serial_write(b"[BOOT] Successfully read ");
+                                    print_u64(bytes_read as u64);
+                                    serial::serial_write(b" bytes from sector 0\n");
+
+                                    // Print first 16 bytes as hex
+                                    serial::serial_write(b"[BOOT] First 16 bytes: ");
+                                    for i in 0..16 {
+                                        print_hex_u8(test_buffer[i]);
+                                        serial::serial_write(b" ");
+                                    }
                                     serial::serial_write(b"\n");
                                 }
                                 Err(e) => {
-                                    serial::serial_write(b"[BOOT] VirtIO device init failed: ");
+                                    serial::serial_write(b"[BOOT] Block read test failed: ");
                                     serial::serial_write(e.as_bytes());
                                     serial::serial_write(b"\n");
                                 }
                             }
+
+                            // Note: In a real system, we would store the block_dev in a global
+                            // or pass it to the block device subsystem. For now, we just drop it.
+                            serial::serial_write(b"[BOOT] VirtIO block device test complete\n");
                         }
                         Err(e) => {
-                            serial::serial_write(b"[BOOT] Failed to create VirtIO-PCI transport: ");
+                            serial::serial_write(b"[BOOT] Failed to initialize VirtIO block device: ");
                             serial::serial_write(e.as_bytes());
                             serial::serial_write(b"\n");
                         }
@@ -408,6 +434,16 @@ fn print_hex_u64(n: u64) {
         buf[i] = hex_chars[nibble];
     }
 
+    serial::serial_write(&buf);
+}
+
+/// Helper function to print u8 as hexadecimal to serial
+fn print_hex_u8(n: u8) {
+    let hex_chars = b"0123456789abcdef";
+    let buf = [
+        hex_chars[(n >> 4) as usize],
+        hex_chars[(n & 0xF) as usize],
+    ];
     serial::serial_write(&buf);
 }
 
