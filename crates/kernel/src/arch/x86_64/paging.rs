@@ -107,6 +107,7 @@ use x86_64::{
         Page, PageTable, PageTableFlags, PageTableIndex,
         PhysFrame, Size4KiB,
     },
+    structures::paging::page_table::PageTableEntry,
     VirtAddr, PhysAddr,
     registers::control::Cr3,
 };
@@ -387,7 +388,7 @@ impl PageTableManager {
     /// If the entry is present, returns the existing table.
     /// If not present, allocates a new table and updates the entry.
     unsafe fn get_or_create_next_table(
-        entry: &mut x86_64::structures::paging::PageTableEntry
+        entry: &mut PageTableEntry
     ) -> Result<&'static mut PageTable, &'static str> {
         if entry.flags().contains(PageTableFlags::PRESENT) {
             // Entry exists, return it
@@ -407,7 +408,7 @@ impl PageTableManager {
             // Update entry
             entry.set_addr(
                 phys,
-                PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE
             );
 
             Ok(table)
@@ -416,7 +417,7 @@ impl PageTableManager {
 
     /// Get next level page table (immutable)
     unsafe fn get_next_table(
-        entry: &x86_64::structures::paging::PageTableEntry
+        entry: &PageTableEntry
     ) -> Result<&'static PageTable, &'static str> {
         if entry.flags().contains(PageTableFlags::PRESENT) {
             let phys = entry.addr();
@@ -429,7 +430,7 @@ impl PageTableManager {
 
     /// Get next level page table (mutable)
     unsafe fn get_next_table_mut(
-        entry: &mut x86_64::structures::paging::PageTableEntry
+        entry: &mut PageTableEntry
     ) -> Result<&'static mut PageTable, &'static str> {
         if entry.flags().contains(PageTableFlags::PRESENT) {
             let phys = entry.addr();
@@ -470,11 +471,13 @@ pub fn phys_to_virt(phys: PhysAddr) -> VirtAddr {
 /// - `None` if not in direct mapping region
 pub fn virt_to_phys(virt: VirtAddr) -> Option<PhysAddr> {
     let addr = virt.as_u64();
-    if addr >= PHYS_MEM_OFFSET && addr < PHYS_MEM_OFFSET + MAX_PHYS_MEM {
-        Some(PhysAddr::new(addr - PHYS_MEM_OFFSET))
-    } else {
-        None
+    if addr >= PHYS_MEM_OFFSET {
+        let offset = addr - PHYS_MEM_OFFSET;
+        if offset < MAX_PHYS_MEM {
+            return Some(PhysAddr::new(offset));
+        }
     }
+    None
 }
 
 /// Flush TLB entry for a single page
@@ -486,7 +489,7 @@ pub fn virt_to_phys(virt: VirtAddr) -> Option<PhysAddr> {
 /// * `virt` - Virtual address to flush
 pub fn flush_tlb_page(virt: VirtAddr) {
     use x86_64::instructions::tlb;
-    tlb::flush(Page::<Size4KiB>::containing_address(virt));
+    tlb::flush(virt);
 }
 
 /// Flush entire TLB

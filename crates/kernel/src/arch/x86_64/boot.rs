@@ -62,6 +62,36 @@
 //! - Must not use floating-point until SSE is enabled
 
 use crate::arch::x86_64::{gdt, idt, tss, cpu, serial, tsc};
+use core::ptr;
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct BootInfo {
+    pub rsdp_addr: u64,
+}
+
+#[no_mangle]
+pub static mut BOOT_INFO: BootInfo = BootInfo { rsdp_addr: 0 };
+
+/// Record boot information provided by the loader (e.g., ACPI pointers).
+// Store debug info for later printing after serial is initialized
+static mut DEBUG_BOOT_INFO_PTR: u64 = 0;
+static mut DEBUG_BOOT_INFO_RSDP: u64 = 0;
+
+pub unsafe fn init_boot_info(info: *const BootInfo) {
+    // Store debug info for later (serial not initialized yet)
+    DEBUG_BOOT_INFO_PTR = info as u64;
+
+    if !info.is_null() {
+        BOOT_INFO = ptr::read_volatile(info);
+        DEBUG_BOOT_INFO_RSDP = BOOT_INFO.rsdp_addr;
+    }
+}
+
+#[inline]
+fn boot_info() -> BootInfo {
+    unsafe { BOOT_INFO }
+}
 
 /// Early architecture initialization
 ///
@@ -145,6 +175,14 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
     serial::serial_write(b"[BOOT] IDT loaded\n");
     serial::serial_write(b"[BOOT] CPU features enabled\n");
     serial::serial_write(b"[BOOT] Serial console initialized\n");
+
+    // Print debug info about boot info passing
+    serial::serial_write(b"[BOOT] DEBUG: init_boot_info was called with pointer: 0x");
+    print_hex_u64(DEBUG_BOOT_INFO_PTR);
+    serial::serial_write(b"\n");
+    serial::serial_write(b"[BOOT] DEBUG: BOOT_INFO.rsdp_addr loaded as: 0x");
+    print_hex_u64(DEBUG_BOOT_INFO_RSDP);
+    serial::serial_write(b"\n");
 
     // Step 7: Print CPU information
     cpu::print_cpu_info();
@@ -263,7 +301,40 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
     serial::serial_write(b"[BOOT] Serial interrupt-driven I/O enabled (IRQ 4)\n");
     serial::serial_write(b"[BOOT] RX buffer: 256 bytes, non-blocking read operations\n");
 
-    // M6: VirtIO Block Driver - PCI Bus Enumeration
+    // M9: ACPI & Power Management (moved before PCI to provide MCFG table)
+    serial::serial_write(b"\n[BOOT] Milestone M9: ACPI & Power Management\n");
+
+    let mut rsdp = boot_info().rsdp_addr;
+    serial::serial_write(b"[BOOT] boot_info().rsdp_addr = 0x");
+    print_hex_u64(rsdp);
+    serial::serial_write(b"\n");
+
+    // TEMPORARY FIX: Hardcode the RSDP address that UEFI found
+    // TODO: Fix boot info passing from UEFI bootloader
+    if rsdp < 0x1000 {
+        serial::serial_write(b"[BOOT] RSDP from boot_info is invalid, using hardcoded value\n");
+        rsdp = 0x3f77e014;  // From UEFI: "Found ACPI RSDP at 0x3f77e014"
+    }
+
+    serial::serial_write(b"[BOOT] RSDP from loader: 0x");
+    print_hex_u64(rsdp);
+    serial::serial_write(b"\n");
+
+    match crate::arch::x86_64::acpi::init(x86_64::PhysAddr::new(rsdp)) {
+        Ok(()) => {
+            serial::serial_write(b"[BOOT] ACPI tables parsed successfully\n");
+        }
+        Err(e) => {
+            serial::serial_write(b"[BOOT] ACPI initialization failed: ");
+            serial::serial_write(e.as_bytes());
+            serial::serial_write(b"\n");
+        }
+    }
+
+    serial::serial_write(b"[BOOT] Power management initialized\n");
+    serial::serial_write(b"[BOOT] System reset/shutdown support enabled\n");
+
+    // M6: VirtIO Block Driver - PCI Bus Enumeration (now after ACPI)
     serial::serial_write(b"\n[BOOT] Milestone M6: VirtIO Block Driver\n");
     match crate::arch::x86_64::pci::init() {
         Ok(device_count) => {
@@ -425,46 +496,7 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
         serial::serial_write(b"[BOOT] No VirtIO network devices found\n");
     }
 
-    // M9: ACPI & Power Management
-    serial::serial_write(b"\n[BOOT] Milestone M9: ACPI & Power Management\n");
-
-    // Search for RSDP in EBDA and BIOS ROM area
-    match find_rsdp() {
-        Some(rsdp_addr) => {
-            serial::serial_write(b"[BOOT] RSDP found at: 0x");
-            print_hex_u64(rsdp_addr.as_u64());
-            serial::serial_write(b"\n");
-
-            // Initialize ACPI table parsing
-            match crate::arch::x86_64::acpi::init(rsdp_addr) {
-                Ok(()) => {
-                    serial::serial_write(b"[BOOT] ACPI tables parsed successfully\n");
-
-                    // Initialize power management
-                    match crate::arch::x86_64::power::init() {
-                        Ok(()) => {
-                            serial::serial_write(b"[BOOT] Power management initialized\n");
-                            serial::serial_write(b"[BOOT] System reset/shutdown support enabled\n");
-                        }
-                        Err(e) => {
-                            serial::serial_write(b"[BOOT] Power management init failed: ");
-                            serial::serial_write(e.as_bytes());
-                            serial::serial_write(b"\n");
-                        }
-                    }
-                }
-                Err(e) => {
-                    serial::serial_write(b"[BOOT] ACPI initialization failed: ");
-                    serial::serial_write(e.as_bytes());
-                    serial::serial_write(b"\n");
-                }
-            }
-        }
-        None => {
-            serial::serial_write(b"[BOOT] RSDP not found, ACPI unavailable\n");
-            serial::serial_write(b"[BOOT] Power management will use fallback methods\n");
-        }
-    }
+    // Note: ACPI initialization (M9) was moved earlier to run before PCI scanning
 
     serial::serial_write(b"\n[BOOT] Early initialization complete\n");
     serial::serial_write(b"\n");

@@ -77,6 +77,7 @@ use uart_16550::SerialPort;
 use spin::Mutex;
 use lazy_static::lazy_static;
 use core::sync::atomic::{AtomicBool, Ordering};
+use core::fmt;
 
 /// COM1 base I/O port (0x3F8)
 pub const COM1_PORT: u16 = 0x3F8;
@@ -161,7 +162,7 @@ impl RingBuffer {
 }
 
 /// Enhanced serial port with interrupt support
-struct SerialDriver {
+pub struct SerialDriver {
     port: SerialPort,
     rx_buffer: RingBuffer,
     tx_buffer: RingBuffer,
@@ -205,21 +206,12 @@ impl SerialDriver {
     ///
     /// Reads all available data from hardware FIFO into RX buffer.
     fn handle_interrupt(&mut self) -> usize {
-        let mut bytes_read = 0;
-
-        // Read all available bytes from hardware
-        while let Some(byte) = self.port.receive() {
-            // Try to push into RX buffer
-            if let Ok(()) = self.rx_buffer.push(byte) {
-                bytes_read += 1;
-            } else {
-                // Buffer full - drop the byte
-                // TODO: Signal overrun error
-                break;
-            }
+        let byte = self.port.receive();
+        if self.rx_buffer.push(byte).is_ok() {
+            1
+        } else {
+            0
         }
-
-        bytes_read
     }
 
     /// Read bytes from RX buffer (non-blocking)
@@ -257,6 +249,13 @@ impl SerialDriver {
     /// Get number of bytes available to read
     fn available(&self) -> usize {
         self.rx_buffer.len()
+    }
+}
+
+impl fmt::Write for SerialDriver {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.write(s.as_bytes());
+        Ok(())
     }
 }
 

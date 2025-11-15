@@ -181,13 +181,13 @@ unsafe fn delay_ms(ms: u64) {
     let ticks = (ms * PIT_FREQUENCY) / 1000;
 
     // Read TSC for delay if available
-    let start = x86_64::instructions::rdtsc();
+    let start = unsafe { core::arch::x86_64::_rdtsc() };
     let tsc_freq = crate::arch::x86_64::tsc::get_tsc_frequency();
 
     if tsc_freq > 0 {
         // Use TSC for accurate delay
         let target_cycles = (ms * tsc_freq) / 1000;
-        while x86_64::instructions::rdtsc() - start < target_cycles {
+        while unsafe { core::arch::x86_64::_rdtsc() } - start < target_cycles {
             core::hint::spin_loop();
         }
     } else {

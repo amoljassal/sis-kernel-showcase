@@ -64,14 +64,18 @@ fn get_jitter() -> u64 {
     static JITTER_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     // Read ARM64 system counter
-    let timer: u64;
-    unsafe {
+    #[cfg(target_arch = "aarch64")]
+    let timer: u64 = unsafe {
+        let value;
         core::arch::asm!(
-            "mrs {}, cntvct_el0",
-            out(reg) timer,
+            "mrs {0}, cntvct_el0",
+            out(reg) value,
             options(nomem, nostack)
         );
-    }
+        value
+    };
+    #[cfg(target_arch = "x86_64")]
+    let timer: u64 = crate::arch::x86_64::tsc::read_tsc();
 
     // Mix in monotonic counter
     let counter = JITTER_COUNTER.fetch_add(1, Ordering::Relaxed);

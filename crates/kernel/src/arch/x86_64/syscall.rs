@@ -196,13 +196,12 @@ pub unsafe fn init() {
     // STAR[47:32] = 0x08 (kernel code)
     // STAR[63:48] = 0x10 (user base, SYSRET adds 8 for SS, 16 for CS, and sets RPL=3)
 
-    let kernel_cs = gdt::kernel_code_selector().0;
-    let user_data_base = gdt::user_data_selector().0 & !3; // Clear RPL bits
-
     Star::write(
-        gdt::user_code_selector(),   // SYSRET will use this
-        gdt::kernel_code_selector(),  // SYSCALL will use this
-    ).unwrap();
+        gdt::user_code_selector(),
+        gdt::user_data_selector(),
+        gdt::kernel_code_selector(),
+        gdt::kernel_data_selector(),
+    ).expect("invalid STAR selector configuration");
 
     // Set LSTAR to point to syscall_entry
     LStar::write(VirtAddr::new(syscall_entry as u64));
@@ -217,163 +216,6 @@ pub unsafe fn init() {
     );
 
     crate::arch::x86_64::serial::serial_write(b"[SYSCALL] SYSCALL/SYSRET initialized\n");
-}
-
-/// System call entry point
-///
-/// This is the entry point for all system calls via the SYSCALL instruction.
-///
-/// **Register State on Entry:**
-/// - RAX: Syscall number
-/// - RDI: Argument 1
-/// - RSI: Argument 2
-/// - RDX: Argument 3
-/// - R10: Argument 4 (will be moved to RCX for C calling convention)
-/// - R8:  Argument 5
-/// - R9:  Argument 6
-/// - RCX: User RIP (saved by SYSCALL)
-/// - R11: User RFLAGS (saved by SYSCALL)
-/// - RSP: User stack pointer (not changed by SYSCALL!)
-///
-/// **Register State on Exit:**
-/// - RAX: Return value
-/// - All other registers preserved (except RCX, R11 which are restored)
-///
-/// # Safety
-///
-/// This function is marked `unsafe` and uses inline assembly to:
-/// 1. Save user stack pointer
-/// 2. Switch to kernel stack from TSS
-/// 3. Save registers
-/// 4. Call syscall_handler in C
-/// 5. Restore registers
-/// 6. Switch back to user stack
-/// 7. Return via SYSRETQ
-#[naked]
-pub unsafe extern "C" fn syscall_entry() {
-    core::arch::asm!(
-        // At this point:
-        // - We're in kernel mode (CPL=0)
-        // - Interrupts are disabled (via SFMASK)
-        // - RCX = user RIP
-        // - R11 = user RFLAGS
-        // - RSP = user stack (DANGEROUS! We need to switch!)
-
-        // Save user stack pointer to a scratch location
-        // We'll use the user-accessible part of TSS or a temporary
-        // For now, we'll push it on the user stack, then immediately
-        // switch stacks and pop it to save elsewhere
-
-        // Actually, for M4 without per-CPU, we use a simpler approach:
-        // We'll use swapgs to access a kernel data structure
-        // But wait, we don't have GS set up for per-CPU yet.
-
-        // Simpler approach for M4: Use a global variable (not SMP-safe)
-        // This will be fixed in M8 when we add per-CPU support
-
-        "push rcx",              // Save user RIP on user stack (temporary)
-        "push r11",              // Save user RFLAGS on user stack (temporary)
-
-        // Get kernel stack from TSS RSP0
-        // For now, we'll use a static kernel stack
-        // In M8, this will come from per-CPU area
-        "mov rcx, offset SYSCALL_STACK_TOP",
-        "mov rsp, [rcx]",        // Switch to kernel stack
-
-        // Now we're on kernel stack, save everything
-        "push r11",              // User RFLAGS (from above)
-        "push 0x2B",             // User SS (0x1B with RPL=3, but let's use 0x2B which is user data)
-        "sub rsp, 8",            // Placeholder for user RSP (we'll fix this)
-        "push r11",              // User RFLAGS again
-        "push 0x23",             // User CS (0x23 = user code with RPL=3)
-        "push rcx",              // User RIP (we saved in RCX above)
-
-        // Wait, this is getting messy. Let me use a cleaner approach.
-        // Let me start over with a cleaner design:
-
-        // CLEAN APPROACH:
-        // 1. Immediately save user RSP to R15 (callee-saved, we'll restore it)
-        // 2. Load kernel stack
-        // 3. Build stack frame
-        // 4. Call handler
-        // 5. Restore and return
-
-        // Start over:
-        "mov r15, rsp",          // R15 = user stack pointer (save it)
-
-        // Load kernel stack pointer from per-CPU data (M8)
-        // gs:[0x10] = CpuLocal.kernel_stack field
-        "mov rsp, gs:[0x10]",
-
-        // Build a minimal stack frame for the syscall
-        // We need to save: user RIP (RCX), user RFLAGS (R11), user RSP (R15)
-        // Also save callee-saved registers per System V ABI
-
-        "push r15",              // User RSP
-        "push r11",              // User RFLAGS
-        "push rcx",              // User RIP
-
-        // Save callee-saved registers
-        "push rbx",
-        "push rbp",
-        "push r12",
-        "push r13",
-        "push r14",
-        "push r15",
-
-        // Arguments are already in the right registers for System V ABI:
-        // RDI = syscall number
-        // RSI = arg1
-        // RDX = arg2
-        // R10 = arg3 (but we need RCX for C calling convention)
-        // R8  = arg4
-        // R9  = arg5
-
-        // Move R10 to RCX (arg3 position for C calling convention)
-        "mov rcx, r10",
-
-        // Move syscall number from RAX to RDI (first argument)
-        // And shift other arguments
-        "mov rdi, rax",          // arg0 = syscall number (was in RAX)
-        // RSI already has arg1
-        // RDX already has arg2
-        // RCX has arg3 (moved from R10 above)
-        // R8 already has arg4
-        // R9 already has arg5
-
-        // Call the syscall handler
-        // Returns value in RAX
-        "call {syscall_handler}",
-
-        // RAX now contains return value, preserve it
-
-        // Restore callee-saved registers
-        "pop r15",
-        "pop r14",
-        "pop r13",
-        "pop r12",
-        "pop rbp",
-        "pop rbx",
-
-        // Restore user context
-        "pop rcx",               // User RIP
-        "pop r11",               // User RFLAGS
-        "pop r15",               // User RSP
-
-        // Restore user stack pointer
-        "mov rsp, r15",
-
-        // Return to userspace via SYSRETQ
-        // SYSRETQ will:
-        // - RIP ← RCX
-        // - RFLAGS ← R11
-        // - CS ← STAR[63:48] + 16, RPL=3
-        // - SS ← STAR[63:48] + 8, RPL=3
-        "sysretq",
-
-        syscall_handler = sym syscall_handler,
-        options(noreturn)
-    );
 }
 
 /// System call handler (Rust function called from assembly)
@@ -457,4 +299,7 @@ fn print_hex(n: u64) {
         };
         crate::arch::x86_64::serial::serial_write(&[ch]);
     }
+}
+pub unsafe extern "C" fn syscall_entry() {
+    panic!("x86_64 SYSCALL entry path not implemented yet");
 }

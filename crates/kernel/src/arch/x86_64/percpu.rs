@@ -87,7 +87,6 @@
 //! - Stack pointers must be valid and properly aligned
 //! - Context switches must save/restore GS base if needed
 
-use core::ptr::NonNull;
 use x86_64::VirtAddr;
 
 /// MSR for GS base (kernel GS)
@@ -119,6 +118,7 @@ pub const KERNEL_STACK_SIZE: usize = 65536;
 /// The structure is aligned to cache line size (64 bytes) to avoid false
 /// sharing between CPUs.
 #[repr(C, align(64))]
+#[derive(Copy, Clone)]
 pub struct CpuLocal {
     /// Pointer to this structure (must be first field)
     ///
@@ -231,6 +231,7 @@ impl CpuLocal {
                 syscalls: 0,
                 interrupts: 0,
                 context_switches: 0,
+                idle_ticks: 0,
             },
             _padding: [0; 1],
         }
@@ -346,11 +347,7 @@ pub unsafe fn init_bsp() {
     crate::arch::x86_64::serial::serial_write(b"[PERCPU] Initializing BSP per-CPU data...\n");
 
     // Get APIC ID for BSP
-    let apic_id = if let Some(apic) = crate::arch::x86_64::apic::get() {
-        apic.id()
-    } else {
-        0  // Fallback if APIC not available
-    };
+    let apic_id = crate::arch::x86_64::apic::local_apic_id();
 
     // Calculate kernel stack top (stack grows downward)
     let stack_bottom = BSP_KERNEL_STACK.as_ptr() as u64;
@@ -529,10 +526,11 @@ pub unsafe fn init_ap(cpu_id: u32, apic_id: u32) {
 
     // Initialize AP CPU data
     AP_CPU_DATA[ap_index] = CpuLocal::new(cpu_id, apic_id, VirtAddr::new(stack_top));
-    AP_CPU_DATA[ap_index].self_ptr = &AP_CPU_DATA[ap_index] as *const _;
+    let cpu_ptr = &AP_CPU_DATA[ap_index] as *const _;
+    AP_CPU_DATA[ap_index].self_ptr = cpu_ptr;
 
     // Set GS base to point to this AP's CPU data
-    set_gs_base(&AP_CPU_DATA[ap_index] as *const _ as u64);
+    set_gs_base(cpu_ptr as u64);
 
     crate::arch::x86_64::serial::serial_write(b"[PERCPU] AP ");
     print_u32(cpu_id);
@@ -543,15 +541,15 @@ pub unsafe fn init_ap(cpu_id: u32, apic_id: u32) {
     crate::arch::x86_64::serial::serial_write(b"\n[PERCPU] Kernel stack: 0x");
     print_hex(stack_top);
     crate::arch::x86_64::serial::serial_write(b"\n[PERCPU] Per-CPU data at: 0x");
-    print_hex(&AP_CPU_DATA[ap_index] as *const _ as u64);
+    print_hex(cpu_ptr as u64);
     crate::arch::x86_64::serial::serial_write(b"\n");
 
     // Verify GS base was set correctly
     let gs_base = get_gs_base();
-    if gs_base != &AP_CPU_DATA[ap_index] as *const _ as u64 {
+    if gs_base != cpu_ptr as u64 {
         crate::arch::x86_64::serial::serial_write(b"[PERCPU] WARNING: GS base mismatch!\n");
         crate::arch::x86_64::serial::serial_write(b"[PERCPU] Expected: 0x");
-        print_hex(&AP_CPU_DATA[ap_index] as *const _ as u64);
+        print_hex(cpu_ptr as u64);
         crate::arch::x86_64::serial::serial_write(b"\n[PERCPU] Got: 0x");
         print_hex(gs_base);
         crate::arch::x86_64::serial::serial_write(b"\n");

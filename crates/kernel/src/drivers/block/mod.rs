@@ -4,13 +4,14 @@
 //! - SDHCI (SD Host Controller Interface) for SD/MMC cards
 //! - Future: NVMe, SATA, eMMC, etc.
 
+#[cfg(target_arch = "aarch64")]
 pub mod sdhci;
 
+#[cfg(target_arch = "aarch64")]
 pub use sdhci::SdhciController;
 
 use crate::drivers::traits::BlockDevice;
 use crate::lib::error::Result;
-use crate::platform::dt::{SdhciInfo, get_device_map};
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -45,7 +46,10 @@ pub fn get_block_device(name: &str) -> Option<Arc<dyn BlockDevice>> {
 /// 2. Creates an SDHCI controller instance
 /// 3. Initializes the controller and SD card
 /// 4. Registers the device
+#[cfg(target_arch = "aarch64")]
 pub unsafe fn init_sdhci_from_dt() -> Result<()> {
+    use crate::platform::dt::{SdhciInfo, get_device_map};
+
     // Get SDHCI info from device tree
     let devmap = get_device_map().ok_or(crate::lib::error::Errno::ENODEV)?;
     let sdhci_info = devmap.sdhci.ok_or(crate::lib::error::Errno::ENODEV)?;
@@ -67,6 +71,12 @@ pub unsafe fn init_sdhci_from_dt() -> Result<()> {
     register_block_device(device)?;
 
     Ok(())
+}
+
+#[cfg(not(target_arch = "aarch64"))]
+pub unsafe fn init_sdhci_from_dt() -> Result<()> {
+    // No SDHCI controller on x86_64 yet.
+    Err(crate::lib::error::Errno::ENODEV)
 }
 
 /// Initialize all block devices

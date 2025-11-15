@@ -113,14 +113,29 @@ pub unsafe fn init(rsdp_addr: PhysAddr) -> Result<(), &'static str> {
     serial::serial_write(b"\n");
 
     // Map RSDP (20 bytes for ACPI 1.0, 36 bytes for ACPI 2.0+)
-    const PHYS_OFFSET: u64 = 0xFFFF_FFFF_8000_0000;
-    let rsdp_virt = (rsdp_addr.as_u64() + PHYS_OFFSET) as *const Rsdp;
+    // For x86_64 QEMU, the RSDP is in low memory that should be identity mapped
+    // Try identity mapping first (physical address = virtual address)
+    serial::serial_write(b"[ACPI] Attempting to access RSDP with identity mapping\n");
+    let rsdp_virt = rsdp_addr.as_u64() as *const Rsdp;
+
+    serial::serial_write(b"[ACPI] Reading RSDP from virtual address: 0x");
+    print_hex_u64(rsdp_virt as u64);
+    serial::serial_write(b"\n");
 
     // Read and validate RSDP signature
+    serial::serial_write(b"[ACPI] Reading RSDP signature...\n");
     let rsdp = read_volatile(rsdp_virt);
+    serial::serial_write(b"[ACPI] RSDP signature read complete\n");
+
     if &rsdp.signature != b"RSD PTR " {
+        serial::serial_write(b"[ACPI] ERROR: Invalid RSDP signature: ");
+        for i in 0..8 {
+            serial::serial_write(&[rsdp.signature[i]]);
+        }
+        serial::serial_write(b"\n");
         return Err("Invalid RSDP signature");
     }
+    serial::serial_write(b"[ACPI] RSDP signature valid\n");
 
     serial::serial_write(b"[ACPI] RSDP revision: ");
     print_u64(rsdp.revision as u64);
@@ -186,8 +201,8 @@ pub unsafe fn init(rsdp_addr: PhysAddr) -> Result<(), &'static str> {
 unsafe fn parse_rsdt(acpi_info: &mut AcpiInfo) -> Result<(), &'static str> {
     let rsdt_addr = acpi_info.rsdt_addr.ok_or("No RSDT address")?;
 
-    const PHYS_OFFSET: u64 = 0xFFFF_FFFF_8000_0000;
-    let rsdt_virt = (rsdt_addr.as_u64() + PHYS_OFFSET) as *const SdtHeader;
+    // Use identity mapping for low memory ACPI tables
+    let rsdt_virt = rsdt_addr.as_u64() as *const SdtHeader;
     let header = read_volatile(rsdt_virt);
 
     // Validate signature
@@ -217,8 +232,8 @@ unsafe fn parse_rsdt(acpi_info: &mut AcpiInfo) -> Result<(), &'static str> {
 unsafe fn parse_xsdt(acpi_info: &mut AcpiInfo) -> Result<(), &'static str> {
     let xsdt_addr = acpi_info.xsdt_addr.ok_or("No XSDT address")?;
 
-    const PHYS_OFFSET: u64 = 0xFFFF_FFFF_8000_0000;
-    let xsdt_virt = (xsdt_addr.as_u64() + PHYS_OFFSET) as *const SdtHeader;
+    // Use identity mapping for low memory ACPI tables
+    let xsdt_virt = xsdt_addr.as_u64() as *const SdtHeader;
     let header = read_volatile(xsdt_virt);
 
     // Validate signature
@@ -235,10 +250,68 @@ unsafe fn parse_xsdt(acpi_info: &mut AcpiInfo) -> Result<(), &'static str> {
     serial::serial_write(b" entries\n");
 
     // Parse entry pointers
-    let entries = (xsdt_virt as usize + header_size) as *const u64;
+    serial::serial_write(b"[ACPI] XSDT base: 0x");
+    print_hex_u64(xsdt_virt as u64);
+    serial::serial_write(b", header size: ");
+    print_u64(header_size as u64);
+    serial::serial_write(b"\n");
+
+    let entries_ptr = (xsdt_virt as usize + header_size);
+    serial::serial_write(b"[ACPI] Entries start at: 0x");
+    print_hex_u64(entries_ptr as u64);
+    serial::serial_write(b"\n");
+
+    let entries = entries_ptr as *const u64;
+
     for i in 0..entry_count {
-        let table_addr = PhysAddr::new(read_volatile(entries.add(i)));
+        serial::serial_write(b"[ACPI] Reading XSDT entry ");
+        print_u64(i as u64);
+        serial::serial_write(b" at address 0x");
+        print_hex_u64(entries.add(i) as u64);
+        serial::serial_write(b"...\n");
+
+        let entry_addr = entries.add(i);
+
+        // Try to read the 64-bit entry using byte-by-byte access to avoid alignment issues
+        let mut table_addr_raw: u64 = 0;
+        let entry_bytes = entry_addr as *const u8;
+
+        serial::serial_write(b"[ACPI]   Reading entry bytes...\n");
+        for j in 0..8 {
+            let byte_addr = entry_bytes.add(j);
+            let byte_val = read_volatile(byte_addr);
+            table_addr_raw |= (byte_val as u64) << (j * 8);
+
+            // Debug: show each byte read
+            if j == 0 {
+                serial::serial_write(b"[ACPI]   Bytes: ");
+            }
+            let hex_chars = b"0123456789abcdef";
+            serial::serial_write(&[hex_chars[(byte_val >> 4) as usize]]);
+            serial::serial_write(&[hex_chars[(byte_val & 0xF) as usize]]);
+            serial::serial_write(b" ");
+        }
+        serial::serial_write(b"\n");
+
+        serial::serial_write(b"[ACPI]   Table address: 0x");
+        print_hex_u64(table_addr_raw);
+        serial::serial_write(b"\n");
+
+        // Validate the address
+        if table_addr_raw == 0 {
+            serial::serial_write(b"[ACPI]   Skipping null table address\n");
+            continue;
+        }
+
+        if table_addr_raw > 0x100000000 {
+            serial::serial_write(b"[ACPI]   Skipping invalid table address (too high)\n");
+            continue;
+        }
+
+        let table_addr = PhysAddr::new(table_addr_raw);
+        serial::serial_write(b"[ACPI]   Parsing table...\n");
         parse_table_at(acpi_info, table_addr);
+        serial::serial_write(b"[ACPI]   Table parsed successfully\n");
     }
 
     Ok(())
@@ -246,9 +319,20 @@ unsafe fn parse_xsdt(acpi_info: &mut AcpiInfo) -> Result<(), &'static str> {
 
 /// Parse a single ACPI table at the given address
 unsafe fn parse_table_at(acpi_info: &mut AcpiInfo, table_addr: PhysAddr) {
-    const PHYS_OFFSET: u64 = 0xFFFF_FFFF_8000_0000;
-    let table_virt = (table_addr.as_u64() + PHYS_OFFSET) as *const SdtHeader;
+    // Use identity mapping for low memory ACPI tables
+    let table_virt = table_addr.as_u64() as *const SdtHeader;
+
+    serial::serial_write(b"[ACPI]     Reading table header at 0x");
+    print_hex_u64(table_virt as u64);
+    serial::serial_write(b"\n");
+
     let header = read_volatile(table_virt);
+
+    serial::serial_write(b"[ACPI]     Table signature: ");
+    for i in 0..4 {
+        serial::serial_write(&[header.signature[i]]);
+    }
+    serial::serial_write(b"\n");
 
     // Match known table signatures
     match &header.signature {

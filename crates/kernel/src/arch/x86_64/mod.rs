@@ -152,12 +152,15 @@
 //! 5. Document safety invariants clearly
 
 // Submodules
+use core::sync::atomic::{AtomicU64, Ordering};
+
 pub mod cpu;      // CPU initialization and features
 pub mod gdt;      // Global Descriptor Table
 pub mod idt;      // Interrupt Descriptor Table
 pub mod tss;      // Task State Segment
 pub mod serial;   // 16550 UART driver
 pub mod boot;     // Boot sequence and early init
+pub mod trapframe; // Minimal trap frame representation
 
 // M1: Interrupts & Exceptions (COMPLETE)
 pub mod pic;      // Legacy 8259A PIC
@@ -198,6 +201,58 @@ pub mod tsc;      // Time Stamp Counter
 
 // Re-exports for common use
 pub use cpu::*;
+pub use trapframe::TrapFrame;
+
+// ---------------------------------------------------------------------------
+// Temporary context bridge so cross-architecture scheduler code can compile.
+// These will evolve as the x86_64 port gains real user-mode transitions.
+// ---------------------------------------------------------------------------
+
+static NEXT_USER_PC: AtomicU64 = AtomicU64::new(0);
+static NEXT_USER_RFLAGS: AtomicU64 = AtomicU64::new(0);
+static NEXT_USER_SP: AtomicU64 = AtomicU64::new(0);
+
+/// Store the next user-mode instruction pointer (analogue of ELR_EL1 on ARM).
+#[inline]
+pub fn set_elr_el1(pc: u64) {
+    NEXT_USER_PC.store(pc, Ordering::Relaxed);
+}
+
+/// Fetch the stored user RIP (used for debugging/tests).
+#[inline]
+pub fn user_pc() -> u64 {
+    NEXT_USER_PC.load(Ordering::Relaxed)
+}
+
+/// Store the next user-mode RFLAGS.
+#[inline]
+pub fn set_spsr_el1(pstate: u64) {
+    NEXT_USER_RFLAGS.store(pstate, Ordering::Relaxed);
+}
+
+/// Fetch stored user RFLAGS.
+#[inline]
+pub fn user_rflags() -> u64 {
+    NEXT_USER_RFLAGS.load(Ordering::Relaxed)
+}
+
+/// Store the user-mode stack pointer.
+#[inline]
+pub fn set_sp_el0(sp: u64) {
+    NEXT_USER_SP.store(sp, Ordering::Relaxed);
+}
+
+/// Fetch stored user stack pointer.
+#[inline]
+pub fn user_sp() -> u64 {
+    NEXT_USER_SP.load(Ordering::Relaxed)
+}
+
+/// Return the logical CPU ID for the current core.
+#[inline]
+pub fn current_cpu_id() -> usize {
+    crate::arch::x86_64::percpu::CpuLocal::current().cpu_id as usize
+}
 pub use gdt::init_gdt;
 pub use idt::init_idt_early;
 pub use tss::init_tss;

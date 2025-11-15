@@ -345,6 +345,11 @@ pub mod aarch64 {
         pub exc_taken: u64,
     }
 
+    #[derive(Copy, Clone, Debug)]
+    pub enum PmuEvent {
+        Unsupported,
+    }
+
     impl Snapshot {
         pub fn ipc(&self) -> f64 { 0.0 }
         pub fn l1d_miss_rate(&self) -> f64 { 0.0 }
@@ -373,7 +378,7 @@ pub mod aarch64 {
         if !PMU_INITIALIZED.load(Ordering::Acquire) {
             return Err(DriverError::NotInitialized);
         }
-        Validator::check_bounds(counter_idx, 0, super::MAX_EVENT_COUNTER)?;
+        Validator::check_bounds(counter_idx as usize, 0, super::MAX_EVENT_COUNTER as usize)?;
         Ok(0)
     }
 }

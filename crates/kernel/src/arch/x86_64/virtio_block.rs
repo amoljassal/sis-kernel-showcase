@@ -478,8 +478,13 @@ impl VirtioBlockDevice {
     ///
     /// Returns (physical_address, virtual_address)
     fn alloc_dma_buffer(size: usize) -> Result<(PhysAddr, usize), &'static str> {
-        let pages = (size + 4095) / 4096;
-        let phys = crate::mm::alloc_pages(pages)
+        let mut pages = (size + 4095) / 4096;
+        if pages == 0 {
+            pages = 1;
+        }
+        let pow2 = pages.next_power_of_two();
+        let order = pow2.trailing_zeros() as u8;
+        let phys = crate::mm::alloc_pages(order)
             .ok_or("Failed to allocate DMA buffer")?;
 
         const PHYS_OFFSET: u64 = 0xFFFF_FFFF_8000_0000;
@@ -487,7 +492,7 @@ impl VirtioBlockDevice {
 
         // Zero the buffer
         unsafe {
-            core::ptr::write_bytes(virt as *mut u8, 0, pages * 4096);
+            core::ptr::write_bytes(virt as *mut u8, 0, (1usize << order) * 4096);
         }
 
         Ok((PhysAddr::new(phys), virt))
@@ -495,8 +500,12 @@ impl VirtioBlockDevice {
 
     /// Free DMA buffer
     unsafe fn free_dma_buffer(phys: PhysAddr, _virt: usize, size: usize) {
-        let pages = (size + 4095) / 4096;
-        crate::mm::free_pages(phys.as_u64(), pages);
+        let mut pages = (size + 4095) / 4096;
+        if pages == 0 {
+            pages = 1;
+        }
+        let order = pages.next_power_of_two().trailing_zeros() as u8;
+        crate::mm::free_pages(phys.as_u64(), order);
     }
 
     /// Get device capacity in sectors
