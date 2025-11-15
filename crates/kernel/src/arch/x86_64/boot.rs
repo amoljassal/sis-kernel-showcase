@@ -149,8 +149,25 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
     // Step 7: Print CPU information
     cpu::print_cpu_info();
 
-    // Step 8: Initialize Time Stamp Counter (TSC)
+    // Step 8: Initialize HPET (High Precision Event Timer)
+    // Try to initialize HPET for high-precision timing
+    // HPET is optional - system will fall back to PIT if not available
+    let hpet_available = match crate::arch::x86_64::hpet::init() {
+        Ok(()) => {
+            serial::serial_write(b"[BOOT] HPET initialized successfully\\n");
+            true
+        }
+        Err(e) => {
+            serial::serial_write(b"[BOOT] HPET not available: ");
+            serial::serial_write(e.as_bytes());
+            serial::serial_write(b"\\n");
+            false
+        }
+    };
+
+    // Step 9: Initialize Time Stamp Counter (TSC)
     // Calibrate TSC for accurate timekeeping
+    // TSC calibration will use HPET if available, otherwise PIT
     tsc::init_tsc();
 
     // Validate TSS configuration (debug builds only)
@@ -163,18 +180,45 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
     // M1: Initialize interrupt handling
     serial::serial_write(b"\n[BOOT] Milestone M1: Interrupt Handling\n");
 
-    // Step 9: Initialize legacy PIC (8259A)
+    // Step 10: Initialize legacy PIC (8259A)
     // Remap PIC to vectors 32-47 to avoid conflicts with CPU exceptions
     crate::arch::x86_64::pic::init();
 
-    // Step 10: Initialize PIT (Programmable Interval Timer)
+    // Step 11: Initialize PIT (Programmable Interval Timer)
     // Configure for 1000 Hz (1 ms per tick)
     crate::arch::x86_64::pit::init(1000);
 
-    // Step 11: Enable timer interrupt (IRQ 0)
-    crate::arch::x86_64::pic::enable_irq(crate::arch::x86_64::pic::Irq::Timer);
+    // M2: Initialize APIC & High Precision Timer
+    serial::serial_write(b"\n[BOOT] Milestone M2: APIC & High Precision Timer\n");
 
-    // Step 12: Enable interrupts globally
+    // Step 12: Initialize Local APIC
+    // Try to initialize APIC for modern interrupt handling
+    // APIC is preferred over PIC but system will fall back if not available
+    let apic_available = match crate::arch::x86_64::apic::init() {
+        Ok(()) => {
+            serial::serial_write(b"[BOOT] Local APIC initialized successfully\n");
+            true
+        }
+        Err(e) => {
+            serial::serial_write(b"[BOOT] Local APIC not available: ");
+            serial::serial_write(e.as_bytes());
+            serial::serial_write(b"\n[BOOT] Falling back to legacy PIC\n");
+            false
+        }
+    };
+
+    // Step 13: Configure timer interrupt
+    if apic_available {
+        // Use APIC timer (future work - for now still use PIT)
+        // APIC timer will be configured in future milestones
+        serial::serial_write(b"[BOOT] Using PIT timer with APIC (APIC timer not yet configured)\n");
+        crate::arch::x86_64::pic::enable_irq(crate::arch::x86_64::pic::Irq::Timer);
+    } else {
+        // Use PIT with PIC
+        crate::arch::x86_64::pic::enable_irq(crate::arch::x86_64::pic::Irq::Timer);
+    }
+
+    // Step 14: Enable interrupts globally
     serial::serial_write(b"[BOOT] Enabling interrupts...\n");
     x86_64::instructions::interrupts::enable();
 

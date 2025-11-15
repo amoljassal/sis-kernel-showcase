@@ -265,8 +265,23 @@ pub unsafe fn init_tsc() {
         return;
     }
 
+    // Try HPET-based calibration (M2+)
+    if let Some(freq) = crate::arch::x86_64::hpet::calibrate_tsc(100) {
+        set_tsc_frequency(freq);
+        crate::arch::x86_64::serial::serial_write(b"[TSC] Calibrated via HPET: ");
+        print_u64(freq);
+        crate::arch::x86_64::serial::serial_write(b" Hz\n");
+        return;
+    }
+
+    // Try PIT-based calibration (M1+)
+    let freq = crate::arch::x86_64::pit::calibrate_tsc(100);
+    if freq > 0 {
+        set_tsc_frequency(freq);
+        return; // PIT calibration already prints message
+    }
+
     // Fallback: assume 1 GHz (very inaccurate, but better than nothing)
-    // In M2, we'll add HPET/PIT-based calibration for more accuracy
     const FALLBACK_FREQ: u64 = 1_000_000_000; // 1 GHz
     set_tsc_frequency(FALLBACK_FREQ);
     crate::arch::x86_64::serial::serial_write(b"[TSC] Using fallback frequency: ");
