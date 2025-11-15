@@ -213,6 +213,29 @@ impl CpuLocal {
         }
     }
 
+    /// Create an empty per-CPU data structure (for static initialization)
+    ///
+    /// # Returns
+    ///
+    /// A zeroed `CpuLocal` structure.
+    pub const fn empty() -> Self {
+        Self {
+            self_ptr: core::ptr::null(),
+            cpu_id: 0,
+            apic_id: 0,
+            kernel_stack: 0,
+            user_rsp_tmp: 0,
+            tss_rsp0: 0,
+            current_task: 0,
+            stats: CpuStats {
+                syscalls: 0,
+                interrupts: 0,
+                context_switches: 0,
+            },
+            _padding: [0; 1],
+        }
+    }
+
     /// Get reference to current CPU's data (read-only)
     ///
     /// This is safe to call from any context (syscall, interrupt, kernel thread).
@@ -462,6 +485,79 @@ unsafe fn rdmsr(msr: u32) -> u64 {
         options(nomem, nostack, preserves_flags)
     );
     ((high as u64) << 32) | (low as u64)
+}
+
+/// Initialize Application Processor per-CPU data
+///
+/// Allocates and configures per-CPU data structures for an AP.
+///
+/// # Arguments
+///
+/// * `cpu_id` - Sequential CPU ID (1+ for APs)
+/// * `apic_id` - Local APIC ID for this AP
+///
+/// # Safety
+///
+/// Must be called exactly once per AP during startup, after heap initialization.
+pub unsafe fn init_ap(cpu_id: u32, apic_id: u32) {
+    crate::arch::x86_64::serial::serial_write(b"[PERCPU] Initializing AP ");
+    print_u32(cpu_id);
+    crate::arch::x86_64::serial::serial_write(b" per-CPU data...\n");
+
+    // For M8 Part 2, we'll allocate AP kernel stacks and per-CPU data statically
+    // A full implementation would use the heap allocator
+
+    // For now, create per-CPU data in static arrays (limited to 16 CPUs)
+    const MAX_APS: usize = 15; // BSP + 15 APs = 16 total
+
+    static mut AP_CPU_DATA: [CpuLocal; MAX_APS] = [CpuLocal::empty(); MAX_APS];
+    static mut AP_KERNEL_STACKS: [[u8; KERNEL_STACK_SIZE]; MAX_APS] =
+        [[0; KERNEL_STACK_SIZE]; MAX_APS];
+
+    if cpu_id == 0 || cpu_id as usize > MAX_APS {
+        crate::arch::x86_64::serial::serial_write(b"[PERCPU] Invalid CPU ID: ");
+        print_u32(cpu_id);
+        crate::arch::x86_64::serial::serial_write(b"\n");
+        return;
+    }
+
+    let ap_index = (cpu_id - 1) as usize; // AP 1 -> index 0, AP 2 -> index 1, etc.
+
+    // Calculate kernel stack top
+    let stack_bottom = AP_KERNEL_STACKS[ap_index].as_ptr() as u64;
+    let stack_top = stack_bottom + KERNEL_STACK_SIZE as u64;
+
+    // Initialize AP CPU data
+    AP_CPU_DATA[ap_index] = CpuLocal::new(cpu_id, apic_id, VirtAddr::new(stack_top));
+    AP_CPU_DATA[ap_index].self_ptr = &AP_CPU_DATA[ap_index] as *const _;
+
+    // Set GS base to point to this AP's CPU data
+    set_gs_base(&AP_CPU_DATA[ap_index] as *const _ as u64);
+
+    crate::arch::x86_64::serial::serial_write(b"[PERCPU] AP ");
+    print_u32(cpu_id);
+    crate::arch::x86_64::serial::serial_write(b" CPU ID: ");
+    print_u32(cpu_id);
+    crate::arch::x86_64::serial::serial_write(b", APIC ID: ");
+    print_u32(apic_id);
+    crate::arch::x86_64::serial::serial_write(b"\n[PERCPU] Kernel stack: 0x");
+    print_hex(stack_top);
+    crate::arch::x86_64::serial::serial_write(b"\n[PERCPU] Per-CPU data at: 0x");
+    print_hex(&AP_CPU_DATA[ap_index] as *const _ as u64);
+    crate::arch::x86_64::serial::serial_write(b"\n");
+
+    // Verify GS base was set correctly
+    let gs_base = get_gs_base();
+    if gs_base != &AP_CPU_DATA[ap_index] as *const _ as u64 {
+        crate::arch::x86_64::serial::serial_write(b"[PERCPU] WARNING: GS base mismatch!\n");
+        crate::arch::x86_64::serial::serial_write(b"[PERCPU] Expected: 0x");
+        print_hex(&AP_CPU_DATA[ap_index] as *const _ as u64);
+        crate::arch::x86_64::serial::serial_write(b"\n[PERCPU] Got: 0x");
+        print_hex(gs_base);
+        crate::arch::x86_64::serial::serial_write(b"\n");
+    } else {
+        crate::arch::x86_64::serial::serial_write(b"[PERCPU] GS base verified OK\n");
+    }
 }
 
 /// Helper to print u32 to serial

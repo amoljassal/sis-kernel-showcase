@@ -241,6 +241,21 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
     crate::arch::x86_64::syscall::init();
     serial::serial_write(b"[BOOT] SYSCALL/SYSRET enabled (using per-CPU kernel stacks)\n");
 
+    // M8 Part 2: Start Application Processors (SMP)
+    serial::serial_write(b"\n[BOOT] Milestone M8 Part 2: SMP Initialization\n");
+    match crate::arch::x86_64::smp::boot_aps() {
+        Ok(cpu_count) => {
+            serial::serial_write(b"[BOOT] SMP initialized: ");
+            print_u64(cpu_count as u64);
+            serial::serial_write(b" CPUs online\n");
+        }
+        Err(e) => {
+            serial::serial_write(b"[BOOT] SMP initialization failed: ");
+            serial::serial_write(e.as_bytes());
+            serial::serial_write(b"\n[BOOT] Continuing with single-processor mode\n");
+        }
+    }
+
     serial::serial_write(b"\n[BOOT] Early initialization complete\n");
     serial::serial_write(b"\n");
 
