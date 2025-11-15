@@ -68,10 +68,22 @@ use core::ptr;
 #[derive(Clone, Copy, Default)]
 pub struct BootInfo {
     pub rsdp_addr: u64,
+    pub framebuffer_addr: u64,
+    pub framebuffer_width: u32,
+    pub framebuffer_height: u32,
+    pub framebuffer_pitch: u32,
+    pub framebuffer_bpp: u32,  // bits per pixel
 }
 
 #[no_mangle]
-pub static mut BOOT_INFO: BootInfo = BootInfo { rsdp_addr: 0 };
+pub static mut BOOT_INFO: BootInfo = BootInfo {
+    rsdp_addr: 0,
+    framebuffer_addr: 0,
+    framebuffer_width: 0,
+    framebuffer_height: 0,
+    framebuffer_pitch: 0,
+    framebuffer_bpp: 0,
+};
 
 /// Record boot information provided by the loader (e.g., ACPI pointers).
 // Store debug info for later printing after serial is initialized
@@ -183,6 +195,24 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
     serial::serial_write(b"[BOOT] DEBUG: BOOT_INFO.rsdp_addr loaded as: 0x");
     print_hex_u64(DEBUG_BOOT_INFO_RSDP);
     serial::serial_write(b"\n");
+
+    // Print framebuffer information
+    let fb_info = boot_info();
+    if fb_info.framebuffer_addr != 0 {
+        serial::serial_write(b"[BOOT] Framebuffer: addr=0x");
+        print_hex_u64(fb_info.framebuffer_addr);
+        serial::serial_write(b" ");
+        print_decimal_u32(fb_info.framebuffer_width);
+        serial::serial_write(b"x");
+        print_decimal_u32(fb_info.framebuffer_height);
+        serial::serial_write(b" pitch=");
+        print_decimal_u32(fb_info.framebuffer_pitch);
+        serial::serial_write(b" bpp=");
+        print_decimal_u32(fb_info.framebuffer_bpp);
+        serial::serial_write(b"\n");
+    } else {
+        serial::serial_write(b"[BOOT] No framebuffer available (serial console only)\n");
+    }
 
     // Step 7: Print CPU information
     cpu::print_cpu_info();
@@ -652,6 +682,29 @@ fn print_hex_u8(n: u8) {
         hex_chars[(n & 0xF) as usize],
     ];
     serial::serial_write(&buf);
+}
+
+/// Helper function to print u32 as decimal to serial
+fn print_decimal_u32(mut n: u32) {
+    if n == 0 {
+        serial::serial_write(b"0");
+        return;
+    }
+
+    let mut buf = [0u8; 10]; // u32 max is 4294967295 (10 digits)
+    let mut i = 0;
+
+    while n > 0 {
+        buf[i] = b'0' + (n % 10) as u8;
+        n /= 10;
+        i += 1;
+    }
+
+    // Print in reverse order (we built the number backwards)
+    while i > 0 {
+        i -= 1;
+        serial::serial_write(&[buf[i]]);
+    }
 }
 
 /// Halt the CPU forever

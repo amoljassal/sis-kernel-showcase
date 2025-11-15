@@ -4,11 +4,11 @@
 extern crate alloc;
 
 use alloc::vec;
-use alloc::vec::Vec;
 use core::convert::Infallible;
 use core::fmt::Write;
 use core::mem;
 use uefi::prelude::*;
+use uefi::proto::console::gop::GraphicsOutput;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::file::{Directory, File, FileAttribute, FileMode, RegularFile};
 use uefi::proto::media::fs::SimpleFileSystem;
@@ -20,9 +20,12 @@ use uefi::{Handle, Identify};
 fn efi_main(handle: Handle, mut st: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut st).ok();
     let _ = st.stdout().reset(false);
-    let _ = st
-        .stdout()
-        .write_str("BOOT-ARM64 (UEFI)\r\nSIS UEFI loader v2 (VERBOSE)\r\n");
+
+    #[cfg(target_arch = "x86_64")]
+    let _ = st.stdout().write_str("BOOT-x86_64 (UEFI)\r\nSIS UEFI loader v2 (VERBOSE)\r\n");
+
+    #[cfg(target_arch = "aarch64")]
+    let _ = st.stdout().write_str("BOOT-ARM64 (UEFI)\r\nSIS UEFI loader v2 (VERBOSE)\r\n");
 
     match chainload_kernel(handle, st) {
         Ok(_) => unreachable!(),
@@ -106,10 +109,22 @@ struct Elf64Sym {
 #[derive(Clone, Copy, Default)]
 struct BootInfo {
     rsdp_addr: u64,
+    framebuffer_addr: u64,
+    framebuffer_width: u32,
+    framebuffer_height: u32,
+    framebuffer_pitch: u32,
+    framebuffer_bpp: u32,  // bits per pixel
 }
 
 // Keep BootInfo in static storage so the kernel can read it after we exit boot services.
-static mut BOOT_INFO: BootInfo = BootInfo { rsdp_addr: 0 };
+static mut BOOT_INFO: BootInfo = BootInfo {
+    rsdp_addr: 0,
+    framebuffer_addr: 0,
+    framebuffer_width: 0,
+    framebuffer_height: 0,
+    framebuffer_pitch: 0,
+    framebuffer_bpp: 0,
+};
 
 fn chainload_kernel(
     handle: Handle,
@@ -718,11 +733,49 @@ fn chainload_kernel(
     }
     }
 
+    // Query GOP (Graphics Output Protocol) for framebuffer information FIRST
+    let _ = st.stdout().write_str("Querying GOP for framebuffer...\r\n");
+    st.boot_services().stall(50_000);
+
+    let mut gop_found = false;
+    if let Ok(gop_handle) = st.boot_services().get_handle_for_protocol::<GraphicsOutput>() {
+        if let Ok(mut gop) = st.boot_services().open_protocol_exclusive::<GraphicsOutput>(gop_handle) {
+            let mode_info = gop.current_mode_info();
+            let mut framebuffer = gop.frame_buffer();
+
+            unsafe {
+                BOOT_INFO.framebuffer_addr = framebuffer.as_mut_ptr() as u64;
+                BOOT_INFO.framebuffer_width = mode_info.resolution().0 as u32;
+                BOOT_INFO.framebuffer_height = mode_info.resolution().1 as u32;
+                BOOT_INFO.framebuffer_pitch = mode_info.stride() as u32 * 4; // stride is in pixels, convert to bytes (4 bytes per pixel)
+                BOOT_INFO.framebuffer_bpp = 32; // GOP typically uses 32-bit color (BGRA)
+            }
+            gop_found = true;
+            // Drop gop here to release the borrow on st
+        }
+    }
+
+    if gop_found {
+        let _ = st.stdout().write_fmt(format_args!(
+            "GOP framebuffer: addr=0x{:x} {}x{} pitch={} bpp={}\r\n",
+            unsafe { BOOT_INFO.framebuffer_addr },
+            unsafe { BOOT_INFO.framebuffer_width },
+            unsafe { BOOT_INFO.framebuffer_height },
+            unsafe { BOOT_INFO.framebuffer_pitch },
+            unsafe { BOOT_INFO.framebuffer_bpp }
+        ));
+        st.boot_services().stall(100_000);
+    } else {
+        let _ = st.stdout().write_str("GOP protocol not available\r\n");
+        st.boot_services().stall(50_000);
+    }
+
     // Collect boot info (ACPI RSDP) before exiting boot services
     // Populate BootInfo (static) before exiting boot services
     let rsdp_addr: u64;
     unsafe {
-        BOOT_INFO = BootInfo::default();
+        // Set RSDP address (framebuffer fields already set above)
+        BOOT_INFO.rsdp_addr = 0; // Initialize to 0 before searching
         for table in st.config_table() {
             if table.guid == ACPI2_GUID {
                 BOOT_INFO.rsdp_addr = table.address as u64;
@@ -743,7 +796,47 @@ fn chainload_kernel(
         st.boot_services().stall(20_000);
     }
 
-    // (No symbol patching needed; RSDP is passed via BootInfo)
+    // (No symbol patching needed; RSDP and framebuffer info passed via BootInfo)
+
+    // Allocate a page for BOOT_INFO at a known address so the kernel can access it
+    // Use AllocateType::Address to allocate at a specific low memory address
+    let boot_info_phys_addr = 0x10000u64; // 64KB - should be accessible
+    let _ = st.stdout().write_fmt(format_args!(
+        "Allocating BOOT_INFO at 0x{:x}...\r\n",
+        boot_info_phys_addr
+    ));
+    st.boot_services().stall(50_000);
+
+    let boot_info_allocated = st
+        .boot_services()
+        .allocate_pages(
+            AllocateType::Address(boot_info_phys_addr),
+            MemoryType::LOADER_DATA,
+            1,
+        )
+        .ok();
+
+    let boot_info_final_ptr: *const BootInfo = if boot_info_allocated.is_some() {
+        // Copy BOOT_INFO to the allocated memory
+        unsafe {
+            let dest = boot_info_phys_addr as *mut BootInfo;
+            core::ptr::write_volatile(dest, BOOT_INFO);
+            let _ = st.stdout().write_str("BOOT_INFO copied to allocated memory\r\n");
+            st.boot_services().stall(50_000);
+            dest as *const BootInfo
+        }
+    } else {
+        // Fallback: use the static BOOT_INFO address
+        let _ = st.stdout().write_str("BOOT_INFO allocation failed, using static\r\n");
+        st.boot_services().stall(50_000);
+        unsafe { &BOOT_INFO as *const BootInfo }
+    };
+
+    let _ = st.stdout().write_fmt(format_args!(
+        "BOOT_INFO pointer: 0x{:x}\r\n",
+        boot_info_final_ptr as u64
+    ));
+    st.boot_services().stall(50_000);
 
     let _ = st.stdout().write_str("Exiting boot services...\r\n");
     st.boot_services().stall(100_000);
@@ -773,7 +866,21 @@ fn chainload_kernel(
     }
 
     // Call kernel entry with BootInfo pointer
-    let entry: extern "C" fn(*const BootInfo) -> ! = unsafe { mem::transmute(entry_addr as usize) };
-    let boot_info_ptr: *const BootInfo = unsafe { &BOOT_INFO };
-    entry(boot_info_ptr)
+    // Use inline assembly to ensure the pointer is passed correctly in RDI (x86_64 first parameter)
+    #[cfg(target_arch = "x86_64")]
+    unsafe {
+        core::arch::asm!(
+            "mov rdi, {boot_info}",
+            "call {entry}",
+            boot_info = in(reg) boot_info_final_ptr as u64,
+            entry = in(reg) entry_addr,
+            options(noreturn)
+        );
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        let entry: extern "C" fn(*const BootInfo) -> ! = mem::transmute(entry_addr as usize);
+        entry(boot_info_final_ptr)
+    }
 }
