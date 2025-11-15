@@ -3,6 +3,7 @@
 // M8: Driver hardening infrastructure
 pub mod timeout;   // Timeout utilities for hardware operations
 pub mod error;     // Common driver error types
+pub mod selftest;  // Self-test framework for drivers
 
 pub mod char;
 pub mod block;  // Block device drivers (SDHCI, etc.) - M1
