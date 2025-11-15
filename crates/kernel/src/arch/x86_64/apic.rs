@@ -141,6 +141,30 @@ const APIC_LVT_MASKED: u32 = 1 << 16;        // Interrupt masked
 const APIC_LVT_TIMER_PERIODIC: u32 = 1 << 17; // Periodic mode
 const APIC_LVT_TIMER_DEADLINE: u32 = 2 << 17; // TSC-Deadline mode
 
+// ICR (Interrupt Command Register) bits - for IPIs
+const ICR_DELIVERY_MODE_FIXED: u32 = 0 << 8;      // Fixed delivery
+const ICR_DELIVERY_MODE_LOWEST: u32 = 1 << 8;     // Lowest priority
+const ICR_DELIVERY_MODE_SMI: u32 = 2 << 8;        // SMI
+const ICR_DELIVERY_MODE_NMI: u32 = 4 << 8;        // NMI
+const ICR_DELIVERY_MODE_INIT: u32 = 5 << 8;       // INIT IPI
+const ICR_DELIVERY_MODE_SIPI: u32 = 6 << 8;       // SIPI (Startup IPI)
+
+const ICR_DEST_MODE_PHYSICAL: u32 = 0 << 11;      // Physical destination
+const ICR_DEST_MODE_LOGICAL: u32 = 1 << 11;       // Logical destination
+
+const ICR_DELIVERY_PENDING: u32 = 1 << 12;        // Delivery status (read-only)
+
+const ICR_LEVEL_DEASSERT: u32 = 0 << 14;          // De-assert level
+const ICR_LEVEL_ASSERT: u32 = 1 << 14;            // Assert level
+
+const ICR_TRIGGER_EDGE: u32 = 0 << 15;            // Edge triggered
+const ICR_TRIGGER_LEVEL: u32 = 1 << 15;           // Level triggered
+
+const ICR_DEST_SHORTHAND_NONE: u32 = 0 << 18;     // No shorthand
+const ICR_DEST_SHORTHAND_SELF: u32 = 1 << 18;     // Send to self
+const ICR_DEST_SHORTHAND_ALL: u32 = 2 << 18;      // All including self
+const ICR_DEST_SHORTHAND_OTHERS: u32 = 3 << 18;   // All excluding self
+
 /// APIC operating mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApicMode {
@@ -150,6 +174,33 @@ pub enum ApicMode {
     XApic,
     /// x2APIC mode (MSR-based)
     X2Apic,
+}
+
+/// IPI (Inter-Processor Interrupt) types
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IpiType {
+    /// Fixed interrupt with specified vector
+    Fixed(u8),
+    /// INIT IPI - resets target CPU to initial state
+    Init,
+    /// SIPI (Startup IPI) - starts CPU at specified 4K page
+    /// Page number is bits 19:12 of startup address (i.e., address >> 12)
+    Startup(u8),
+    /// NMI (Non-Maskable Interrupt)
+    Nmi,
+}
+
+/// IPI destination
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IpiDestination {
+    /// Specific APIC ID (physical mode)
+    Physical(u32),
+    /// Send to self
+    SelfOnly,
+    /// Send to all CPUs (including self)
+    AllIncludingSelf,
+    /// Send to all CPUs (excluding self)
+    AllExcludingSelf,
 }
 
 /// Local APIC controller
@@ -366,25 +417,105 @@ impl LocalApic {
     ///
     /// # Arguments
     ///
-    /// * `dest_apic_id` - Destination APIC ID
-    /// * `vector` - Interrupt vector number
+    /// * `destination` - IPI destination (specific CPU, self, or all)
+    /// * `ipi_type` - Type of IPI to send (Fixed, INIT, SIPI, NMI)
     ///
     /// # Safety
     ///
-    /// Destination CPU must exist and have a handler for the vector.
-    pub unsafe fn send_ipi(&self, dest_apic_id: u32, vector: u8) {
+    /// - For Fixed IPIs: destination CPU must have a handler for the vector
+    /// - For INIT: destination CPU will be reset to initial state
+    /// - For SIPI: startup vector must be a valid 4K-aligned address >> 12
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Send INIT IPI to APIC ID 1
+    /// apic.send_ipi(IpiDestination::Physical(1), IpiType::Init);
+    ///
+    /// // Send SIPI to start CPU at 0x8000
+    /// apic.send_ipi(IpiDestination::Physical(1), IpiType::Startup(0x08));
+    ///
+    /// // Send fixed interrupt vector 0x30 to all other CPUs
+    /// apic.send_ipi(IpiDestination::AllExcludingSelf, IpiType::Fixed(0x30));
+    /// ```
+    pub unsafe fn send_ipi(&self, destination: IpiDestination, ipi_type: IpiType) {
+        // Build ICR value
+        let mut icr_low: u32 = 0;
+        let mut dest_apic_id: u32 = 0;
+
+        // Set delivery mode and vector based on IPI type
+        match ipi_type {
+            IpiType::Fixed(vector) => {
+                icr_low |= ICR_DELIVERY_MODE_FIXED;
+                icr_low |= vector as u32;
+            }
+            IpiType::Init => {
+                icr_low |= ICR_DELIVERY_MODE_INIT;
+                icr_low |= ICR_TRIGGER_LEVEL | ICR_LEVEL_ASSERT;
+            }
+            IpiType::Startup(page) => {
+                icr_low |= ICR_DELIVERY_MODE_SIPI;
+                icr_low |= page as u32; // Startup address is page << 12
+            }
+            IpiType::Nmi => {
+                icr_low |= ICR_DELIVERY_MODE_NMI;
+            }
+        }
+
+        // Set destination mode and shorthand
+        match destination {
+            IpiDestination::Physical(apic_id) => {
+                icr_low |= ICR_DEST_MODE_PHYSICAL | ICR_DEST_SHORTHAND_NONE;
+                dest_apic_id = apic_id;
+            }
+            IpiDestination::SelfOnly => {
+                icr_low |= ICR_DEST_SHORTHAND_SELF;
+            }
+            IpiDestination::AllIncludingSelf => {
+                icr_low |= ICR_DEST_SHORTHAND_ALL;
+            }
+            IpiDestination::AllExcludingSelf => {
+                icr_low |= ICR_DEST_SHORTHAND_OTHERS;
+            }
+        }
+
+        // Send the IPI
         match self.mode {
             ApicMode::XApic => {
                 // Write destination to ICR high
                 self.write_xapic(APIC_REG_ICR_HIGH, dest_apic_id << 24);
-                // Write vector and delivery mode to ICR low (triggers IPI)
-                self.write_xapic(APIC_REG_ICR_LOW, vector as u32);
+                // Write command to ICR low (triggers IPI)
+                self.write_xapic(APIC_REG_ICR_LOW, icr_low);
             }
             ApicMode::X2Apic => {
                 // In x2APIC, ICR is a single 64-bit register
-                let icr = ((dest_apic_id as u64) << 32) | (vector as u64);
+                let icr = ((dest_apic_id as u64) << 32) | (icr_low as u64);
                 let msr = X2APIC_MSR_BASE + (APIC_REG_ICR_LOW >> 4);
                 crate::arch::x86_64::wrmsr(msr, icr);
+            }
+            ApicMode::Disabled => {}
+        }
+    }
+
+    /// Wait for IPI delivery to complete
+    ///
+    /// Polls the ICR delivery status bit until the IPI has been sent.
+    /// Should be called after send_ipi() for INIT and SIPI IPIs.
+    ///
+    /// # Safety
+    ///
+    /// May block for a short time (~10-20 microseconds).
+    pub unsafe fn wait_ipi_delivery(&self) {
+        match self.mode {
+            ApicMode::XApic => {
+                // Poll ICR delivery status bit (bit 12)
+                while (self.read_xapic(APIC_REG_ICR_LOW) & ICR_DELIVERY_PENDING) != 0 {
+                    core::hint::spin_loop();
+                }
+            }
+            ApicMode::X2Apic => {
+                // In x2APIC mode, polling is not required
+                // The write to ICR is serializing
             }
             ApicMode::Disabled => {}
         }
@@ -460,6 +591,13 @@ pub unsafe fn eoi() {
 /// Get the Local APIC ID
 pub fn local_apic_id() -> u32 {
     LOCAL_APIC.lock().as_ref().map(|apic| apic.id()).unwrap_or(0)
+}
+
+/// Get a reference to the Local APIC
+///
+/// Returns None if APIC is not initialized.
+pub fn get() -> Option<spin::MutexGuard<'static, Option<LocalApic>>> {
+    Some(LOCAL_APIC.lock())
 }
 
 /// Helper to print u32
