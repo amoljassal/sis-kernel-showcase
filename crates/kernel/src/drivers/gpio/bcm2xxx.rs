@@ -16,9 +16,11 @@
 //! - GPLEV0-GPLEV1: Pin level registers (read current pin state)
 //!
 //! ## M6 Implementation (GPIO/Mailbox)
+//! ## M8 Hardening Applied: Input validation, error handling, bounds checking
 
 use core::ptr::{read_volatile, write_volatile};
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use crate::drivers::{DriverError, DriverResult, Validator};
 
 /// GPIO register offsets from base address
 const GPFSEL0: usize = 0x00;    // Function Select 0 (GPIO 0-9)
@@ -40,6 +42,9 @@ const GPLEV1: usize = 0x38;     // Pin Level 1 (GPIO 32-53)
 const GPPUD: usize = 0x94;      // Pull-up/down control
 const GPPUDCLK0: usize = 0x98;  // Pull-up/down clock 0 (GPIO 0-31)
 const GPPUDCLK1: usize = 0x9C;  // Pull-up/down clock 1 (GPIO 32-53)
+
+/// Maximum GPIO pin number (BCM2712 has 54 pins: 0-53)
+pub const MAX_GPIO_PIN: u32 = 53;
 
 /// GPIO pin function modes
 #[repr(u32)]
@@ -85,14 +90,20 @@ impl BcmGpio {
     /// * `pin` - GPIO pin number (0-53)
     /// * `func` - Function mode to set
     ///
+    /// # Returns
+    /// `Ok(())` on success, `Err(DriverError)` on invalid pin
+    ///
     /// # Example
     /// ```
-    /// gpio.set_function(42, GpioFunction::Output);  // Set GPIO 42 as output
+    /// gpio.set_function(42, GpioFunction::Output)?;  // Set GPIO 42 as output
     /// ```
-    pub fn set_function(&self, pin: u32, func: GpioFunction) {
-        if pin >= 54 {
-            return; // Invalid pin number
-        }
+    ///
+    /// # M8 Hardening
+    /// - Validates pin number is in range
+    /// - Returns error instead of silent failure
+    pub fn set_function(&self, pin: u32, func: GpioFunction) -> DriverResult<()> {
+        // M8: Input validation
+        Validator::check_gpio_pin(pin, MAX_GPIO_PIN + 1)?;
 
         let reg_offset = GPFSEL0 + ((pin / 10) * 4) as usize;
         let bit_offset = (pin % 10) * 3;
@@ -103,6 +114,8 @@ impl BcmGpio {
             val |= (func as u32) << bit_offset;  // Set new function
             self.write_reg(reg_offset, val);
         }
+
+        Ok(())
     }
 
     /// Set a GPIO pin high (output mode)
@@ -110,14 +123,9 @@ impl BcmGpio {
     /// # Arguments
     /// * `pin` - GPIO pin number (0-53)
     ///
-    /// # Example
-    /// ```
-    /// gpio.set_pin(42);  // Set GPIO 42 high
-    /// ```
-    pub fn set_pin(&self, pin: u32) {
-        if pin >= 54 {
-            return;
-        }
+    /// # M8 Hardening: Validates pin number
+    pub fn set_pin(&self, pin: u32) -> DriverResult<()> {
+        Validator::check_gpio_pin(pin, MAX_GPIO_PIN + 1)?;
 
         let (reg_offset, bit) = if pin < 32 {
             (GPSET0, pin)
@@ -128,6 +136,8 @@ impl BcmGpio {
         unsafe {
             self.write_reg(reg_offset, 1 << bit);
         }
+
+        Ok(())
     }
 
     /// Clear a GPIO pin low (output mode)
@@ -135,14 +145,9 @@ impl BcmGpio {
     /// # Arguments
     /// * `pin` - GPIO pin number (0-53)
     ///
-    /// # Example
-    /// ```
-    /// gpio.clear_pin(42);  // Set GPIO 42 low
-    /// ```
-    pub fn clear_pin(&self, pin: u32) {
-        if pin >= 54 {
-            return;
-        }
+    /// # M8 Hardening: Validates pin number
+    pub fn clear_pin(&self, pin: u32) -> DriverResult<()> {
+        Validator::check_gpio_pin(pin, MAX_GPIO_PIN + 1)?;
 
         let (reg_offset, bit) = if pin < 32 {
             (GPCLR0, pin)
@@ -153,6 +158,8 @@ impl BcmGpio {
         unsafe {
             self.write_reg(reg_offset, 1 << bit);
         }
+
+        Ok(())
     }
 
     /// Read the current level of a GPIO pin
@@ -161,11 +168,11 @@ impl BcmGpio {
     /// * `pin` - GPIO pin number (0-53)
     ///
     /// # Returns
-    /// `true` if pin is high, `false` if pin is low
-    pub fn read_pin(&self, pin: u32) -> bool {
-        if pin >= 54 {
-            return false;
-        }
+    /// `Ok(true)` if pin is high, `Ok(false)` if pin is low
+    ///
+    /// # M8 Hardening: Validates pin number, returns error instead of false
+    pub fn read_pin(&self, pin: u32) -> DriverResult<bool> {
+        Validator::check_gpio_pin(pin, MAX_GPIO_PIN + 1)?;
 
         let (reg_offset, bit) = if pin < 32 {
             (GPLEV0, pin)
@@ -175,7 +182,7 @@ impl BcmGpio {
 
         unsafe {
             let val = self.read_reg(reg_offset);
-            (val & (1 << bit)) != 0
+            Ok((val & (1 << bit)) != 0)
         }
     }
 
@@ -183,12 +190,15 @@ impl BcmGpio {
     ///
     /// # Arguments
     /// * `pin` - GPIO pin number (0-53)
-    pub fn toggle_pin(&self, pin: u32) {
-        if self.read_pin(pin) {
-            self.clear_pin(pin);
+    ///
+    /// # M8 Hardening: Proper error propagation
+    pub fn toggle_pin(&self, pin: u32) -> DriverResult<()> {
+        if self.read_pin(pin)? {
+            self.clear_pin(pin)?;
         } else {
-            self.set_pin(pin);
+            self.set_pin(pin)?;
         }
+        Ok(())
     }
 
     /// Set pull-up/down resistor for a GPIO pin
@@ -196,10 +206,12 @@ impl BcmGpio {
     /// # Arguments
     /// * `pin` - GPIO pin number (0-53)
     /// * `pull` - Pull mode (Off, Down, Up)
-    pub fn set_pull(&self, pin: u32, pull: GpioPull) {
-        if pin >= 54 {
-            return;
-        }
+    ///
+    /// # M8 Hardening
+    /// - Validates pin number
+    /// - Uses proper delay timing
+    pub fn set_pull(&self, pin: u32, pull: GpioPull) -> DriverResult<()> {
+        Validator::check_gpio_pin(pin, MAX_GPIO_PIN + 1)?;
 
         unsafe {
             // Set pull mode in GPPUD register
@@ -227,6 +239,8 @@ impl BcmGpio {
             self.write_reg(GPPUD, 0);
             self.write_reg(clk_offset, 0);
         }
+
+        Ok(())
     }
 
     #[inline]
@@ -277,45 +291,49 @@ pub fn is_initialized() -> bool {
 }
 
 /// Set a GPIO pin function (convenience wrapper)
-pub fn set_function(pin: u32, func: GpioFunction) {
-    if let Some(gpio) = get_gpio() {
-        gpio.set_function(pin, func);
-    }
+///
+/// # M8 Hardening: Returns DriverError if not initialized or invalid pin
+pub fn set_function(pin: u32, func: GpioFunction) -> DriverResult<()> {
+    let gpio = get_gpio().ok_or(DriverError::NotInitialized)?;
+    gpio.set_function(pin, func)
 }
 
 /// Set a GPIO pin high (convenience wrapper)
-pub fn set_pin(pin: u32) {
-    if let Some(gpio) = get_gpio() {
-        gpio.set_pin(pin);
-    }
+///
+/// # M8 Hardening: Returns DriverError if not initialized or invalid pin
+pub fn set_pin(pin: u32) -> DriverResult<()> {
+    let gpio = get_gpio().ok_or(DriverError::NotInitialized)?;
+    gpio.set_pin(pin)
 }
 
 /// Clear a GPIO pin low (convenience wrapper)
-pub fn clear_pin(pin: u32) {
-    if let Some(gpio) = get_gpio() {
-        gpio.clear_pin(pin);
-    }
+///
+/// # M8 Hardening: Returns DriverError if not initialized or invalid pin
+pub fn clear_pin(pin: u32) -> DriverResult<()> {
+    let gpio = get_gpio().ok_or(DriverError::NotInitialized)?;
+    gpio.clear_pin(pin)
 }
 
 /// Read a GPIO pin level (convenience wrapper)
-pub fn read_pin(pin: u32) -> bool {
-    if let Some(gpio) = get_gpio() {
-        gpio.read_pin(pin)
-    } else {
-        false
-    }
+///
+/// # M8 Hardening: Returns DriverError if not initialized or invalid pin
+pub fn read_pin(pin: u32) -> DriverResult<bool> {
+    let gpio = get_gpio().ok_or(DriverError::NotInitialized)?;
+    gpio.read_pin(pin)
 }
 
 /// Toggle a GPIO pin (convenience wrapper)
-pub fn toggle_pin(pin: u32) {
-    if let Some(gpio) = get_gpio() {
-        gpio.toggle_pin(pin);
-    }
+///
+/// # M8 Hardening: Returns DriverError if not initialized or invalid pin
+pub fn toggle_pin(pin: u32) -> DriverResult<()> {
+    let gpio = get_gpio().ok_or(DriverError::NotInitialized)?;
+    gpio.toggle_pin(pin)
 }
 
 /// Set pull resistor (convenience wrapper)
-pub fn set_pull(pin: u32, pull: GpioPull) {
-    if let Some(gpio) = get_gpio() {
-        gpio.set_pull(pin, pull);
-    }
+///
+/// # M8 Hardening: Returns DriverError if not initialized or invalid pin
+pub fn set_pull(pin: u32, pull: GpioPull) -> DriverResult<()> {
+    let gpio = get_gpio().ok_or(DriverError::NotInitialized)?;
+    gpio.set_pull(pin, pull)
 }

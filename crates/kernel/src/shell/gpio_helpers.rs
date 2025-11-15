@@ -2,8 +2,10 @@
 //!
 //! Provides interactive commands for testing and controlling GPIO pins.
 //! Part of M6 (GPIO/Mailbox) implementation.
+//! M8 Hardening: Error handling for all GPIO operations
 
 use crate::drivers::gpio::{GpioFunction, GpioPull};
+use crate::drivers::DriverError;
 
 impl super::Shell {
     /// GPIO command handler
@@ -36,11 +38,13 @@ impl super::Shell {
                     return;
                 }
                 if let Some(pin) = self.parse_number(args[1].as_bytes()) {
-                    crate::drivers::gpio::set_pin(pin as u32);
-                    unsafe {
-                        crate::uart_print(b"[GPIO] Pin ");
-                        self.print_number_simple(pin);
-                        crate::uart_print(b" set HIGH\n");
+                    match crate::drivers::gpio::set_pin(pin as u32) {
+                        Ok(()) => unsafe {
+                            crate::uart_print(b"[GPIO] Pin ");
+                            self.print_number_simple(pin);
+                            crate::uart_print(b" set HIGH\n");
+                        },
+                        Err(e) => self.print_gpio_error(e),
                     }
                 }
             }
@@ -50,11 +54,13 @@ impl super::Shell {
                     return;
                 }
                 if let Some(pin) = self.parse_number(args[1].as_bytes()) {
-                    crate::drivers::gpio::clear_pin(pin as u32);
-                    unsafe {
-                        crate::uart_print(b"[GPIO] Pin ");
-                        self.print_number_simple(pin);
-                        crate::uart_print(b" set LOW\n");
+                    match crate::drivers::gpio::clear_pin(pin as u32) {
+                        Ok(()) => unsafe {
+                            crate::uart_print(b"[GPIO] Pin ");
+                            self.print_number_simple(pin);
+                            crate::uart_print(b" set LOW\n");
+                        },
+                        Err(e) => self.print_gpio_error(e),
                     }
                 }
             }
@@ -64,11 +70,13 @@ impl super::Shell {
                     return;
                 }
                 if let Some(pin) = self.parse_number(args[1].as_bytes()) {
-                    crate::drivers::gpio::toggle_pin(pin as u32);
-                    unsafe {
-                        crate::uart_print(b"[GPIO] Pin ");
-                        self.print_number_simple(pin);
-                        crate::uart_print(b" toggled\n");
+                    match crate::drivers::gpio::toggle_pin(pin as u32) {
+                        Ok(()) => unsafe {
+                            crate::uart_print(b"[GPIO] Pin ");
+                            self.print_number_simple(pin);
+                            crate::uart_print(b" toggled\n");
+                        },
+                        Err(e) => self.print_gpio_error(e),
                     }
                 }
             }
@@ -78,16 +86,18 @@ impl super::Shell {
                     return;
                 }
                 if let Some(pin) = self.parse_number(args[1].as_bytes()) {
-                    let level = crate::drivers::gpio::read_pin(pin as u32);
-                    unsafe {
-                        crate::uart_print(b"[GPIO] Pin ");
-                        self.print_number_simple(pin);
-                        crate::uart_print(b" = ");
-                        if level {
-                            crate::uart_print(b"HIGH\n");
-                        } else {
-                            crate::uart_print(b"LOW\n");
-                        }
+                    match crate::drivers::gpio::read_pin(pin as u32) {
+                        Ok(level) => unsafe {
+                            crate::uart_print(b"[GPIO] Pin ");
+                            self.print_number_simple(pin);
+                            crate::uart_print(b" = ");
+                            if level {
+                                crate::uart_print(b"HIGH\n");
+                            } else {
+                                crate::uart_print(b"LOW\n");
+                            }
+                        },
+                        Err(e) => self.print_gpio_error(e),
                     }
                 }
             }
@@ -97,11 +107,13 @@ impl super::Shell {
                     return;
                 }
                 if let Some(pin) = self.parse_number(args[1].as_bytes()) {
-                    crate::drivers::gpio::set_function(pin as u32, GpioFunction::Output);
-                    unsafe {
-                        crate::uart_print(b"[GPIO] Pin ");
-                        self.print_number_simple(pin);
-                        crate::uart_print(b" configured as OUTPUT\n");
+                    match crate::drivers::gpio::set_function(pin as u32, GpioFunction::Output) {
+                        Ok(()) => unsafe {
+                            crate::uart_print(b"[GPIO] Pin ");
+                            self.print_number_simple(pin);
+                            crate::uart_print(b" configured as OUTPUT\n");
+                        },
+                        Err(e) => self.print_gpio_error(e),
                     }
                 }
             }
@@ -111,11 +123,13 @@ impl super::Shell {
                     return;
                 }
                 if let Some(pin) = self.parse_number(args[1].as_bytes()) {
-                    crate::drivers::gpio::set_function(pin as u32, GpioFunction::Input);
-                    unsafe {
-                        crate::uart_print(b"[GPIO] Pin ");
-                        self.print_number_simple(pin);
-                        crate::uart_print(b" configured as INPUT\n");
+                    match crate::drivers::gpio::set_function(pin as u32, GpioFunction::Input) {
+                        Ok(()) => unsafe {
+                            crate::uart_print(b"[GPIO] Pin ");
+                            self.print_number_simple(pin);
+                            crate::uart_print(b" configured as INPUT\n");
+                        },
+                        Err(e) => self.print_gpio_error(e),
                     }
                 }
             }
@@ -141,13 +155,23 @@ impl super::Shell {
                     }
 
                     // Configure as output
-                    crate::drivers::gpio::set_function(pin as u32, GpioFunction::Output);
+                    if let Err(e) = crate::drivers::gpio::set_function(pin as u32, GpioFunction::Output) {
+                        self.print_gpio_error(e);
+                        return;
+                    }
 
                     // Blink
                     for i in 0..count {
-                        crate::drivers::gpio::set_pin(pin as u32);
+                        if let Err(e) = crate::drivers::gpio::set_pin(pin as u32) {
+                            self.print_gpio_error(e);
+                            return;
+                        }
                         crate::time::sleep_ms(500);
-                        crate::drivers::gpio::clear_pin(pin as u32);
+
+                        if let Err(e) = crate::drivers::gpio::clear_pin(pin as u32) {
+                            self.print_gpio_error(e);
+                            return;
+                        }
                         crate::time::sleep_ms(500);
 
                         unsafe {
@@ -187,6 +211,25 @@ impl super::Shell {
             }
             crate::uart_print(b"\nUsage: gpio <command> [args]\n");
             crate::uart_print(b"Commands: set, clear, toggle, read, output, input, blink\n");
+        }
+    }
+
+    /// Print GPIO error message
+    /// M8 Hardening: Comprehensive error reporting
+    fn print_gpio_error(&self, error: DriverError) {
+        unsafe {
+            crate::uart_print(b"[GPIO ERROR] ");
+            match error {
+                DriverError::InvalidParameter => crate::uart_print(b"Invalid pin number (valid: 0-53)\n"),
+                DriverError::NotInitialized => crate::uart_print(b"GPIO not initialized\n"),
+                DriverError::HardwareError => crate::uart_print(b"Hardware error\n"),
+                DriverError::Timeout(_) => crate::uart_print(b"Operation timed out\n"),
+                _ => {
+                    crate::uart_print(b"Error code ");
+                    self.print_number_simple(error.code() as u64);
+                    crate::uart_print(b"\n");
+                }
+            }
         }
     }
 }
