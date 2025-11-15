@@ -7,7 +7,7 @@ pub mod validation;
 use crate::lib::error::{Errno, Result};
 use alloc::format;
 use alloc::sync::Arc;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 /// Syscall error type (alias for Errno)

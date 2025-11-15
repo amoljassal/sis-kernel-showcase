@@ -55,6 +55,7 @@ pub enum CtrlError {
     NoGraph,
     Oversize,
     AuthFailed,
+    IoError,
 }
 
 fn read_token(payload: &[u8]) -> Option<(u64, &[u8])> {
