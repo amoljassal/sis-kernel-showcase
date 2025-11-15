@@ -178,6 +178,7 @@ pub fn unmap_page(page_table: &mut PageTable, virt_addr: u64) {
 }
 
 /// Flush TLB for a specific address
+#[cfg(target_arch = "aarch64")]
 #[inline]
 pub fn flush_tlb(virt_addr: u64) {
     unsafe {
@@ -192,7 +193,16 @@ pub fn flush_tlb(virt_addr: u64) {
     }
 }
 
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub fn flush_tlb(virt_addr: u64) {
+    unsafe {
+        core::arch::asm!("invlpg [{}]", in(reg) virt_addr, options(nostack));
+    }
+}
+
 /// Flush entire TLB
+#[cfg(target_arch = "aarch64")]
 #[inline]
 pub fn flush_tlb_all() {
     unsafe {
@@ -203,6 +213,17 @@ pub fn flush_tlb_all() {
             "isb",
             options(nostack)
         );
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub fn flush_tlb_all() {
+    // Reload CR3 to invalidate all non-global entries
+    use x86_64::registers::control::Cr3;
+    let (frame, flags) = Cr3::read();
+    unsafe {
+        Cr3::write(frame, flags);
     }
 }
 
@@ -325,18 +346,26 @@ pub fn get_pte_mut(
 
 /// Switch to user address space (sets TTBR0_EL1)
 #[inline]
+#[cfg(target_arch = "aarch64")]
+#[inline]
 pub fn switch_user_mm(ttbr0: u64) {
     unsafe {
         core::arch::asm!(
-            "msr ttbr0_el1, {ttbr0}",  // Set TTBR0_EL1
-            "dsb ish",                   // Ensure write completes
-            "tlbi vmalle1is",            // Invalidate all TLB entries for EL1
-            "dsb ish",                   // Ensure TLB invalidation completes
-            "isb",                       // Instruction barrier
+            "msr ttbr0_el1, {ttbr0}",
+            "dsb ish",
+            "tlbi vmalle1is",
+            "dsb ish",
+            "isb",
             ttbr0 = in(reg) ttbr0,
             options(nostack)
         );
     }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub fn switch_user_mm(_ttbr0: u64) {
+    // User address spaces are not yet implemented on x86_64 bring-up.
 }
 
 /// Allocate a new page table root for user space
@@ -529,4 +558,3 @@ pub fn copy_page_table_for_fork(
 
     Ok(())
 }
-

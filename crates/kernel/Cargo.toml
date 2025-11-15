@@ -15,9 +15,9 @@ bitflags = { version = "2.9.1", default-features = false }
 half = { version = "2.4.1", default-features = false, features = ["bytemuck"] }
 heapless = { version = "0.8", default-features = false }
 libm = { version = "0.2", default-features = false }
-sha2 = { version = "0.10", default-features = false, features = ["force-soft"] }
-ed25519-dalek = { version = "2", default-features = false, features = ["alloc"] }
-signature = { version = "2", default-features = false }
+sha2 = { version = "0.10", default-features = false, features = ["force-soft"], optional = true }
+ed25519-dalek = { version = "2", default-features = false, features = ["alloc"], optional = true }
+signature = { version = "2", default-features = false, optional = true }
 smoltcp = { version = "0.11", default-features = false, features = [
     "proto-ipv4",
     "proto-dhcpv4",
@@ -38,6 +38,7 @@ x86_64 = { version = "=0.14.13", default-features = false, features = ["instruct
 uart_16550 = { version = "0.2.0", default-features = false }
 pic8259 = { version = "0.10.1", default-features = false }
 bootloader_api = { version = "0.11.12", default-features = false }
+raw-cpuid = { version = "11.0.2", default-features = false }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 
@@ -63,7 +64,7 @@ graph-spsc-debug = [] # Debug SPSC ring demo with progress prints
 virtio-console = []   # Enable VirtIO console driver path during bring-up
 graph-autostats = []  # Auto-create a baseline graph and emit graph_stats_* METRICs
 llm = []             # Kernel-resident LLM operator/service (feature-gated)
-crypto-real = []     # Enable real SHA-256 + Ed25519 cryptography (production mode)
+crypto-real = ["sha2", "ed25519-dalek", "signature"]     # Enable real SHA-256 + Ed25519 cryptography (production mode)
 demos = []           # Include demo commands (aidemo/graphdemo/...); off for hw-minimal
 hw-minimal = []      # Preset marker for hardware-lean builds (docs/script controlled)
 syscall-verbose = [] # Verbose syscall tracing
@@ -86,5 +87,6 @@ agentsys = []         # Capability-based system for LLM agents
 [build-dependencies]
 chrono = "0.4"
 
-[target.'cfg(target_arch = "x86_64")'.build-dependencies]
-bootloader = { version = "0.11.12", default-features = false, features = ["bios"] }
+# Bootloader removed - x86_64 uses UEFI boot via crates/uefi-boot instead
+# [target.'cfg(target_arch = "x86_64")'.build-dependencies]
+# bootloader = { version = "0.11.12", default-features = false, features = ["bios"] }

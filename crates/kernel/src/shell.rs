@@ -111,12 +111,12 @@ impl Shell {
     /// Main shell loop
     pub fn run(&mut self) {
         // Briefly mask IRQs around initial banner prints to avoid interleaving during bring-up
-        unsafe { core::arch::asm!("msr daifset, #2", options(nostack, preserves_flags)); }
+        unsafe { Self::mask_shell_irqs(); }
         unsafe {
             crate::uart_print(b"\n=== SIS Kernel Shell ===\n");
             crate::uart_print(b"Type 'help' for available commands\n\n");
         }
-        unsafe { core::arch::asm!("msr daifclr, #2", options(nostack, preserves_flags)); }
+        unsafe { Self::unmask_shell_irqs(); }
 
         while self.running {
             self.print_prompt();
@@ -139,6 +139,8 @@ impl Shell {
     }
 
     /// Print shell prompt
+
+    /// Print shell prompt
     fn print_prompt(&self) {
         unsafe {
             crate::uart_print(SHELL_PROMPT);
@@ -158,9 +160,9 @@ impl Shell {
                 *ptr.add(len) = 0;
             }
 
-            len
-        }
+        len
     }
+}
 
     /// Process a command
     fn process_command(&mut self, cmd_len: usize) {
@@ -1094,14 +1096,22 @@ impl Shell {
                 use core::sync::atomic::Ordering;
                 // If already enabled and timer armed, skip re-arm to be idempotent
                 let already_enabled = crate::autonomy::AUTONOMOUS_CONTROL.is_enabled();
-                let mut timer_enabled: u64;
                 #[cfg(target_arch = "aarch64")]
-                unsafe {
-                    core::arch::asm!("mrs {x}, cntp_ctl_el0", x = out(reg) timer_enabled);
+                {
+                    let mut timer_enabled: u64 = 0;
+                    unsafe {
+                        core::arch::asm!("mrs {x}, cntp_ctl_el0", x = out(reg) timer_enabled);
+                    }
+
+                    if already_enabled && (timer_enabled & 1) == 1 {
+                        unsafe { crate::uart_print(b"[AUTOCTL] Already enabled; skip re-arm (use 'autoctl reset' to force)\n"); }
+                        return;
+                    }
                 }
 
-                if already_enabled && (timer_enabled & 1) == 1 {
-                    unsafe { crate::uart_print(b"[AUTOCTL] Already enabled; skip re-arm (use 'autoctl reset' to force)\n"); }
+                #[cfg(not(target_arch = "aarch64"))]
+                if already_enabled {
+                    unsafe { crate::uart_print(b"[AUTOCTL] Already enabled; timer controls unavailable on this architecture\n"); }
                     return;
                 }
 
@@ -2883,6 +2893,30 @@ pub fn print_number_signed(num: i64) {
         print_number_simple((-num) as u64);
     } else {
         print_number_simple(num as u64);
+    }
+}
+
+#[inline]
+unsafe fn mask_shell_irqs() {
+    #[cfg(target_arch = "aarch64")]
+    {
+        core::arch::asm!("msr daifset, #2", options(nostack, preserves_flags));
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        core::arch::asm!("cli", options(nostack, preserves_flags));
+    }
+}
+
+#[inline]
+unsafe fn unmask_shell_irqs() {
+    #[cfg(target_arch = "aarch64")]
+    {
+        core::arch::asm!("msr daifclr, #2", options(nostack, preserves_flags));
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        core::arch::asm!("sti", options(nostack, preserves_flags));
     }
 }
 

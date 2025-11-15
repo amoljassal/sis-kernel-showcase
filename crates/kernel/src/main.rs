@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(alloc_error_handler)]
+#![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 // CI lint gate: when built with `--features strict`, fail on any warning
 #![cfg_attr(feature = "strict", deny(warnings))]
 #![cfg_attr(feature = "strict", deny(unsafe_op_in_unsafe_fn))]
@@ -32,7 +33,10 @@ pub mod net;
 // Security subsystem (Phase D)
 pub mod security;
 // SMP subsystem (Phase E)
+#[cfg(not(target_arch = "x86_64"))]
 pub mod smp;
+#[cfg(target_arch = "x86_64")]
+pub use crate::arch::x86_64::smp as smp;
 // Filesystem layer with journaling (Phase F)
 pub mod fs;
 // Graphics layer (Phase G.0)
@@ -198,9 +202,10 @@ pub extern "C" fn _start() -> ! {
 
 #[cfg(target_arch = "x86_64")]
 #[no_mangle]
-pub extern "C" fn _start() -> ! {
+pub extern "C" fn _start(boot_info: *const crate::arch::x86_64::boot::BootInfo) -> ! {
     // Early architecture initialization
     unsafe {
+        crate::arch::x86_64::boot::init_boot_info(boot_info);
         if let Err(e) = arch::boot::early_init() {
             // Critical error during boot
             arch::serial::serial_write(b"\n[FATAL] Boot error: ");

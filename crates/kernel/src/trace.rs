@@ -256,6 +256,7 @@ fn write_decision_log(trace: &DecisionTrace) {
 }
 
 /// Cross-check decision trace with policy
+#[cfg(feature = "agentsys")]
 pub fn verify_decision_policy(trace: &DecisionTrace, agent_id: u32) -> bool {
     use crate::agent_sys::policy;
     use crate::security::agent_policy::{Capability, Resource, PolicyDecision};
@@ -268,4 +269,10 @@ pub fn verify_decision_policy(trace: &DecisionTrace, agent_id: u32) -> bool {
     );
 
     matches!(decision, PolicyDecision::Allow { .. })
+}
+
+/// Policy verification is a no-op when agent system is disabled.
+#[cfg(not(feature = "agentsys"))]
+pub fn verify_decision_policy(_trace: &DecisionTrace, _agent_id: u32) -> bool {
+    true
 }

@@ -66,7 +66,10 @@
 //! 3. Return via IRET instruction (handled by x86-interrupt ABI)
 //! 4. Be careful with stack usage (especially double fault handler)
 
-use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
+use x86_64::{
+    structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode},
+    VirtAddr,
+};
 use lazy_static::lazy_static;
 use crate::arch::x86_64::tss::{DOUBLE_FAULT_IST_INDEX, NMI_IST_INDEX, MACHINE_CHECK_IST_INDEX};
 
@@ -91,7 +94,7 @@ lazy_static! {
         // Double fault - uses dedicated IST stack
         unsafe {
             idt.double_fault
-                .set_handler_fn(double_fault_handler)
+                .set_handler_addr(VirtAddr::new(double_fault_handler as usize as u64))
                 .set_stack_index(DOUBLE_FAULT_IST_INDEX);
         }
 
@@ -102,7 +105,10 @@ lazy_static! {
         idt.page_fault.set_handler_fn(page_fault_handler);
         idt.x87_floating_point.set_handler_fn(x87_floating_point_handler);
         idt.alignment_check.set_handler_fn(alignment_check_handler);
-        idt.machine_check.set_handler_fn(machine_check_handler);
+        unsafe {
+            idt.machine_check
+                .set_handler_addr(VirtAddr::new(machine_check_handler as usize as u64));
+        }
         idt.simd_floating_point.set_handler_fn(simd_floating_point_handler);
         idt.virtualization.set_handler_fn(virtualization_handler);
 
@@ -202,7 +208,7 @@ extern "x86-interrupt" fn nmi_handler(stack_frame: InterruptStackFrame) {
 /// Used by debuggers.
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
     // Breakpoint is recoverable, so we don't panic
-    crate::serial_write(b"EXCEPTION: BREAKPOINT\n");
+    crate::arch::x86_64::serial::serial_write(b"EXCEPTION: BREAKPOINT\n");
     // TODO: Integrate with debugger in future
 }
 
@@ -253,7 +259,7 @@ extern "x86-interrupt" fn device_not_available_handler(stack_frame: InterruptSta
 extern "x86-interrupt" fn double_fault_handler(
     stack_frame: InterruptStackFrame,
     error_code: u64,
-) -> ! {
+) {
     panic!(
         "EXCEPTION: DOUBLE FAULT (error_code: {:#x})\n{:#?}",
         error_code, stack_frame
@@ -475,7 +481,7 @@ extern "x86-interrupt" fn alignment_check_handler(
 /// - Bus errors
 /// - Cache errors
 /// - Memory errors
-extern "x86-interrupt" fn machine_check_handler(stack_frame: InterruptStackFrame) -> ! {
+extern "x86-interrupt" fn machine_check_handler(stack_frame: InterruptStackFrame) {
     panic!("EXCEPTION: MACHINE CHECK (HARDWARE ERROR)\n{:#?}", stack_frame);
 }
 

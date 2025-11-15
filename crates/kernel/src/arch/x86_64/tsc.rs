@@ -93,16 +93,7 @@ pub fn read_tsc() -> u64 {
 #[inline]
 pub fn read_tsc_serialized() -> u64 {
     unsafe {
-        // CPUID is a serializing instruction
-        core::arch::asm!(
-            "cpuid",
-            "rdtsc",
-            out("rax") _,
-            out("rbx") _,
-            out("rcx") _,
-            out("rdx") _,
-            options(nostack)
-        );
+        core::arch::x86_64::__cpuid(0);
         core::arch::x86_64::_rdtsc()
     }
 }
@@ -115,20 +106,11 @@ pub fn read_tsc_serialized() -> u64 {
 /// Returns (tsc, processor_id).
 #[inline]
 pub fn read_tscp() -> (u64, u32) {
-    let tsc: u64;
-    let cpu_id: u32;
-
     unsafe {
-        core::arch::asm!(
-            "rdtscp",
-            out("rax") tsc,
-            out("rcx") cpu_id,
-            out("rdx") _,
-            options(nostack)
-        );
+        let mut aux: u32 = 0;
+        let tsc = core::arch::x86_64::__rdtscp(&mut aux);
+        (tsc, aux)
     }
-
-    (tsc, cpu_id)
 }
 
 /// Get the calibrated TSC frequency in Hz

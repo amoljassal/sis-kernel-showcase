@@ -4,6 +4,7 @@
 extern crate alloc;
 
 use alloc::vec;
+use alloc::vec::Vec;
 use core::convert::Infallible;
 use core::fmt::Write;
 use core::mem;
@@ -12,6 +13,7 @@ use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::file::{Directory, File, FileAttribute, FileMode, RegularFile};
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::table::boot::{AllocateType, MemoryType, SearchType};
+use uefi::table::cfg::ACPI2_GUID;
 use uefi::{Handle, Identify};
 
 #[entry]
@@ -76,6 +78,7 @@ const SHT_SYMTAB: u32 = 2;
 const SHT_STRTAB: u32 = 3;
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 struct Elf64Shdr {
     sh_name: u32,
     sh_type: u32,
@@ -98,6 +101,15 @@ struct Elf64Sym {
     st_value: u64,
     st_size: u64,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct BootInfo {
+    rsdp_addr: u64,
+}
+
+// Keep BootInfo in static storage so the kernel can read it after we exit boot services.
+static mut BOOT_INFO: BootInfo = BootInfo { rsdp_addr: 0 };
 
 fn chainload_kernel(
     handle: Handle,
@@ -649,9 +661,10 @@ fn chainload_kernel(
                         let mut strtab = vec![0u8; strtab_size];
                         file.set_position(strtab_off as u64).ok();
                         let _ = file.read(&mut strtab[..]);
-                        // Iterate symbols and find DTB_PTR
+                        // Iterate symbols and find DTB_PTR / BOOT_RSDP_PHYS
                         let count = symtab_size / symtab_entsize;
-                        let mut patched = false;
+                        let mut patched_dtb = false;
+                        let mut patched_rsdp = false;
                         for i in 0..count {
                             let off = symtab_off + i * symtab_entsize;
                             let mut buf = [0u8; core::mem::size_of::<Elf64Sym>()];
@@ -659,23 +672,43 @@ fn chainload_kernel(
                             if file.read(&mut buf).ok().unwrap_or(0) < buf.len() { break; }
                             let sym: Elf64Sym = unsafe { core::ptr::read_unaligned(buf.as_ptr() as *const _) };
                             let name_off = sym.st_name as usize;
+
                             // Compare with "DTB_PTR\0"
-                            let pat = b"DTB_PTR\0";
-                            let mut matches = true;
-                            if name_off + pat.len() <= strtab.len() {
-                                for j in 0..pat.len() { if strtab[name_off + j] != pat[j] { matches = false; break; } }
-                            } else { matches = false; }
-                            if matches {
-                                let addr = sym.st_value as usize;
-                                unsafe { core::ptr::write_volatile(addr as *mut usize, dtb_ptr as usize); }
-                                let _ = st.stdout().write_fmt(format_args!("DTB_PTR patched at 0x{:x}\r\n", addr));
-                                st.boot_services().stall(20_000);
-                                patched = true;
+                            let pat_dtb = b"DTB_PTR\0";
+                            if name_off + pat_dtb.len() <= strtab.len() {
+                                if &strtab[name_off..name_off + pat_dtb.len()] == pat_dtb {
+                                    let addr = sym.st_value as usize;
+                                    unsafe { core::ptr::write_volatile(addr as *mut usize, dtb_ptr as usize); }
+                                    let _ = st.stdout().write_fmt(format_args!("DTB_PTR patched at 0x{:x}\r\n", addr));
+                                    st.boot_services().stall(20_000);
+                                    patched_dtb = true;
+                                }
+                            }
+
+                            // Compare with "BOOT_RSDP_PHYS\0"
+                            if BOOT_INFO.rsdp_addr != 0 {
+                                let pat_rsdp = b"BOOT_RSDP_PHYS\0";
+                                if name_off + pat_rsdp.len() <= strtab.len() {
+                                    if &strtab[name_off..name_off + pat_rsdp.len()] == pat_rsdp {
+                                        let addr = sym.st_value as usize;
+                                        unsafe { core::ptr::write_volatile(addr as *mut u64, BOOT_INFO.rsdp_addr); }
+                                        let _ = st.stdout().write_fmt(format_args!("BOOT_RSDP_PHYS patched at 0x{:x}\r\n", addr));
+                                        st.boot_services().stall(20_000);
+                                        patched_rsdp = true;
+                                    }
+                                }
+                            }
+
+                            if patched_dtb && patched_rsdp {
                                 break;
                             }
                         }
-                        if !patched {
+                        if !patched_dtb {
                             let _ = st.stdout().write_str("DTB_PTR symbol not found in kernel\r\n");
+                            st.boot_services().stall(20_000);
+                        }
+                        if BOOT_INFO.rsdp_addr != 0 && !patched_rsdp {
+                            let _ = st.stdout().write_str("BOOT_RSDP_PHYS symbol not found in kernel\r\n");
                             st.boot_services().stall(20_000);
                         }
                     }
@@ -684,6 +717,33 @@ fn chainload_kernel(
         }
     }
     }
+
+    // Collect boot info (ACPI RSDP) before exiting boot services
+    // Populate BootInfo (static) before exiting boot services
+    let rsdp_addr: u64;
+    unsafe {
+        BOOT_INFO = BootInfo::default();
+        for table in st.config_table() {
+            if table.guid == ACPI2_GUID {
+                BOOT_INFO.rsdp_addr = table.address as u64;
+                break;
+            }
+        }
+        rsdp_addr = BOOT_INFO.rsdp_addr;
+    }
+
+    if rsdp_addr != 0 {
+        let _ = st.stdout().write_fmt(format_args!(
+            "Found ACPI RSDP at 0x{:x}\r\n",
+            rsdp_addr as usize
+        ));
+        st.boot_services().stall(20_000);
+    } else {
+        let _ = st.stdout().write_str("ACPI RSDP not found in config tables\r\n");
+        st.boot_services().stall(20_000);
+    }
+
+    // (No symbol patching needed; RSDP is passed via BootInfo)
 
     let _ = st.stdout().write_str("Exiting boot services...\r\n");
     st.boot_services().stall(100_000);
@@ -712,6 +772,8 @@ fn chainload_kernel(
         core::ptr::write_volatile(uart, b'!');
     }
 
-    let entry: extern "C" fn() -> ! = unsafe { mem::transmute(entry_addr as usize) };
-    entry()
+    // Call kernel entry with BootInfo pointer
+    let entry: extern "C" fn(*const BootInfo) -> ! = unsafe { mem::transmute(entry_addr as usize) };
+    let boot_info_ptr: *const BootInfo = unsafe { &BOOT_INFO };
+    entry(boot_info_ptr)
 }

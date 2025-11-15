@@ -1,3 +1,7 @@
+#![cfg_attr(not(feature = "x86_smp_full"), allow(dead_code))]
+
+#[cfg(feature = "x86_smp_full")]
+mod full {
 //! # SMP (Symmetric Multiprocessing) Support
 //!
 //! This module provides support for starting and managing multiple CPUs on x86_64.
@@ -72,18 +76,55 @@
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use x86_64::VirtAddr;
 
+pub mod percpu {
+    pub use crate::arch::x86_64::percpu::{
+        current, dequeue_current, enqueue_current, enqueue_on, get, init_percpu, stats, PerCpuData,
+    };
+}
+
 /// AP trampoline code location (below 1MB, real mode addressable)
 pub const AP_TRAMPOLINE_ADDR: u64 = 0x8000;
 
 /// Maximum number of CPUs we support
-const MAX_CPUS: usize = 256;
+pub const MAX_CPUS: usize = 8;
 
 /// AP ready flags - set by each AP when it completes initialization
 static AP_READY: [AtomicBool; MAX_CPUS] = [const { AtomicBool::new(false) }; MAX_CPUS];
 
 /// Number of CPUs that have been successfully started
-static CPU_COUNT: AtomicU32 = AtomicU32::new(1); // BSP counts as 1
+static CPU_COUNT: AtomicU32 = AtomicU32::new(0);
 
+/// Online CPU bitmap.
+static CPU_ONLINE: [AtomicBool; MAX_CPUS] = [const { AtomicBool::new(false) }; MAX_CPUS];
+
+/// Return number of CPUs online.
+pub fn num_cpus() -> usize {
+    CPU_COUNT.load(Ordering::Acquire) as usize
+}
+
+/// Check if a CPU is online.
+pub fn is_cpu_online(cpu_id: usize) -> bool {
+    if cpu_id >= MAX_CPUS {
+        return false;
+    }
+    CPU_ONLINE[cpu_id].load(Ordering::Acquire)
+}
+
+/// Mark a CPU as online.
+pub fn mark_cpu_online(cpu_id: usize) {
+    if cpu_id >= MAX_CPUS {
+        return;
+    }
+    if !CPU_ONLINE[cpu_id].swap(true, Ordering::Release) {
+        CPU_COUNT.fetch_add(1, Ordering::Release);
+    }
+}
+
+/// Initialize SMP subsystem (currently stubbed to single-core).
+pub fn init() {
+    mark_cpu_online(0);
+    crate::info!("SMP(x86_64): multi-core bring-up not implemented yet");
+}
 /// AP entry point stack - shared by all APs during initial startup
 /// Each AP will get its own stack from percpu::init_ap()
 #[repr(C, align(4096))]
@@ -136,27 +177,8 @@ static mut AP_ENTRY_INFO: ApEntryInfo = ApEntryInfo {
 /// 0x8010: GDT
 /// 0x8100: entry code
 /// ```
-#[naked]
 unsafe extern "C" fn ap_trampoline_start() {
-    // NOTE: This is a simplified trampoline. In a real implementation,
-    // we would need to:
-    // 1. Start in 16-bit real mode
-    // 2. Load a temporary GDT
-    // 3. Enable protected mode (CR0.PE)
-    // 4. Set up paging
-    // 5. Enable long mode (EFER.LME, CR0.PG)
-    // 6. Jump to 64-bit code
-    //
-    // For M8 Part 2, we assume the system is already in long mode
-    // and just need to set up the AP with correct state.
-
-    core::arch::asm!(
-        // We're in 16-bit real mode at 0x8000
-        // For now, this is a placeholder - actual trampoline would be more complex
-        "cli",                          // Disable interrupts
-        "hlt",                          // Halt (replaced with real code in production)
-        options(noreturn)
-    );
+    panic!("x86_64 AP trampoline not implemented");
 }
 
 /// AP main entry point (64-bit long mode)
@@ -179,10 +201,10 @@ extern "C" fn ap_main(cpu_id: u32, apic_id: u32) -> ! {
         crate::arch::x86_64::serial::serial_write(b") starting...\n");
 
         // Initialize GDT for this AP
-        crate::arch::x86_64::gdt::init();
+        crate::arch::x86_64::gdt::init_gdt();
 
         // Load IDT (shared across all CPUs)
-        crate::arch::x86_64::idt::init();
+        crate::arch::x86_64::idt::init_idt();
 
         // Initialize Local APIC for this AP
         if let Err(e) = crate::arch::x86_64::apic::init() {
@@ -199,9 +221,10 @@ extern "C" fn ap_main(cpu_id: u32, apic_id: u32) -> ! {
         // Initialize syscall for this AP
         crate::arch::x86_64::syscall::init();
 
+        mark_cpu_online(cpu_id as usize);
+
         // Signal that this AP is ready
         AP_READY[cpu_id as usize].store(true, Ordering::Release);
-        CPU_COUNT.fetch_add(1, Ordering::SeqCst);
 
         crate::arch::x86_64::serial::serial_write(b"[SMP] AP ");
         print_cpu_id(cpu_id);
@@ -428,4 +451,268 @@ fn print_cpu_id(id: u32) {
         i -= 1;
         crate::arch::x86_64::serial::serial_write_byte(buf[i]);
     }
+}
+}
+
+#[cfg(feature = "x86_smp_full")]
+pub use full::*;
+
+#[cfg(not(feature = "x86_smp_full"))]
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
+#[cfg(not(feature = "x86_smp_full"))]
+pub mod percpu {
+    use alloc::collections::VecDeque;
+    use core::cell::UnsafeCell;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    use crate::process::Pid;
+
+    pub struct PerCpuData {
+        pub cpu_id: usize,
+        pub current_pid: AtomicUsize,
+        pub runqueue: UnsafeCell<VecDeque<Pid>>,
+        pub context_switches: AtomicUsize,
+        pub timer_ticks: AtomicUsize,
+        pub load: AtomicUsize,
+        pub is_idle: AtomicUsize,
+    }
+
+    impl PerCpuData {
+        const fn new(cpu_id: usize) -> Self {
+            Self {
+                cpu_id,
+                current_pid: AtomicUsize::new(0),
+                runqueue: UnsafeCell::new(VecDeque::new()),
+                context_switches: AtomicUsize::new(0),
+                timer_ticks: AtomicUsize::new(0),
+                load: AtomicUsize::new(0),
+                is_idle: AtomicUsize::new(1),
+            }
+        }
+
+        pub fn current_pid(&self) -> Pid {
+            self.current_pid.load(Ordering::Acquire) as Pid
+        }
+
+        pub fn set_current_pid(&self, pid: Pid) {
+            self.current_pid.store(pid as usize, Ordering::Release);
+        }
+
+        pub fn inc_context_switches(&self) {
+            self.context_switches.fetch_add(1, Ordering::Relaxed);
+        }
+
+        pub fn inc_timer_ticks(&self) {
+            self.timer_ticks.fetch_add(1, Ordering::Relaxed);
+        }
+
+        pub fn runqueue_len(&self) -> usize {
+            unsafe { (*self.runqueue.get()).len() }
+        }
+
+        pub fn update_load(&self) {
+            let load = self.runqueue_len() + if self.current_pid() != 0 { 1 } else { 0 };
+            self.load.store(load, Ordering::Release);
+        }
+
+        pub fn set_idle(&self, idle: bool) {
+            self.is_idle.store(idle as usize, Ordering::Release);
+        }
+
+        pub fn is_idle(&self) -> bool {
+            self.is_idle.load(Ordering::Acquire) != 0
+        }
+    }
+
+    unsafe impl Sync for PerCpuData {}
+
+    static PER_CPU_DATA: [PerCpuData; super::MAX_CPUS] = [
+        PerCpuData::new(0),
+        PerCpuData::new(1),
+        PerCpuData::new(2),
+        PerCpuData::new(3),
+        PerCpuData::new(4),
+        PerCpuData::new(5),
+        PerCpuData::new(6),
+        PerCpuData::new(7),
+    ];
+
+    pub fn init_percpu(cpu_id: usize) {
+        if cpu_id >= super::MAX_CPUS {
+            crate::warn!("PerCPU: Invalid CPU ID {}", cpu_id);
+            return;
+        }
+
+        let percpu = &PER_CPU_DATA[cpu_id];
+
+        unsafe {
+            *percpu.runqueue.get() = VecDeque::new();
+        }
+
+        percpu.current_pid.store(0, Ordering::Release);
+        percpu.context_switches.store(0, Ordering::Release);
+        percpu.timer_ticks.store(0, Ordering::Release);
+        percpu.load.store(0, Ordering::Release);
+        percpu.is_idle.store(1, Ordering::Release);
+
+        crate::debug!("PerCPU: Initialized per-CPU data for CPU {}", cpu_id);
+    }
+
+    pub fn current() -> &'static PerCpuData {
+        let cpu_id = crate::arch::current_cpu_id();
+        get(cpu_id)
+    }
+
+    pub fn get(cpu_id: usize) -> &'static PerCpuData {
+        if cpu_id >= super::MAX_CPUS {
+            return &PER_CPU_DATA[0];
+        }
+        &PER_CPU_DATA[cpu_id]
+    }
+
+    pub fn enqueue_current(pid: Pid) {
+        let percpu = current();
+        unsafe {
+            (*percpu.runqueue.get()).push_back(pid);
+        }
+        percpu.update_load();
+    }
+
+    pub fn enqueue_on(cpu_id: usize, pid: Pid) {
+        if cpu_id >= super::MAX_CPUS {
+            crate::warn!("PerCPU: Invalid CPU ID {} for enqueue", cpu_id);
+            return;
+        }
+
+        let percpu = get(cpu_id);
+        unsafe {
+            (*percpu.runqueue.get()).push_back(pid);
+        }
+        percpu.update_load();
+
+        if percpu.is_idle() {
+            super::ipi::send_reschedule_ipi(cpu_id);
+        }
+    }
+
+    pub fn dequeue_current() -> Option<Pid> {
+        let percpu = current();
+        let pid = unsafe { (*percpu.runqueue.get()).pop_front() };
+
+        if pid.is_some() {
+            percpu.update_load();
+        }
+
+        pid
+    }
+
+    pub fn stats() -> PerCpuStats {
+        let mut cpu_stats = [CpuStat::default(); super::MAX_CPUS];
+
+        for i in 0..super::MAX_CPUS {
+            let percpu = get(i);
+            cpu_stats[i] = CpuStat {
+                cpu_id: i,
+                current_pid: percpu.current_pid(),
+                runqueue_len: percpu.runqueue_len(),
+                context_switches: percpu.context_switches.load(Ordering::Relaxed),
+                timer_ticks: percpu.timer_ticks.load(Ordering::Relaxed),
+                load: percpu.load.load(Ordering::Relaxed),
+                is_idle: percpu.is_idle(),
+            };
+        }
+
+        PerCpuStats { cpu_stats }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct PerCpuStats {
+        pub cpu_stats: [CpuStat; super::MAX_CPUS],
+    }
+
+    #[derive(Debug, Clone, Copy, Default)]
+    pub struct CpuStat {
+        pub cpu_id: usize,
+        pub current_pid: Pid,
+        pub runqueue_len: usize,
+        pub context_switches: usize,
+        pub timer_ticks: usize,
+        pub load: usize,
+        pub is_idle: bool,
+    }
+}
+
+#[cfg(not(feature = "x86_smp_full"))]
+pub mod ipi {
+    pub fn send_reschedule_ipi(_cpu_id: usize) {}
+
+    pub fn handle_ipi(_intid: u32) -> bool {
+        false
+    }
+}
+
+#[cfg(not(feature = "x86_smp_full"))]
+pub const MAX_CPUS: usize = 8;
+
+#[cfg(not(feature = "x86_smp_full"))]
+static CPU_COUNT: AtomicU32 = AtomicU32::new(0);
+
+#[cfg(not(feature = "x86_smp_full"))]
+static CPU_ONLINE: [AtomicBool; MAX_CPUS] = [
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+];
+
+#[cfg(not(feature = "x86_smp_full"))]
+pub fn num_cpus() -> usize {
+    CPU_COUNT.load(Ordering::Acquire) as usize
+}
+
+#[cfg(not(feature = "x86_smp_full"))]
+pub fn is_cpu_online(cpu_id: usize) -> bool {
+    cpu_id < MAX_CPUS && CPU_ONLINE[cpu_id].load(Ordering::Acquire)
+}
+
+#[cfg(not(feature = "x86_smp_full"))]
+pub fn mark_cpu_online(cpu_id: usize) {
+    if cpu_id < MAX_CPUS && !CPU_ONLINE[cpu_id].swap(true, Ordering::Release) {
+        CPU_COUNT.fetch_add(1, Ordering::Release);
+    }
+}
+
+#[cfg(not(feature = "x86_smp_full"))]
+pub fn init() {
+    mark_cpu_online(0);
+    crate::info!("SMP(x86_64): running in single-core stub mode");
+}
+
+#[cfg(not(feature = "x86_smp_full"))]
+pub unsafe fn init_ap(_cpu_id: u32, _apic_id: u32) {}
+
+#[cfg(not(feature = "x86_smp_full"))]
+pub unsafe fn boot_aps() -> Result<usize, &'static str> {
+    Ok(1)
+}
+
+#[cfg(not(feature = "x86_smp_full"))]
+pub fn stats() -> SmpStats {
+    let mut online = [false; MAX_CPUS];
+    online[0] = true;
+    SmpStats {
+        num_cpus: num_cpus(),
+        online_cpu_ids: online,
+    }
+}
+
+#[cfg(not(feature = "x86_smp_full"))]
+pub struct SmpStats {
+    pub num_cpus: usize,
+    pub online_cpu_ids: [bool; MAX_CPUS],
 }

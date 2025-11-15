@@ -124,7 +124,10 @@ pub fn do_exit(current_pid: Pid, exit_code: i32) -> ! {
     // Should never reach here
     loop {
         unsafe {
-            core::arch::asm!("wfi");
+            #[cfg(target_arch = "aarch64")]
+            core::arch::asm!("wfi", options(nostack, preserves_flags));
+            #[cfg(target_arch = "x86_64")]
+            core::arch::asm!("hlt", options(nostack, preserves_flags));
         }
     }
 }

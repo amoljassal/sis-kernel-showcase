@@ -64,6 +64,7 @@
 
 use x86_64::instructions::port::Port;
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 use core::fmt;
 use spin::Mutex;
 use lazy_static::lazy_static;
@@ -268,6 +269,18 @@ pub struct PciController {
     config_data: Port<u32>,
 }
 
+const MAX_PCI_BUS_SCAN: u8 = 31; // Temporary limit to keep bring-up snappy in QEMU
+
+fn io_wait() {
+    // Some PCI config paths (especially under QEMU's port-based interface) need
+    // a tiny delay between config address/data accesses. Use a short spin-loop
+    // instead of inline I/O writes so the code works even when privileged ioport
+    // instructions are unavailable in the current environment.
+    for _ in 0..64 {
+        core::hint::spin_loop();
+    }
+}
+
 impl PciController {
     /// Create a new PCI controller
     ///
@@ -291,22 +304,41 @@ impl PciController {
         let address = self.make_address(bus, device, function, offset);
         unsafe {
             self.config_address.write(address);
-            self.config_data.read()
+            let mut tmp: u32 = 0;
+            // introduce delay by reading config_address repeatedly
+            for _ in 0..32 {
+                tmp ^= self.config_address.read();
+            }
+            let value = self.config_data.read();
+            let _ = tmp ^ value;
+            value
         }
     }
 
     /// Read a 16-bit value from PCI configuration space
     pub fn read_config_u16(&mut self, bus: u8, device: u8, function: u8, offset: u8) -> u16 {
-        let dword = self.read_config_u32(bus, device, function, offset & 0xFC);
-        let shift = (offset & 0x02) * 8;
-        ((dword >> shift) & 0xFFFF) as u16
+        let address = self.make_address(bus, device, function, offset & 0xFC);
+        unsafe {
+            self.config_address.write(address);
+            io_wait();
+            let shift = (offset & 0x02) * 8;
+            let value = (self.config_data.read() >> shift) as u16 & 0xFFFF;
+            io_wait();
+            value
+        }
     }
 
     /// Read an 8-bit value from PCI configuration space
     pub fn read_config_u8(&mut self, bus: u8, device: u8, function: u8, offset: u8) -> u8 {
-        let dword = self.read_config_u32(bus, device, function, offset & 0xFC);
-        let shift = (offset & 0x03) * 8;
-        ((dword >> shift) & 0xFF) as u8
+        let address = self.make_address(bus, device, function, offset & 0xFC);
+        unsafe {
+            self.config_address.write(address);
+            io_wait();
+            let shift = (offset & 0x03) * 8;
+            let value = (self.config_data.read() >> shift) as u8;
+            io_wait();
+            value
+        }
     }
 
     /// Write a 32-bit value to PCI configuration space
@@ -342,15 +374,22 @@ impl PciController {
 
     /// Check if a device exists at the given location
     pub fn device_exists(&mut self, bus: u8, device: u8, function: u8) -> bool {
+        crate::arch::x86_64::serial::serial_write(b"[PCI]         read vendor_id\n");
         let vendor_id = self.read_config_u16(bus, device, function, 0x00);
+        crate::arch::x86_64::serial::serial_write(b"[PCI]         vendor read complete\n");
         vendor_id != 0xFFFF
     }
 
     /// Scan for a specific device
     pub fn probe_device(&mut self, bus: u8, device: u8, function: u8) -> Option<PciDevice> {
+        crate::arch::x86_64::serial::serial_write(b"[PCI]       probe ");
+        print_bdf(bus, device, function);
+        crate::arch::x86_64::serial::serial_write(b" -> ");
         if !self.device_exists(bus, device, function) {
+            crate::arch::x86_64::serial::serial_write(b"none\n");
             return None;
         }
+        crate::arch::x86_64::serial::serial_write(b"present\n");
 
         let vendor_id = self.read_config_u16(bus, device, function, 0x00);
         let device_id = self.read_config_u16(bus, device, function, 0x02);
@@ -453,14 +492,23 @@ impl PciController {
         let mut devices = Vec::new();
 
         // Scan all possible bus/device/function combinations
-        for bus in 0..=255u8 {
+        for bus in 0..=MAX_PCI_BUS_SCAN {
+            crate::arch::x86_64::serial::serial_write(b"[PCI]   scanning bus ");
+            print_decimal(bus as usize);
+            crate::arch::x86_64::serial::serial_write(b"\n");
             for device in 0..32u8 {
+                if device % 8 == 0 {
+                    crate::arch::x86_64::serial::serial_write(b"[PCI]     device ");
+                    print_decimal(device as usize);
+                    crate::arch::x86_64::serial::serial_write(b"\n");
+                }
                 for function in 0..8u8 {
                     if let Some(pci_device) = self.probe_device(bus, device, function) {
-                        devices.push(pci_device);
+                        let multifunction = (pci_device.header_type & 0x80) != 0;
+                        devices.push(pci_device.clone());
 
                         // If this is function 0 and not a multi-function device, skip other functions
-                        if function == 0 && (pci_device.header_type & 0x80) == 0 {
+                        if function == 0 && !multifunction {
                             break;
                         }
                     } else if function == 0 {
@@ -492,22 +540,292 @@ lazy_static! {
     static ref PCI_DEVICES: Mutex<Vec<PciDevice>> = Mutex::new(Vec::new());
 }
 
+/// MCFG table header (from ACPI)
+#[repr(C, packed)]
+struct McfgHeader {
+    signature: [u8; 4],      // "MCFG"
+    length: u32,
+    revision: u8,
+    checksum: u8,
+    oem_id: [u8; 6],
+    oem_table_id: [u8; 8],
+    oem_revision: u32,
+    creator_id: u32,
+    creator_revision: u32,
+    reserved: [u8; 8],
+}
+
+/// MCFG allocation structure
+#[repr(C, packed)]
+struct McfgAllocation {
+    base_address: u64,       // Base address for ECAM
+    segment_group: u16,      // PCI segment group
+    start_bus: u8,          // Starting bus number
+    end_bus: u8,            // Ending bus number
+    reserved: [u8; 4],
+}
+
+/// Initialize PCI using ECAM (Enhanced Configuration Access Mechanism)
+unsafe fn init_with_ecam(mcfg_addr: x86_64::PhysAddr) -> Result<usize, &'static str> {
+    use core::ptr::read_volatile;
+
+    crate::arch::x86_64::serial::serial_write(b"[PCI] Parsing MCFG table at 0x");
+    print_hex_u64(mcfg_addr.as_u64());
+    crate::arch::x86_64::serial::serial_write(b"\n");
+
+    // Read MCFG header (using identity mapping)
+    let mcfg_header = read_volatile(mcfg_addr.as_u64() as *const McfgHeader);
+
+    // Validate MCFG signature
+    if &mcfg_header.signature != b"MCFG" {
+        return Err("Invalid MCFG signature");
+    }
+
+    // Calculate number of allocation structures
+    let header_size = core::mem::size_of::<McfgHeader>();
+    let alloc_size = core::mem::size_of::<McfgAllocation>();
+    let num_allocations = ((mcfg_header.length as usize) - header_size) / alloc_size;
+
+    crate::arch::x86_64::serial::serial_write(b"[PCI] MCFG has ");
+    print_decimal(num_allocations);
+    crate::arch::x86_64::serial::serial_write(b" allocation(s)\n");
+
+    if num_allocations == 0 {
+        return Err("No MCFG allocations found");
+    }
+
+    // Read first allocation
+    let alloc_ptr = (mcfg_addr.as_u64() + header_size as u64) as *const McfgAllocation;
+    let allocation = read_volatile(alloc_ptr);
+
+    let ecam_base = allocation.base_address;
+    let start_bus = allocation.start_bus;
+    let end_bus = allocation.end_bus;
+
+    crate::arch::x86_64::serial::serial_write(b"[PCI] ECAM base: 0x");
+    print_hex_u64(ecam_base);
+    crate::arch::x86_64::serial::serial_write(b", buses ");
+    print_decimal(start_bus as usize);
+    crate::arch::x86_64::serial::serial_write(b"-");
+    print_decimal(end_bus as usize);
+    crate::arch::x86_64::serial::serial_write(b"\n");
+
+    // Scan devices using ECAM
+    crate::arch::x86_64::serial::serial_write(b"[PCI] Scanning for devices (not storing due to heap constraints)...\n");
+
+    // Don't store devices for now - heap can't handle PciDevice allocation yet
+    // Just count and report them
+    let mut device_count = 0;
+
+    // Scan only the first bus for now to test
+    for bus in start_bus..=core::cmp::min(start_bus, end_bus) {
+        crate::arch::x86_64::serial::serial_write(b"[PCI] Scanning bus ");
+        print_decimal(bus as usize);
+        crate::arch::x86_64::serial::serial_write(b" via ECAM\n");
+
+        for device in 0..32u8 {
+            for function in 0..8u8 {
+                // Calculate ECAM address for this device
+                // Address = base + (bus << 20) + (device << 15) + (function << 12)
+                let config_addr = ecam_base +
+                    ((bus as u64) << 20) +
+                    ((device as u64) << 15) +
+                    ((function as u64) << 12);
+
+                // Read vendor ID (first 16 bits)
+                let vendor_id_ptr = config_addr as *const u16;
+                let vendor_id = read_volatile(vendor_id_ptr);
+
+                // 0xFFFF means no device
+                if vendor_id == 0xFFFF {
+                    if function == 0 {
+                        break; // No more functions for this device
+                    }
+                    continue;
+                }
+
+                // Device found! Read more configuration
+                crate::arch::x86_64::serial::serial_write(b"\n[PCI]   Reading device_id...\n");
+                let device_id = read_volatile((config_addr + 2) as *const u16);
+                crate::arch::x86_64::serial::serial_write(b"[PCI]   Reading class codes...\n");
+                let class = read_volatile((config_addr + 0x0B) as *const u8);
+                let subclass = read_volatile((config_addr + 0x0A) as *const u8);
+                let prog_if = read_volatile((config_addr + 0x09) as *const u8);
+                let revision = read_volatile((config_addr + 0x08) as *const u8);
+                crate::arch::x86_64::serial::serial_write(b"[PCI]   Reading header type...\n");
+                let header_type = read_volatile((config_addr + 0x0E) as *const u8);
+                crate::arch::x86_64::serial::serial_write(b"[PCI]   Reading interrupt info...\n");
+                let interrupt_line = read_volatile((config_addr + 0x3C) as *const u8);
+                let interrupt_pin = read_volatile((config_addr + 0x3D) as *const u8);
+                crate::arch::x86_64::serial::serial_write(b"[PCI]   All config reads complete\n");
+
+                crate::arch::x86_64::serial::serial_write(b"[PCI] Found device ");
+                print_bdf(bus, device, function);
+                crate::arch::x86_64::serial::serial_write(b": ");
+                crate::arch::x86_64::serial::serial_write(b"vendor=0x");
+                print_hex_u16(vendor_id);
+                crate::arch::x86_64::serial::serial_write(b", device=0x");
+                print_hex_u16(device_id);
+                crate::arch::x86_64::serial::serial_write(b" class=0x");
+                print_hex_u8(class);
+                print_hex_u8(subclass);
+
+                // Check if it's a VirtIO device (vendor 0x1AF4)
+                if vendor_id == 0x1AF4 {
+                    crate::arch::x86_64::serial::serial_write(b" (VirtIO)");
+                }
+                crate::arch::x86_64::serial::serial_write(b"\n");
+
+                crate::arch::x86_64::serial::serial_write(b"[PCI]   Device found, incrementing count\n");
+                device_count += 1;
+
+                // Don't create/store PciDevice - heap can't handle it yet
+                // TODO: Store devices once heap is properly initialized
+
+                crate::arch::x86_64::serial::serial_write(b"[PCI]   Checking multi-function (header_type=0x");
+                print_hex_u8(header_type);
+                crate::arch::x86_64::serial::serial_write(b")...\n");
+
+                // Check if this is a multi-function device
+                if function == 0 && (header_type & 0x80) == 0 {
+                    crate::arch::x86_64::serial::serial_write(b"[PCI]   Single function device, skipping remaining functions\n");
+                    break; // Single function device
+                }
+
+                crate::arch::x86_64::serial::serial_write(b"[PCI]   Moving to next function\n");
+            }
+        }
+    }
+
+    crate::arch::x86_64::serial::serial_write(b"[PCI] ECAM enumeration complete, found ");
+    print_decimal(device_count);
+    crate::arch::x86_64::serial::serial_write(b" device(s)\n");
+
+    // Don't store devices globally yet - heap constraints
+    // TODO: Store devices once heap is properly initialized
+
+    Ok(device_count)
+}
+
 /// Initialize PCI bus and scan for devices
 ///
 /// # Safety
 /// Must be called during kernel initialization, after serial console is ready.
 pub unsafe fn init() -> Result<usize, &'static str> {
-    crate::arch::x86_64::serial::serial_write(b"[PCI] Scanning PCI bus...\n");
+    crate::arch::x86_64::serial::serial_write(b"[PCI] Initializing PCI bus enumeration\n");
 
-    let devices = PCI.lock().scan_all();
-    let count = devices.len();
+    // Try to use ECAM first if MCFG is available
+    if let Some(mcfg_addr) = crate::arch::x86_64::acpi::get_mcfg_address() {
+        crate::arch::x86_64::serial::serial_write(b"[PCI] MCFG table found, using ECAM for configuration\n");
+        return init_with_ecam(mcfg_addr);
+    }
+
+    crate::arch::x86_64::serial::serial_write(b"[PCI] No MCFG table, falling back to legacy I/O ports\n");
+    crate::arch::x86_64::serial::serial_write(b"[PCI] Legacy I/O port scanning disabled (known to hang)\n");
+
+    // For now, return empty device list if no ECAM available
+    let device_list: Vec<PciDevice> = Vec::new();
+
+    /*
+    // Create PCI controller
+    let mut controller = PciController::new();
+    crate::arch::x86_64::serial::serial_write(b"[PCI] Controller created\n");
+
+    // Scan all buses (0-255), devices (0-31), and functions (0-7)
+    // For efficiency, we'll scan only the first few buses typically used in VMs
+    for bus in 0..2u8 {  // Reduced to 2 buses for testing
+        crate::arch::x86_64::serial::serial_write(b"[PCI] Scanning bus ");
+        print_decimal(bus as usize);
+        crate::arch::x86_64::serial::serial_write(b"\n");
+        for device in 0..32u8 {
+            // Only check a few devices for testing
+            if device > 4 {
+                break;
+            }
+            for function in 0..8u8 {
+                // Debug: show what we're about to read
+                if device == 0 && function == 0 {
+                    crate::arch::x86_64::serial::serial_write(b"[PCI] Reading device 0:0:0...\n");
+                }
+
+                // Read vendor ID (first 16 bits at offset 0)
+                let vendor_id = controller.read_config_u16(bus, device, function, PciConfigOffset::VendorId as u8);
+
+                if device == 0 && function == 0 {
+                    crate::arch::x86_64::serial::serial_write(b"[PCI] Device 0:0:0 vendor ID: 0x");
+                    print_hex_u16(vendor_id);
+                    crate::arch::x86_64::serial::serial_write(b"\n");
+                }
+
+                // 0xFFFF means no device present
+                if vendor_id == 0xFFFF {
+                    // If function 0 doesn't exist, skip other functions
+                    if function == 0 {
+                        break;
+                    }
+                    continue;
+                }
+
+                // Device exists, read its configuration
+                let device_id = controller.read_config_u16(bus, device, function, PciConfigOffset::DeviceId as u8);
+                let class_code = controller.read_config_u8(bus, device, function, PciConfigOffset::ClassCode as u8);
+                let subclass = controller.read_config_u8(bus, device, function, PciConfigOffset::Subclass as u8);
+                let prog_if = controller.read_config_u8(bus, device, function, PciConfigOffset::ProgIf as u8);
+                let revision = controller.read_config_u8(bus, device, function, PciConfigOffset::RevisionId as u8);
+                let header_type = controller.read_config_u8(bus, device, function, PciConfigOffset::HeaderType as u8);
+
+                // Read BARs - for now, just mark them as unused
+                // TODO: Properly parse BAR types
+                let bars = [
+                    BarType::Unused,
+                    BarType::Unused,
+                    BarType::Unused,
+                    BarType::Unused,
+                    BarType::Unused,
+                    BarType::Unused,
+                ];
+
+                // Read interrupt info
+                let interrupt_line = controller.read_config_u8(bus, device, function, PciConfigOffset::InterruptLine as u8);
+                let interrupt_pin = controller.read_config_u8(bus, device, function, PciConfigOffset::InterruptPin as u8);
+
+                // Create device struct
+                let pci_device = PciDevice {
+                    bus,
+                    device,
+                    function,
+                    vendor_id,
+                    device_id,
+                    class: class_code,
+                    subclass,
+                    prog_if,
+                    revision,
+                    header_type,
+                    bars,
+                    interrupt_line,
+                    interrupt_pin,
+                };
+
+                devices.push(pci_device);
+
+                // Check if this is a multi-function device
+                if function == 0 && (header_type & 0x80) == 0 {
+                    // Single function device, skip other functions
+                    break;
+                }
+            }
+        }
+    }
+    */
+
+    let count = device_list.len();
 
     crate::arch::x86_64::serial::serial_write(b"[PCI] Found ");
     print_decimal(count);
     crate::arch::x86_64::serial::serial_write(b" devices\n");
 
     // Print discovered devices
-    for dev in &devices {
+    for dev in &device_list {
         crate::arch::x86_64::serial::serial_write(b"[PCI]   ");
         print_bdf(dev.bus, dev.device, dev.function);
         crate::arch::x86_64::serial::serial_write(b" ");
@@ -538,7 +856,7 @@ pub unsafe fn init() -> Result<usize, &'static str> {
         }
     }
 
-    *PCI_DEVICES.lock() = devices;
+    *PCI_DEVICES.lock() = device_list;
     Ok(count)
 }
 
@@ -600,6 +918,19 @@ fn print_hex_u16(n: u16) {
         hex_chars[((n >> 4) & 0xF) as usize],
         hex_chars[(n & 0xF) as usize],
     ];
+    crate::arch::x86_64::serial::serial_write(&buf);
+}
+
+fn print_hex_u64(n: u64) {
+    let hex_chars = b"0123456789abcdef";
+    let mut buf = [0u8; 16];
+
+    for i in 0..16 {
+        let shift = (15 - i) * 4;
+        let nibble = ((n >> shift) & 0xF) as usize;
+        buf[i] = hex_chars[nibble];
+    }
+
     crate::arch::x86_64::serial::serial_write(&buf);
 }
 

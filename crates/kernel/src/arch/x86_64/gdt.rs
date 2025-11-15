@@ -84,7 +84,7 @@ lazy_static! {
         // Will be initialized later, placeholder for now
         // TSS is required for privilege level changes and interrupt stacks
         let tss_selector = gdt.add_entry(Descriptor::tss_segment(unsafe {
-            &*(&super::tss::TSS as *const _)
+            &*super::tss::TSS
         }));
 
         (gdt, Selectors {

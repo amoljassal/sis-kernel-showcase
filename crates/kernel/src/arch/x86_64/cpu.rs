@@ -110,7 +110,8 @@ pub fn detect_cpu_features() -> CpuFeatures {
     // Get feature flags
     let features = cpuid.get_feature_info().unwrap();
     let extended_features = cpuid.get_extended_feature_info();
-    let extended_info = cpuid.get_extended_function_info();
+    let extended_proc = cpuid.get_extended_processor_and_feature_identifiers();
+    let apm_info = cpuid.get_advanced_power_mgmt_info();
 
     // Get processor brand string (model name)
     let mut model_name = [0u8; 48];
@@ -137,7 +138,7 @@ pub fn detect_cpu_features() -> CpuFeatures {
         has_avx2: extended_features.as_ref().map_or(false, |f| f.has_avx2()),
 
         // Security features
-        has_nx: extended_info.as_ref().map_or(false, |f| f.has_execute_disable()),
+        has_nx: extended_proc.as_ref().map_or(false, |f| f.has_execute_disable()),
         has_smep: extended_features.as_ref().map_or(false, |f| f.has_smep()),
         has_smap: extended_features.as_ref().map_or(false, |f| f.has_smap()),
 
@@ -150,7 +151,7 @@ pub fn detect_cpu_features() -> CpuFeatures {
         // Other features
         has_tsc: features.has_tsc(),
         has_tsc_deadline: features.has_tsc_deadline(),
-        has_invariant_tsc: extended_info.as_ref().map_or(false, |f| f.has_invariant_tsc()),
+        has_invariant_tsc: apm_info.as_ref().map_or(false, |f| f.has_invariant_tsc()),
     }
 }
 

@@ -475,12 +475,17 @@ pub unsafe fn alloc_virtqueue_memory(queue_size: u16) -> Result<(PhysAddr, usize
     let (total_size, _, _, _) = Virtqueue::calculate_size(queue_size);
 
     // Round up to page size
-    let pages_needed = (total_size + 4095) / 4096;
-    let alloc_size = pages_needed * 4096;
+    let mut pages_needed = (total_size + 4095) / 4096;
+    if pages_needed == 0 {
+        pages_needed = 1;
+    }
+    let pages_pow2 = pages_needed.next_power_of_two();
+    let order = pages_pow2.trailing_zeros() as u8;
+    let alloc_size = (1usize << order) * 4096;
 
     // Allocate physical pages
     // For now, we use a simple allocation from the buddy allocator
-    let phys_addr = crate::mm::alloc_pages(pages_needed)
+    let phys_addr = crate::mm::alloc_pages(order)
         .ok_or("Failed to allocate virtqueue memory")?;
 
     // Map to virtual address using direct physical mapping
