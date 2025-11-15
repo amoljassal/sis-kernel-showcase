@@ -54,12 +54,29 @@ impl MetricsSnapshot {
             (0, 0, 0)
         };
 
-        // Get heap stats (stub - will integrate with actual heap)
-        let (heap_allocs, heap_deallocs, heap_current, heap_peak, heap_failures) =
-            get_heap_stats();
+        // REAL HEAP STATS
+        let heap_stats = crate::heap::get_heap_stats();
+        let heap_allocs = heap_stats.total_allocations() as u64;
+        let heap_deallocs = heap_stats.total_deallocations() as u64;
+        let heap_current = heap_stats.current_allocated() as u64;
+        let heap_peak = heap_stats.peak_allocated() as u64;
+        let heap_failures = heap_stats.allocation_failures() as u64;
+
+        // REAL PANIC COUNT
+        let panic_count = crate::lib::panic::get_panic_count();
 
         // Get uptime
         let uptime_ms = crate::time::get_time_since_boot_ms();
+
+        // Network stats (if available)
+        #[cfg(feature = "network")]
+        let (network_tx_packets, network_rx_packets) = {
+            // TODO: Integrate with actual network stats when available
+            (0, 0)
+        };
+
+        #[cfg(not(feature = "network"))]
+        let (network_tx_packets, network_rx_packets) = (0, 0);
 
         Self {
             ctx_switch_p50_ns: p50,
@@ -70,11 +87,11 @@ impl MetricsSnapshot {
             heap_current_bytes: heap_current,
             heap_peak_bytes: heap_peak,
             heap_failures,
-            panic_count: 0, // TODO: Track panics
+            panic_count,
             uptime_ms,
-            network_tx_packets: 0, // TODO: Integrate with network stats
-            network_rx_packets: 0,
-            disk_read_ops: 0,
+            network_tx_packets,
+            network_rx_packets,
+            disk_read_ops: 0, // TODO: Integrate with disk stats
             disk_write_ops: 0,
         }
     }
@@ -177,13 +194,6 @@ impl MetricsSnapshot {
             self.disk_write_ops
         )
     }
-}
-
-/// Get heap statistics (stub - integrate with actual heap allocator)
-fn get_heap_stats() -> (u64, u64, u64, u64, u64) {
-    // TODO: Integrate with crate::heap module
-    // For now, return placeholder values
-    (0, 0, 0, 0, 0)
 }
 
 /// Export current metrics as JSON string

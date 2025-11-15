@@ -53,3 +53,58 @@ pub fn get_time_since_boot_ms() -> u64 {
 pub fn get_uptime_ms() -> u64 {
     get_time_since_boot_ms()
 }
+
+// ========== Hardware Timer Base ==========
+// Additional timer functions for scheduler and syscalls
+
+/// Cache for timer frequency (initialized at boot)
+static mut TIMER_FREQUENCY: u64 = 0;
+
+/// Read hardware cycle counter
+#[cfg(target_arch = "aarch64")]
+pub fn read_cycle_counter() -> u64 {
+    let counter: u64;
+    unsafe {
+        core::arch::asm!("mrs {}, cntvct_el0", out(reg) counter);
+    }
+    counter
+}
+
+#[cfg(not(target_arch = "aarch64"))]
+pub fn read_cycle_counter() -> u64 {
+    0
+}
+
+/// Initialize timer and cache frequency
+pub fn init_timer() {
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        let freq: u64;
+        core::arch::asm!("mrs {}, cntfrq_el0", out(reg) freq);
+        TIMER_FREQUENCY = freq;
+    }
+}
+
+/// Convert cycles to nanoseconds
+pub fn cycles_to_ns(cycles: u64) -> u64 {
+    let freq = unsafe { TIMER_FREQUENCY };
+    if freq == 0 {
+        // Fallback: assume 62.5 MHz (common in QEMU)
+        (cycles * 1_000_000_000) / 62_500_000
+    } else {
+        // Avoid overflow: (cycles * 1_000_000_000) / freq
+        let seconds = cycles / freq;
+        let remainder = cycles % freq;
+        seconds * 1_000_000_000 + (remainder * 1_000_000_000) / freq
+    }
+}
+
+/// Get current time in nanoseconds
+pub fn current_time_ns() -> u64 {
+    cycles_to_ns(read_cycle_counter())
+}
+
+/// Get current time in microseconds
+pub fn current_time_us() -> u64 {
+    current_time_ns() / 1000
+}

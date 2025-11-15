@@ -55,7 +55,7 @@ pub trait FileSystem: Send + Sync {
 
 use crate::lib::error::Errno;
 use alloc::sync::Arc;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 /// File mode bits
@@ -237,4 +237,16 @@ pub fn unlink(path: &str) -> Result<(), Errno> {
 
     // Remove file from parent
     parent.unlink(name)
+}
+
+/// Read symlink target (minimal implementation for Phase A)
+pub fn readlink(path: &str) -> Result<String, Errno> {
+    // Special case for /proc/self/exe
+    if path == "/proc/self/exe" {
+        return Ok("/bin/init".to_string());
+    }
+
+    // For now, return EINVAL for all other paths (no symlink support yet)
+    // Real implementation would check inode type and read symlink data
+    Err(Errno::EINVAL)
 }

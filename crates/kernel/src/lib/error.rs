@@ -86,6 +86,48 @@ impl Errno {
         -(self as i32 as isize)
     }
 
+    /// Get a static string description of the error
+    pub fn description(self) -> &'static str {
+        match self {
+            Errno::EPERM => "Operation not permitted",
+            Errno::ENOENT => "No such file or directory",
+            Errno::ESRCH => "No such process",
+            Errno::EINTR => "Interrupted system call",
+            Errno::EIO => "I/O error",
+            Errno::ENXIO => "No such device or address",
+            Errno::E2BIG => "Argument list too long",
+            Errno::ENOEXEC => "Exec format error",
+            Errno::EBADF => "Bad file descriptor",
+            Errno::ECHILD => "No child processes",
+            Errno::EAGAIN => "Try again",
+            Errno::ENOMEM => "Out of memory",
+            Errno::EACCES => "Permission denied",
+            Errno::EFAULT => "Bad address",
+            Errno::EBUSY => "Device or resource busy",
+            Errno::EEXIST => "File exists",
+            Errno::ENODEV => "No such device",
+            Errno::ENOTDIR => "Not a directory",
+            Errno::EISDIR => "Is a directory",
+            Errno::EINVAL => "Invalid argument",
+            Errno::EMFILE => "Too many open files",
+            Errno::ENOTTY => "Not a typewriter",
+            Errno::ENOSPC => "No space left on device",
+            Errno::ESPIPE => "Illegal seek",
+            Errno::EROFS => "Read-only file system",
+            Errno::EPIPE => "Broken pipe",
+            Errno::ERANGE => "Math result not representable",
+            Errno::ENOSYS => "Function not implemented",
+            Errno::ENAMETOOLONG => "File name too long",
+            Errno::EMSGSIZE => "Message too long",
+            Errno::ENOTSUP => "Operation not supported",
+            Errno::EAFNOSUPPORT => "Address family not supported",
+            Errno::EADDRNOTAVAIL => "Cannot assign requested address",
+            Errno::ENOTSOCK => "Socket operation on non-socket",
+            Errno::ETIMEDOUT => "Connection timed out",
+            Errno::ECANCELED => "Operation canceled",
+        }
+    }
+
     /// Convert a negated errno value (e.g., -2) to an Errno variant
     pub fn from_negated_i32(value: i32) -> Self {
         match -value {
