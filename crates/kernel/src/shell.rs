@@ -314,7 +314,19 @@ impl Shell {
                 "ctlhex" => { self.ctlhex_cmd(&parts[1..]); true },
                 #[cfg(feature = "virtio-console")]
                 "vconwrite" => { self.cmd_vconwrite(&parts[1..]); true },
-                "pmu" => { self.pmu_demo_cmd(); true },
+                "pmu" => {
+                    if parts.len() > 1 {
+                        match parts[1] {
+                            "stats" => self.pmu_stats_cmd(),
+                            "bench" | "demo" => self.pmu_demo_cmd(),
+                            _ => unsafe { crate::uart_print(b"Usage: pmu [stats|bench]\n"); },
+                        }
+                    } else {
+                        // Default: show stats
+                        self.pmu_stats_cmd();
+                    }
+                    true
+                },
                 "mem" => { self.cmd_mem(); true },
                 "regs" => { self.cmd_regs(); true },
                 "dtb" => { self.cmd_dtb(); true },

@@ -662,6 +662,11 @@ mod bringup {
         print_number(num_cpus);
         super::uart_print(b" CPU(S) ONLINE\n");
 
+        // 6.2) Initialize PMU (Performance Monitoring Unit) - M5
+        super::uart_print(b"PMU: INIT\n");
+        crate::pmu::init();
+        super::uart_print(b"PMU: READY\n");
+
         // 6) Initialize driver framework and discover devices (optional)
         // For bring-up stability, skip VirtIO drivers unless explicitly enabled.
         #[cfg(feature = "virtio-console")]
