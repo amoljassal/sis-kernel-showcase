@@ -10,9 +10,11 @@
 //! Each message contains a sequence of property tags with request/response data.
 //!
 //! ## M6 Implementation (GPIO/Mailbox)
+//! ## M8 Hardening Applied: Timeout framework, error handling, alignment validation
 
 use core::ptr::{read_volatile, write_volatile};
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use crate::drivers::{DriverError, DriverResult, Timeout, Validator};
 
 /// Mailbox register offsets
 const MAILBOX_READ: usize = 0x00;
@@ -100,15 +102,11 @@ pub mod voltage_id {
     pub const SDRAM_I: u32 = 4;
 }
 
-/// Mailbox error types
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum MailboxError {
-    NotInitialized,
-    Timeout,
-    InvalidResponse,
-    PropertyError,
-    BufferTooSmall,
-}
+/// Buffer alignment requirement (16 bytes for DMA)
+const MAILBOX_BUFFER_ALIGNMENT: usize = 16;
+
+/// Mailbox timeout (5 seconds for slow firmware operations)
+const MAILBOX_TIMEOUT_US: u64 = 5_000_000;
 
 /// Mailbox controller
 pub struct Mailbox {
@@ -132,55 +130,59 @@ impl Mailbox {
     /// * `channel` - Mailbox channel (typically MAILBOX_CHANNEL_PROPERTY)
     ///
     /// # Returns
-    /// `Ok(())` if successful, `Err(MailboxError)` on failure
+    /// `Ok(())` if successful, `Err(DriverError)` on failure
     ///
     /// # Safety
     /// The buffer must be properly aligned and contain a valid message
-    unsafe fn call(&self, buffer: &mut [u32], channel: u32) -> Result<(), MailboxError> {
-        // Buffer must be 16-byte aligned
+    ///
+    /// # M8 Hardening
+    /// - Uses Timeout framework (5s timeout for firmware operations)
+    /// - Validates 16-byte buffer alignment
+    /// - Proper error types via DriverError
+    unsafe fn call(&self, buffer: &mut [u32], channel: u32) -> DriverResult<()> {
         let addr = buffer.as_ptr() as usize;
-        if addr & 0xF != 0 {
-            return Err(MailboxError::BufferTooSmall);
-        }
+
+        // M8: Validate buffer alignment (16-byte required for DMA)
+        Validator::check_alignment(addr, MAILBOX_BUFFER_ALIGNMENT)?;
+
+        // M8: Use Timeout framework instead of raw counter
+        let timeout = Timeout::new(MAILBOX_TIMEOUT_US);
 
         // Wait for mailbox to be not full
-        let mut timeout = 1_000_000;
-        while (self.read_reg(MAILBOX_STATUS) & MAILBOX_FULL) != 0 {
-            timeout -= 1;
-            if timeout == 0 {
-                return Err(MailboxError::Timeout);
-            }
-            core::hint::spin_loop();
-        }
+        timeout.wait(|| (self.read_reg(MAILBOX_STATUS) & MAILBOX_FULL) == 0)?;
 
         // Write message address with channel in low 4 bits
         let msg = (addr & !0xF) as u32 | (channel & 0xF);
         self.write_reg(MAILBOX_WRITE, msg);
 
-        // Wait for response
-        timeout = 1_000_000;
+        // Wait for response with timeout
+        let response_timeout = Timeout::new(MAILBOX_TIMEOUT_US);
         loop {
             // Wait for mailbox to be not empty
-            while (self.read_reg(MAILBOX_STATUS) & MAILBOX_EMPTY) != 0 {
-                timeout -= 1;
-                if timeout == 0 {
-                    return Err(MailboxError::Timeout);
-                }
-                core::hint::spin_loop();
-            }
+            if (self.read_reg(MAILBOX_STATUS) & MAILBOX_EMPTY) == 0 {
+                // Read response
+                let resp = self.read_reg(MAILBOX_READ);
 
-            // Read response
-            let resp = self.read_reg(MAILBOX_READ);
-
-            // Check if this is our response
-            if (resp & 0xF) == channel {
-                // Check response code
-                if buffer[1] == MAILBOX_RESPONSE_SUCCESS {
-                    return Ok(());
-                } else {
-                    return Err(MailboxError::PropertyError);
+                // Check if this is our response
+                if (resp & 0xF) == channel {
+                    // Check response code
+                    if buffer[1] == MAILBOX_RESPONSE_SUCCESS {
+                        return Ok(());
+                    } else {
+                        return Err(DriverError::HardwareError); // Firmware rejected request
+                    }
                 }
             }
+
+            // Check timeout
+            if response_timeout.is_expired() {
+                return Err(DriverError::Timeout(crate::drivers::TimeoutError::new(
+                    response_timeout.elapsed_us(),
+                    MAILBOX_TIMEOUT_US,
+                )));
+            }
+
+            core::hint::spin_loop();
         }
     }
 
@@ -227,9 +229,11 @@ pub fn is_initialized() -> bool {
 }
 
 /// Get board serial number
-pub fn get_board_serial() -> Result<u64, MailboxError> {
+///
+/// # M8 Hardening: Returns DriverResult with proper error handling
+pub fn get_board_serial() -> DriverResult<u64> {
     if !is_initialized() {
-        return Err(MailboxError::NotInitialized);
+        return Err(DriverError::NotInitialized);
     }
 
     unsafe {
@@ -259,9 +263,11 @@ pub fn get_board_serial() -> Result<u64, MailboxError> {
 /// let temp = mailbox::get_temperature()?;
 /// // temp is in millidegrees, so 45123 = 45.123°C
 /// ```
-pub fn get_temperature() -> Result<u32, MailboxError> {
+///
+/// # M8 Hardening: Returns DriverResult with proper error handling
+pub fn get_temperature() -> DriverResult<u32> {
     if !is_initialized() {
-        return Err(MailboxError::NotInitialized);
+        return Err(DriverError::NotInitialized);
     }
 
     unsafe {
@@ -284,9 +290,11 @@ pub fn get_temperature() -> Result<u32, MailboxError> {
 }
 
 /// Get maximum temperature in millidegrees Celsius
-pub fn get_max_temperature() -> Result<u32, MailboxError> {
+///
+/// # M8 Hardening: Returns DriverResult
+pub fn get_max_temperature() -> DriverResult<u32> {
     if !is_initialized() {
-        return Err(MailboxError::NotInitialized);
+        return Err(DriverError::NotInitialized);
     }
 
     unsafe {
@@ -309,9 +317,11 @@ pub fn get_max_temperature() -> Result<u32, MailboxError> {
 }
 
 /// Get firmware revision
-pub fn get_firmware_revision() -> Result<u32, MailboxError> {
+///
+/// # M8 Hardening: Returns DriverResult
+pub fn get_firmware_revision() -> DriverResult<u32> {
     if !is_initialized() {
-        return Err(MailboxError::NotInitialized);
+        return Err(DriverError::NotInitialized);
     }
 
     unsafe {
@@ -333,9 +343,11 @@ pub fn get_firmware_revision() -> Result<u32, MailboxError> {
 }
 
 /// Get board model
-pub fn get_board_model() -> Result<u32, MailboxError> {
+///
+/// # M8 Hardening: Returns DriverResult
+pub fn get_board_model() -> DriverResult<u32> {
     if !is_initialized() {
-        return Err(MailboxError::NotInitialized);
+        return Err(DriverError::NotInitialized);
     }
 
     unsafe {
@@ -357,9 +369,11 @@ pub fn get_board_model() -> Result<u32, MailboxError> {
 }
 
 /// Get board revision
-pub fn get_board_revision() -> Result<u32, MailboxError> {
+///
+/// # M8 Hardening: Returns DriverResult
+pub fn get_board_revision() -> DriverResult<u32> {
     if !is_initialized() {
-        return Err(MailboxError::NotInitialized);
+        return Err(DriverError::NotInitialized);
     }
 
     unsafe {
@@ -381,9 +395,11 @@ pub fn get_board_revision() -> Result<u32, MailboxError> {
 }
 
 /// Get ARM memory region (base, size)
-pub fn get_arm_memory() -> Result<(u32, u32), MailboxError> {
+///
+/// # M8 Hardening: Returns DriverResult
+pub fn get_arm_memory() -> DriverResult<(u32, u32)> {
     if !is_initialized() {
-        return Err(MailboxError::NotInitialized);
+        return Err(DriverError::NotInitialized);
     }
 
     unsafe {
@@ -409,9 +425,11 @@ pub fn get_arm_memory() -> Result<(u32, u32), MailboxError> {
 ///
 /// # Arguments
 /// * `clock_id` - Clock ID (use `clock_id::*` constants)
-pub fn get_clock_rate(clock_id: u32) -> Result<u32, MailboxError> {
+///
+/// # M8 Hardening: Returns DriverResult
+pub fn get_clock_rate(clock_id: u32) -> DriverResult<u32> {
     if !is_initialized() {
-        return Err(MailboxError::NotInitialized);
+        return Err(DriverError::NotInitialized);
     }
 
     unsafe {
@@ -437,9 +455,11 @@ pub fn get_clock_rate(clock_id: u32) -> Result<u32, MailboxError> {
 ///
 /// # Arguments
 /// * `voltage_id` - Voltage ID (use `voltage_id::*` constants)
-pub fn get_voltage(voltage_id: u32) -> Result<u32, MailboxError> {
+///
+/// # M8 Hardening: Returns DriverResult
+pub fn get_voltage(voltage_id: u32) -> DriverResult<u32> {
     if !is_initialized() {
-        return Err(MailboxError::NotInitialized);
+        return Err(DriverError::NotInitialized);
     }
 
     unsafe {

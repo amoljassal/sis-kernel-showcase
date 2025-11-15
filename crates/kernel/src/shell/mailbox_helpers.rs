@@ -2,6 +2,9 @@
 //!
 //! Provides interactive commands for querying firmware information.
 //! Part of M6 (GPIO/Mailbox) implementation.
+//! M8 Hardening: Error handling for all mailbox operations
+
+use crate::drivers::DriverError;
 
 impl super::Shell {
     /// Mailbox command handler
@@ -107,11 +110,7 @@ impl super::Shell {
                     }
                 }
             }
-            Err(_) => {
-                unsafe {
-                    crate::uart_print(b"[MAILBOX] Failed to get temperature\n");
-                }
-            }
+            Err(e) => self.print_mailbox_error(e, b"Failed to get temperature"),
         }
     }
 
@@ -150,11 +149,7 @@ impl super::Shell {
                     crate::uart_print(b"\n");
                 }
             }
-            Err(_) => {
-                unsafe {
-                    crate::uart_print(b"[MAILBOX] Failed to get serial number\n");
-                }
-            }
+            Err(e) => self.print_mailbox_error(e, b"Failed to get serial number"),
         }
     }
 
@@ -168,11 +163,7 @@ impl super::Shell {
                     crate::uart_print(b"\n");
                 }
             }
-            Err(_) => {
-                unsafe {
-                    crate::uart_print(b"[MAILBOX] Failed to get firmware revision\n");
-                }
-            }
+            Err(e) => self.print_mailbox_error(e, b"Failed to get firmware revision"),
         }
     }
 
@@ -231,6 +222,32 @@ impl super::Shell {
             unsafe {
                 let ch = [digits[i]];
                 crate::uart_print(&ch);
+            }
+        }
+    }
+
+    /// Print mailbox error message
+    /// M8 Hardening: Comprehensive error reporting for firmware operations
+    fn print_mailbox_error(&self, error: DriverError, context: &[u8]) {
+        unsafe {
+            crate::uart_print(b"[MAILBOX ERROR] ");
+            crate::uart_print(context);
+            crate::uart_print(b": ");
+
+            match error {
+                DriverError::Timeout(ref t) => {
+                    crate::uart_print(b"Operation timed out after ");
+                    self.print_number_simple(t.elapsed_us / 1_000_000);
+                    crate::uart_print(b" seconds\n");
+                }
+                DriverError::NotInitialized => crate::uart_print(b"Mailbox not initialized\n"),
+                DriverError::HardwareError => crate::uart_print(b"Firmware rejected request\n"),
+                DriverError::AlignmentError => crate::uart_print(b"Buffer alignment error (must be 16-byte aligned)\n"),
+                _ => {
+                    crate::uart_print(b"Error code ");
+                    self.print_number_simple(error.code() as u64);
+                    crate::uart_print(b"\n");
+                }
             }
         }
     }
