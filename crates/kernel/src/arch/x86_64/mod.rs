@@ -173,10 +173,11 @@ pub mod paging;   // 4-level page tables (M3: Paging)
 // M4: Syscall Entry (COMPLETE)
 pub mod syscall;  // SYSCALL/SYSRET entry (M4: Syscalls)
 
+// M8: SMP & Per-CPU (IN PROGRESS)
+pub mod percpu;   // Per-CPU data structures (M8: SMP)
+
 #[cfg(feature = "m8-complete")]
-pub mod smp;      // SMP support (M8: SMP)
-#[cfg(feature = "m8-complete")]
-pub mod percpu;   // Per-CPU data (M8: SMP)
+pub mod smp;      // Full SMP support with AP boot (M8: SMP)
 
 #[cfg(feature = "m9-complete")]
 pub mod acpi;     // ACPI tables (M9: ACPI)

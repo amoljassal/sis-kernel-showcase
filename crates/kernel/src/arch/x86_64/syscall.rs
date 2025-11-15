@@ -301,9 +301,9 @@ pub unsafe extern "C" fn syscall_entry() {
         // Start over:
         "mov r15, rsp",          // R15 = user stack pointer (save it)
 
-        // Load kernel stack pointer from static variable (M4 only, M8 will use per-CPU)
-        "mov rsp, offset SYSCALL_KERNEL_STACK",
-        "mov rsp, [rsp]",
+        // Load kernel stack pointer from per-CPU data (M8)
+        // gs:[0x10] = CpuLocal.kernel_stack field
+        "mov rsp, gs:[0x10]",
 
         // Build a minimal stack frame for the syscall
         // We need to save: user RIP (RCX), user RFLAGS (R11), user RSP (R15)
@@ -397,10 +397,16 @@ extern "C" fn syscall_handler(
     arg4: u64,
     arg5: u64,
 ) -> i64 {
-    // For M4, we'll just log the syscall and return an error
+    // Update per-CPU syscall statistics (M8)
+    let cpu = crate::arch::x86_64::percpu::CpuLocal::current_mut();
+    cpu.stats.syscalls += 1;
+
+    // For M4/M8, we'll just log the syscall and return an error
     // Full syscall table integration will come later
 
-    crate::arch::x86_64::serial::serial_write(b"[SYSCALL] Received syscall #");
+    crate::arch::x86_64::serial::serial_write(b"[SYSCALL] CPU ");
+    print_u64(cpu.cpu_id as u64);
+    crate::arch::x86_64::serial::serial_write(b" syscall #");
     print_u64(syscall_num);
     crate::arch::x86_64::serial::serial_write(b" with args: ");
     print_u64(arg1);
@@ -439,36 +445,6 @@ fn print_u64(n: u64) {
     crate::arch::x86_64::serial::serial_write(&buf[..i]);
 }
 
-/// Kernel stack for syscalls (M4 only, replaced by per-CPU in M8)
-///
-/// This is a temporary solution for M4. In M8, each CPU will have its own
-/// stack in the per-CPU data area.
-///
-/// Stack grows downward, so we use the end of the array as the stack top.
-static mut SYSCALL_KERNEL_STACK_DATA: [u8; 16384] = [0; 16384];
-
-/// Pointer to top of kernel stack
-static mut SYSCALL_KERNEL_STACK: usize = 0;
-
-/// Top of syscall stack (for assembly access)
-#[no_mangle]
-static mut SYSCALL_STACK_TOP: usize = 0;
-
-/// Initialize the syscall kernel stack
-///
-/// # Safety
-///
-/// Must be called during boot before syscalls are enabled
-pub unsafe fn init_stack() {
-    let stack_top = SYSCALL_KERNEL_STACK_DATA.as_ptr() as usize + SYSCALL_KERNEL_STACK_DATA.len();
-    SYSCALL_KERNEL_STACK = stack_top;
-    SYSCALL_STACK_TOP = stack_top;
-
-    crate::arch::x86_64::serial::serial_write(b"[SYSCALL] Kernel stack initialized at ");
-    print_hex(stack_top as u64);
-    crate::arch::x86_64::serial::serial_write(b"\n");
-}
-
 /// Helper to print hex value
 fn print_hex(n: u64) {
     crate::arch::x86_64::serial::serial_write(b"0x");
@@ -480,16 +456,5 @@ fn print_hex(n: u64) {
             b'A' + (nibble - 10)
         };
         crate::arch::x86_64::serial::serial_write(&[ch]);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_syscall_stack_size() {
-        // Ensure stack is large enough (16 KiB should be plenty)
-        assert!(unsafe { SYSCALL_KERNEL_STACK_DATA.len() } >= 16384);
     }
 }
