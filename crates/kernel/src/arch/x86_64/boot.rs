@@ -160,6 +160,25 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
         serial::serial_write(b"[BOOT] TSS validation passed\n");
     }
 
+    // M1: Initialize interrupt handling
+    serial::serial_write(b"\n[BOOT] Milestone M1: Interrupt Handling\n");
+
+    // Step 9: Initialize legacy PIC (8259A)
+    // Remap PIC to vectors 32-47 to avoid conflicts with CPU exceptions
+    crate::arch::x86_64::pic::init();
+
+    // Step 10: Initialize PIT (Programmable Interval Timer)
+    // Configure for 1000 Hz (1 ms per tick)
+    crate::arch::x86_64::pit::init(1000);
+
+    // Step 11: Enable timer interrupt (IRQ 0)
+    crate::arch::x86_64::pic::enable_irq(crate::arch::x86_64::pic::Irq::Timer);
+
+    // Step 12: Enable interrupts globally
+    serial::serial_write(b"[BOOT] Enabling interrupts...\n");
+    x86_64::instructions::interrupts::enable();
+
+    serial::serial_write(b"[BOOT] Interrupts enabled\n");
     serial::serial_write(b"[BOOT] Early initialization complete\n");
     serial::serial_write(b"\n");
 

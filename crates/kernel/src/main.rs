@@ -215,11 +215,50 @@ pub extern "C" fn _start() -> ! {
 
     // TODO: Continue with platform-independent initialization
     arch::serial::serial_write(b"[BOOT] Kernel initialization complete\n");
-    arch::serial::serial_write(b"[BOOT] Entering idle loop...\n");
+    arch::serial::serial_write(b"[BOOT] Entering idle loop with timer demonstration...\n");
+    arch::serial::serial_write(b"[BOOT] Timer is configured for 1000 Hz (1 ms per tick)\n");
+    arch::serial::serial_write(b"\n");
 
-    // Idle loop (will be replaced with scheduler in M8)
+    // Idle loop with periodic timer tick display (will be replaced with scheduler in M8)
+    let mut last_displayed_second = 0u64;
     loop {
         x86_64::instructions::hlt();
+
+        // Display timer ticks every second (1000 ticks)
+        let ticks = arch::pit::ticks();
+        let current_second = ticks / 1000;
+
+        if current_second > last_displayed_second && current_second % 1 == 0 {
+            last_displayed_second = current_second;
+
+            arch::serial::serial_write(b"[TIMER] Uptime: ");
+            print_u64(current_second);
+            arch::serial::serial_write(b" seconds (");
+            print_u64(ticks);
+            arch::serial::serial_write(b" ticks)\n");
+        }
+    }
+}
+
+/// Helper to print u64
+fn print_u64(mut n: u64) {
+    if n == 0 {
+        arch::serial::serial_write(b"0");
+        return;
+    }
+
+    let mut buf = [0u8; 20];
+    let mut i = 0;
+
+    while n > 0 {
+        buf[i] = b'0' + (n % 10) as u8;
+        n /= 10;
+        i += 1;
+    }
+
+    while i > 0 {
+        i -= 1;
+        arch::serial::serial_write_byte(buf[i]);
     }
 }
 
