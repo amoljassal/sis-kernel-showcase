@@ -10,7 +10,7 @@ use spin::Mutex;
 use crate::lib::error::Result;
 
 #[cfg(feature = "decision-traces")]
-use crate::trace_decision::DecisionTrace;
+use crate::trace::DecisionTrace;
 
 /// OpenTelemetry span
 #[derive(Debug, Serialize, Deserialize)]

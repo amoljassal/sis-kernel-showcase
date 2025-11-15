@@ -119,3 +119,153 @@ pub fn metrics_snapshot_memory_alloc(_out: &mut [usize]) -> usize {
 pub fn metrics_snapshot_real_ctx(_out: &mut [usize]) -> usize {
     0
 }
+
+// ========== Decision Trace + OTel Integration ==========
+
+/// Telemetry snapshot at decision time
+pub struct DecisionTelemetry {
+    pub mem_pressure: u32,
+    pub deadline_misses: u32,
+}
+
+impl Default for DecisionTelemetry {
+    fn default() -> Self {
+        Self {
+            mem_pressure: 0,
+            deadline_misses: 0,
+        }
+    }
+}
+
+/// Policy check result
+pub struct PolicyCheck {
+    pub check_name: alloc::string::String,
+    pub passed: bool,
+    pub value: f32,
+}
+
+/// Simplified decision trace for autonomous system decisions
+pub struct DecisionTrace {
+    pub trace_id: u64,
+    pub timestamp_us: u64,
+    pub model_version: alloc::string::String,
+    pub chosen_action: u32,
+    pub confidence: u32,
+    pub was_executed: bool,
+    pub override_reason: Option<alloc::string::String>,
+    pub telemetry: DecisionTelemetry,
+    pub policy_checks: alloc::vec::Vec<PolicyCheck>,
+}
+
+impl DecisionTrace {
+    /// Create a new decision trace
+    pub fn new(action: u32, confidence: u32) -> Self {
+        Self {
+            trace_id: crate::time::get_uptime_ms(),  // Use timestamp as trace ID
+            timestamp_us: crate::time::current_time_us(),
+            model_version: alloc::string::String::from("v1.0"),
+            chosen_action: action,
+            confidence,
+            was_executed: true,
+            override_reason: None,
+            telemetry: DecisionTelemetry::default(),
+            policy_checks: alloc::vec::Vec::new(),
+        }
+    }
+
+    /// Mark as overridden with reason
+    pub fn override_with(mut self, reason: &str) -> Self {
+        self.was_executed = false;
+        self.override_reason = Some(alloc::string::String::from(reason));
+        self
+    }
+
+    /// Add policy check result
+    pub fn add_policy_check(mut self, name: &str, passed: bool, value: f32) -> Self {
+        self.policy_checks.push(PolicyCheck {
+            check_name: alloc::string::String::from(name),
+            passed,
+            value,
+        });
+        self
+    }
+
+    /// Set telemetry data
+    pub fn with_telemetry(mut self, mem_pressure: u32, deadline_misses: u32) -> Self {
+        self.telemetry = DecisionTelemetry {
+            mem_pressure,
+            deadline_misses,
+        };
+        self
+    }
+}
+
+/// Log a decision trace and export to OTel if feature enabled
+pub fn log_decision_trace(trace: DecisionTrace) {
+    // Log to UART
+    unsafe {
+        crate::uart_print(b"[DECISION] id=");
+        print_usize(trace.trace_id as usize);
+        crate::uart_print(b" action=");
+        print_usize(trace.chosen_action as usize);
+        crate::uart_print(b" conf=");
+        print_usize(trace.confidence as usize);
+        crate::uart_print(b" exec=");
+        crate::uart_print(if trace.was_executed { b"yes" } else { b"no" });
+        crate::uart_print(b"\n");
+    }
+
+    // Export to OTel if decision-traces feature enabled
+    #[cfg(feature = "decision-traces")]
+    {
+        crate::otel::exporter::OTEL_EXPORTER.record_decision_span(&trace);
+    }
+
+    // Write to decision log file
+    write_decision_log(&trace);
+}
+
+/// Write decision trace to VFS log file
+fn write_decision_log(trace: &DecisionTrace) {
+    use alloc::format;
+
+    let mut json = alloc::string::String::from("{");
+    json.push_str(&format!("\"trace_id\":{},", trace.trace_id));
+    json.push_str(&format!("\"timestamp_us\":{},", trace.timestamp_us));
+    json.push_str(&format!("\"model\":\"{}\"", trace.model_version));
+    json.push_str(&format!(",\"action\":{}", trace.chosen_action));
+    json.push_str(&format!(",\"confidence\":{}", trace.confidence));
+    json.push_str(&format!(",\"executed\":{}", trace.was_executed));
+
+    if let Some(reason) = &trace.override_reason {
+        json.push_str(&format!(",\"override\":\"{}\"", reason));
+    }
+
+    json.push_str("}\n");
+
+    // Append to decision log
+    let _ = crate::vfs::mkdir("/var", 0o755);
+    let _ = crate::vfs::mkdir("/var/log", 0o755);
+
+    if let Ok(fd) = crate::vfs::open(
+        "/var/log/decisions.json",
+        crate::vfs::OpenFlags::O_WRONLY | crate::vfs::OpenFlags::O_APPEND | crate::vfs::OpenFlags::O_CREAT
+    ) {
+        let _ = fd.write(json.as_bytes());
+    }
+}
+
+/// Cross-check decision trace with policy
+pub fn verify_decision_policy(trace: &DecisionTrace, agent_id: u32) -> bool {
+    use crate::agent_sys::policy;
+    use crate::security::agent_policy::{Capability, Resource, PolicyDecision};
+
+    // Check if agent has permission for the action
+    let decision = policy().check(
+        agent_id,
+        Capability::FsBasic,  // Placeholder - should map action to capability
+        &Resource::NoResource,
+    );
+
+    matches!(decision, PolicyDecision::Allow { .. })
+}
