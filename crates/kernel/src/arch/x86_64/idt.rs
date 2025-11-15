@@ -106,10 +106,27 @@ lazy_static! {
         idt.simd_floating_point.set_handler_fn(simd_floating_point_handler);
         idt.virtualization.set_handler_fn(virtualization_handler);
 
-        // Hardware interrupts (32-255) will be added in M1
+        // Hardware interrupts (32-255)
+        // M1: Add PIC interrupt handlers
+        idt[32].set_handler_fn(timer_interrupt_handler);      // IRQ 0 - PIT Timer
+        idt[33].set_handler_fn(keyboard_interrupt_handler);   // IRQ 1 - Keyboard
+        idt[36].set_handler_fn(serial_interrupt_handler);     // IRQ 4 - COM1
+        idt[39].set_handler_fn(spurious_interrupt_handler);   // IRQ 7 - Spurious (master)
+        idt[47].set_handler_fn(spurious_interrupt_handler);   // IRQ 15 - Spurious (slave)
 
         idt
     };
+}
+
+/// Initialize the IDT with full interrupt handling (M1)
+///
+/// This function loads the IDT with both exception and hardware interrupt handlers.
+///
+/// # Safety
+///
+/// Must be called during boot, after GDT/TSS are loaded and before enabling interrupts.
+pub unsafe fn init_idt() {
+    IDT.load();
 }
 
 /// Initialize the IDT (early boot version)
@@ -370,6 +387,87 @@ extern "x86-interrupt" fn simd_floating_point_handler(stack_frame: InterruptStac
 /// Triggered by EPT violations in virtualized environments
 extern "x86-interrupt" fn virtualization_handler(stack_frame: InterruptStackFrame) {
     panic!("EXCEPTION: VIRTUALIZATION EXCEPTION\n{:#?}", stack_frame);
+}
+
+//
+// Hardware Interrupt Handlers (M1)
+//
+
+/// Timer Interrupt Handler - IRQ 0 (Vector 32)
+///
+/// Called by the PIT (Programmable Interval Timer) at the configured frequency
+/// (typically 1000 Hz = 1 ms per tick).
+///
+/// Responsibilities:
+/// - Increment tick counter
+/// - Trigger scheduler (future)
+/// - Send EOI to PIC
+extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    // Increment PIT tick counter
+    crate::arch::x86_64::pit::tick();
+
+    // Send End of Interrupt to PIC
+    unsafe {
+        crate::arch::x86_64::pic::end_of_interrupt(32);
+    }
+}
+
+/// Keyboard Interrupt Handler - IRQ 1 (Vector 33)
+///
+/// Called when a key is pressed or released on the PS/2 keyboard.
+///
+/// # Note
+///
+/// For M1, this is a stub. Full keyboard driver will be added later.
+extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    use x86_64::instructions::port::Port;
+
+    // Read scancode from keyboard (port 0x60)
+    // This is necessary to acknowledge the keystroke
+    unsafe {
+        let _scancode: u8 = Port::new(0x60).read();
+        // TODO: Process scancode in keyboard driver
+    }
+
+    // Send EOI to PIC
+    unsafe {
+        crate::arch::x86_64::pic::end_of_interrupt(33);
+    }
+}
+
+/// Serial Interrupt Handler - IRQ 4 (Vector 36)
+///
+/// Called when data is received on COM1 serial port.
+///
+/// # Note
+///
+/// For M1, serial port uses polling (no interrupts). This is a stub for future use.
+extern "x86-interrupt" fn serial_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    // TODO: Read data from serial port FIFO
+    // For now, just acknowledge the interrupt
+
+    // Send EOI to PIC
+    unsafe {
+        crate::arch::x86_64::pic::end_of_interrupt(36);
+    }
+}
+
+/// Spurious Interrupt Handler - IRQ 7/15 (Vectors 39/47)
+///
+/// Spurious interrupts can occur on the PIC due to electrical noise or other issues.
+/// They occur on IRQ 7 (master PIC) or IRQ 15 (slave PIC).
+///
+/// The PIC's In-Service Register (ISR) must be checked to confirm if the interrupt
+/// was spurious.
+extern "x86-interrupt" fn spurious_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    // Note: For spurious interrupts on IRQ 7, we should NOT send EOI to master
+    // For spurious interrupts on IRQ 15, we should send EOI to master but NOT slave
+
+    // TODO: Check ISR to determine if truly spurious
+    // For now, just acknowledge (conservative approach)
+    // unsafe {
+    //     crate::arch::x86_64::pic::end_of_interrupt(vector);
+    // }
 }
 
 // Temporary helper to write to serial port

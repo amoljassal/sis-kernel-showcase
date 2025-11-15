@@ -1,6 +1,6 @@
 # x86_64 Architecture Implementation
 
-**Status:** Milestone M0 Complete (Skeleton Boot)
+**Status:** Milestone M1 Complete (Interrupts & Exceptions)
 **Last Updated:** 2025-11-15
 **Architecture:** Intel/AMD 64-bit (x86_64)
 **Boot Method:** UEFI
@@ -10,22 +10,24 @@
 
 ## Executive Summary
 
-This document describes the x86_64 architecture implementation for the SIS kernel. The implementation follows a milestone-based approach (M0-M9) as outlined in `IMPLEMENTATION_PLAN_X86_64.md`. As of this update, **Milestone M0 (Skeleton Boot)** has been completed, providing a minimal but functional boot environment with serial console support.
+This document describes the x86_64 architecture implementation for the SIS kernel. The implementation follows a milestone-based approach (M0-M9) as outlined in `IMPLEMENTATION_PLAN_X86_64.md`. As of this update, **Milestones M0 (Skeleton Boot) and M1 (Interrupts & Exceptions)** have been completed, providing a fully functional boot environment with hardware interrupt support, timer interrupts, and exception handling.
 
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)
 2. [Milestone M0: Skeleton Boot](#milestone-m0-skeleton-boot)
-3. [Module Organization](#module-organization)
-4. [Memory Layout](#memory-layout)
-5. [Boot Sequence](#boot-sequence)
-6. [CPU Feature Management](#cpu-feature-management)
-7. [Exception Handling](#exception-handling)
-8. [Serial Console](#serial-console)
-9. [Time Keeping](#time-keeping)
-10. [Future Milestones](#future-milestones)
-11. [Testing](#testing)
-12. [References](#references)
+3. [Milestone M1: Interrupts & Exceptions](#milestone-m1-interrupts--exceptions)
+4. [Module Organization](#module-organization)
+5. [Memory Layout](#memory-layout)
+6. [Boot Sequence](#boot-sequence)
+7. [CPU Feature Management](#cpu-feature-management)
+8. [Exception Handling](#exception-handling)
+9. [Interrupt Handling](#interrupt-handling)
+10. [Serial Console](#serial-console)
+11. [Time Keeping](#time-keeping)
+12. [Future Milestones](#future-milestones)
+13. [Testing](#testing)
+14. [References](#references)
 
 ---
 

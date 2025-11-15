@@ -159,11 +159,9 @@ pub mod tss;      // Task State Segment
 pub mod serial;   // 16550 UART driver
 pub mod boot;     // Boot sequence and early init
 
-// Conditionally compiled based on milestone progress
-#[cfg(feature = "m1-complete")]
-pub mod pic;      // Legacy 8259A PIC (M1: Interrupts)
-#[cfg(feature = "m1-complete")]
-pub mod pit;      // Programmable Interval Timer (M1: Interrupts)
+// M1: Interrupts & Exceptions (COMPLETE)
+pub mod pic;      // Legacy 8259A PIC
+pub mod pit;      // Programmable Interval Timer
 
 #[cfg(feature = "m2-complete")]
 pub mod apic;     // Local APIC and I/O APIC (M2: APIC)
