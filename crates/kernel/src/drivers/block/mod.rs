@@ -47,8 +47,8 @@ pub fn get_block_device(name: &str) -> Option<Arc<dyn BlockDevice>> {
 /// 4. Registers the device
 pub unsafe fn init_sdhci_from_dt() -> Result<()> {
     // Get SDHCI info from device tree
-    let devmap = get_device_map().ok_or(crate::lib::error::Errno::NoDevice)?;
-    let sdhci_info = devmap.sdhci.ok_or(crate::lib::error::Errno::NoDevice)?;
+    let devmap = get_device_map().ok_or(crate::lib::error::Errno::ENODEV)?;
+    let sdhci_info = devmap.sdhci.ok_or(crate::lib::error::Errno::ENODEV)?;
 
     crate::info!("Block: Initializing SDHCI at {:#x}", sdhci_info.base);
 
@@ -62,7 +62,8 @@ pub unsafe fn init_sdhci_from_dt() -> Result<()> {
     controller.init()?;
 
     // Register as block device
-    let device = Arc::from(controller);
+    let controller: alloc::sync::Arc<sdhci::SdhciController> = alloc::sync::Arc::from(controller);
+    let device: alloc::sync::Arc<dyn BlockDevice> = controller as alloc::sync::Arc<dyn BlockDevice>;
     register_block_device(device)?;
 
     Ok(())

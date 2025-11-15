@@ -44,6 +44,7 @@ static PMU_INITIALIZED: AtomicBool = AtomicBool::new(false);
 #[cfg(target_arch = "aarch64")]
 pub mod aarch64 {
     use super::PMU_INITIALIZED;
+    use super::{DriverError, DriverResult, Validator};
     use core::sync::atomic::Ordering;
     #[inline(always)]
     unsafe fn write_pmselelr(idx: u64) {
@@ -320,7 +321,7 @@ pub mod aarch64 {
         }
 
         // M8: Validate counter index (0-5)
-        Validator::check_bounds(counter_idx, 0, super::MAX_EVENT_COUNTER)?;
+        Validator::check_bounds(counter_idx as usize, 0, super::MAX_EVENT_COUNTER as usize)?;
 
         write_pmselelr(counter_idx);
         Ok(read_pmxevcntr())
@@ -330,7 +331,7 @@ pub mod aarch64 {
 #[cfg(not(target_arch = "aarch64"))]
 pub mod aarch64 {
     use super::PMU_INITIALIZED;
-    use crate::drivers::{DriverError, DriverResult, Validator};
+    use super::{DriverError, DriverResult, Validator};
     use core::sync::atomic::Ordering;
 
     #[derive(Copy, Clone, Default, Debug)]
@@ -431,4 +432,3 @@ pub fn read_event_counter(counter_idx: u64) -> DriverResult<u64> {
 pub fn is_initialized() -> bool {
     PMU_INITIALIZED.load(Ordering::Acquire)
 }
-

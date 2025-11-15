@@ -3076,6 +3076,38 @@ pub fn print_number_signed(num: i64) {
         }
     }
 
+    /// Parse a number from ASCII bytes (supports dec and 0x-prefixed hex)
+    fn parse_number(&self, s: &[u8]) -> Option<u32> {
+        if s.is_empty() { return None; }
+        let mut i = 0usize;
+        // Skip leading whitespace
+        while i < s.len() && (s[i] == b' ' || s[i] == b'\t') { i += 1; }
+        if i >= s.len() { return None; }
+
+        let (radix, mut idx) = if i + 2 <= s.len() && (s[i] == b'0') && (s[i+1] == b'x' || s[i+1] == b'X') {
+            (16u32, i + 2)
+        } else {
+            (10u32, i)
+        };
+
+        let mut val: u64 = 0;
+        let mut any = false;
+        while idx < s.len() {
+            let c = s[idx];
+            let d = match c {
+                b'0'..=b'9' => (c - b'0') as u32,
+                b'a'..=b'f' if radix == 16 => 10 + (c - b'a') as u32,
+                b'A'..=b'F' if radix == 16 => 10 + (c - b'A') as u32,
+                _ => break,
+            };
+            val = val.saturating_mul(radix as u64).saturating_add(d as u64);
+            any = true;
+            idx += 1;
+            if val > u32::MAX as u64 { return None; }
+        }
+        if any { Some(val as u32) } else { None }
+    }
+
     /// Get PID syscall wrapper
     fn syscall_getpid(&self) -> Result<u32, SyscallError> {
         let mut result: i64;

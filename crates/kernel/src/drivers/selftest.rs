@@ -108,22 +108,22 @@ pub struct TestCase {
 
 impl TestCase {
     /// Create a new test case
-    pub fn new(name: &'static str, result: TestResult) -> Self {
+    pub const fn new(name: &'static str, result: TestResult) -> Self {
         Self { name, result }
     }
 
     /// Create a passing test case
-    pub fn pass(name: &'static str) -> Self {
+    pub const fn pass(name: &'static str) -> Self {
         Self::new(name, TestResult::Pass)
     }
 
     /// Create a failing test case
-    pub fn fail(name: &'static str, reason: TestFailure) -> Self {
+    pub const fn fail(name: &'static str, reason: TestFailure) -> Self {
         Self::new(name, TestResult::Fail(reason))
     }
 
     /// Create a skipped test case
-    pub fn skip(name: &'static str) -> Self {
+    pub const fn skip(name: &'static str) -> Self {
         Self::new(name, TestResult::Skip)
     }
 }
