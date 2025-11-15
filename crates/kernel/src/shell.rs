@@ -84,6 +84,7 @@ mod versionctl_helpers;
 mod pmu_helpers;
 mod gpio_helpers;      // M6: GPIO control
 mod mailbox_helpers;   // M6: Firmware mailbox interface
+mod selftest_helpers;  // M8: Driver self-test framework
 mod stresstest_helpers;
 mod benchmark_helpers;
 mod fullautodemo_helpers;
@@ -331,6 +332,21 @@ impl Shell {
                 },
                 "gpio" => { self.gpio_cmd(&parts[1..]); true },      // M6: GPIO commands
                 "mailbox" => { self.mailbox_cmd(&parts[1..]); true }, // M6: Mailbox commands
+                "selftest" => {                                       // M8: Driver self-tests
+                    if parts.len() > 1 {
+                        match parts[1] {
+                            "all" => self.selftest_all_cmd(),
+                            "gpio" => self.selftest_gpio_cmd(),
+                            "mailbox" => self.selftest_mailbox_cmd(),
+                            "pmu" => self.selftest_pmu_cmd(),
+                            _ => unsafe { crate::uart_print(b"Usage: selftest [all|gpio|mailbox|pmu]\n"); },
+                        }
+                    } else {
+                        // Default: run all tests
+                        self.selftest_all_cmd();
+                    }
+                    true
+                },
                 "mem" => { self.cmd_mem(); true },
                 "regs" => { self.cmd_regs(); true },
                 "dtb" => { self.cmd_dtb(); true },
@@ -449,6 +465,7 @@ impl Shell {
             crate::uart_print(b"  pmu      - Run PMU demo (cycles/inst/l1d_refill)\n");
             crate::uart_print(b"  gpio     - GPIO control: set|clear|toggle|read|output|input|blink <pin> [args]\n");
             crate::uart_print(b"  mailbox  - Firmware interface: temp|info|serial|fw|mem|all\n");
+            crate::uart_print(b"  selftest - Run driver self-tests: all|gpio|mailbox|pmu (M8 hardening)\n");
             crate::uart_print(b"  mem      - Show memory information\n");
             crate::uart_print(b"  regs     - Show system registers\n");
             crate::uart_print(b"  dtb      - Show device tree information\n");
