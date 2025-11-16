@@ -177,6 +177,22 @@ OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd \
 - Entropy source: ARM64 uses `cntvct_el0`, x86_64 uses TSC—both feed same PRNG
 - Memory layout preserved across architectures for consistency
 
+**Cross-Platform Compatibility Layer:**
+
+The kernel implements a unified serial abstraction layer (`arch::serial`) that provides consistent serial I/O across both architectures:
+
+- **x86_64**: Full 16550 UART driver with interrupt support (COM1/COM2), ring buffers, and non-blocking I/O
+  - File: `crates/kernel/src/arch/x86_64/serial.rs` (414 lines)
+  - Hardware: I/O port-based access (0x3F8/0x2F8)
+  - Features: Interrupt-driven RX, polling TX, 256-byte ring buffers
+- **ARM64**: Compatibility wrapper over platform UART infrastructure
+  - File: `crates/kernel/src/arch/aarch64/serial.rs` (77 lines)
+  - Wraps existing `uart_print()` calls for output
+  - Input methods stubbed (returns 0/None) as UART RX not yet implemented on ARM64
+  - Maintains API compatibility for seamless cross-platform builds
+
+This allows shared kernel code (e.g., `main.rs:print_u64()`) to use `arch::serial::serial_write()` without `#[cfg]` guards, while each architecture provides its own implementation. The abstraction ensures the kernel compiles and boots successfully on both platforms.
+
 **Next Steps (Real Hardware Boot Readiness):**
 1. ✅ ~~Implement proper boot_info passing from UEFI bootloader~~ (COMPLETED)
 2. ✅ ~~Query GOP framebuffer information~~ (COMPLETED)
