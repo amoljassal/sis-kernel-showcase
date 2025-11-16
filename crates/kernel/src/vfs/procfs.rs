@@ -817,6 +817,11 @@ impl InodeOps for AgentSysDir {
                 0o444,
                 Box::leak(Box::new(CloudGatewayFile)) as &'static dyn InodeOps,
             ))),
+            "compliance" => Ok(Arc::new(Inode::new(
+                InodeType::Regular,
+                0o444,
+                Box::leak(Box::new(ComplianceFile)) as &'static dyn InodeOps,
+            ))),
             _ => Err(Errno::ENOENT),
         }
     }
@@ -851,6 +856,11 @@ impl InodeOps for AgentSysDir {
         entries.push(DirEntry {
             ino: 9,
             name: "cloud_gateway".to_string(),
+            itype: InodeType::Regular,
+        });
+        entries.push(DirEntry {
+            ino: 10,
+            name: "compliance".to_string(),
             itype: InodeType::Regular,
         });
 
@@ -1097,6 +1107,123 @@ impl InodeOps for CloudGatewayFile {
             Ok(to_copy)
         } else {
             let msg = b"Cloud Gateway not initialized\n";
+            if offset >= msg.len() as u64 {
+                return Ok(0);
+            }
+
+            let start = offset as usize;
+            let to_copy = (msg.len() - start).min(buf.len());
+            buf[..to_copy].copy_from_slice(&msg[start..start + to_copy]);
+            Ok(to_copy)
+        }
+    }
+
+    fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
+        Err(Errno::EACCES)
+    }
+
+    fn lookup(&self, _name: &str) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        Err(Errno::ENOTDIR)
+    }
+}
+
+#[cfg(feature = "agentsys")]
+/// /proc/agentsys/compliance file - EU AI Act compliance report
+struct ComplianceFile;
+
+#[cfg(feature = "agentsys")]
+impl InodeOps for ComplianceFile {
+    fn getattr(&self) -> Result<super::inode::InodeMeta> {
+        Ok(super::inode::InodeMeta {
+            ino: 10,
+            itype: InodeType::Regular,
+            mode: crate::vfs::S_IFREG | 0o444,
+            uid: 0,
+            gid: 0,
+            nlink: 1,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
+        })
+    }
+
+    fn read(&self, offset: u64, buf: &mut [u8]) -> Result<usize> {
+        use alloc::format;
+        use alloc::string::ToString;
+
+        // Get compliance report
+        if let Some(report) = crate::agent_sys::supervisor::hooks::get_compliance_report() {
+            // Format compliance report as human-readable text
+            let mut output = alloc::vec::Vec::new();
+
+            output.extend_from_slice(b"EU AI Act Compliance Report\n");
+            output.extend_from_slice(b"===========================\n\n");
+
+            // System-wide compliance
+            output.extend_from_slice(format!("Timestamp:            {}\n", report.timestamp).as_bytes());
+            output.extend_from_slice(format!("Total Agents:         {}\n", report.total_agents).as_bytes());
+            output.extend_from_slice(format!("Total Events:         {}\n", report.total_events).as_bytes());
+            output.extend_from_slice(format!("Policy Violations:    {}\n", report.policy_violations).as_bytes());
+            output.extend_from_slice(format!("System Compliance:    {:.1}%\n\n", report.system_compliance_score * 100.0).as_bytes());
+
+            // Risk level distribution
+            output.extend_from_slice(b"Risk Level Distribution:\n");
+            output.extend_from_slice(format!("  Minimal:            {}\n", report.minimal_risk_agents).as_bytes());
+            output.extend_from_slice(format!("  Limited:            {}\n", report.limited_risk_agents).as_bytes());
+            output.extend_from_slice(format!("  High:               {}\n", report.high_risk_agents).as_bytes());
+            output.extend_from_slice(format!("  Unacceptable:       {}\n", report.unacceptable_risk_agents).as_bytes());
+            output.extend_from_slice(b"\n");
+
+            // Per-agent compliance
+            output.extend_from_slice(b"Agent Compliance Details:\n");
+            output.extend_from_slice(b"-------------------------\n");
+
+            for agent_record in &report.agent_records {
+                output.extend_from_slice(format!("\nAgent ID: {}\n", agent_record.agent_id).as_bytes());
+                output.extend_from_slice(format!("  Risk Level:         {}\n", agent_record.risk_level.as_str()).as_bytes());
+                output.extend_from_slice(format!("  Events Logged:      {}\n", agent_record.events_logged).as_bytes());
+                output.extend_from_slice(format!("  Violations:         {}\n", agent_record.policy_violations).as_bytes());
+                output.extend_from_slice(format!("  Human Oversight:    {}\n", agent_record.human_oversight_count).as_bytes());
+                output.extend_from_slice(format!("  Compliance Score:   {:.1}%\n", agent_record.compliance_score * 100.0).as_bytes());
+
+                let status = if agent_record.compliance_score >= 0.9 {
+                    "COMPLIANT"
+                } else if agent_record.compliance_score >= 0.7 {
+                    "REVIEW_NEEDED"
+                } else {
+                    "NON_COMPLIANT"
+                };
+                output.extend_from_slice(format!("  Status:             {}\n", status).as_bytes());
+            }
+
+            output.extend_from_slice(b"\n");
+            output.extend_from_slice(b"Compliance Requirements (EU AI Act):\n");
+            output.extend_from_slice(b"- Transparency: All operations logged\n");
+            output.extend_from_slice(b"- Risk Assessment: Agents classified by risk level\n");
+            output.extend_from_slice(b"- Human Oversight: Available via compliance events\n");
+            output.extend_from_slice(b"- Audit Trail: Complete event history maintained\n");
+            output.extend_from_slice(b"- Robustness: Fault detection and recovery active\n");
+
+            let bytes = &output;
+            if offset >= bytes.len() as u64 {
+                return Ok(0);
+            }
+
+            let start = offset as usize;
+            let to_copy = (bytes.len() - start).min(buf.len());
+            buf[..to_copy].copy_from_slice(&bytes[start..start + to_copy]);
+            Ok(to_copy)
+        } else {
+            let msg = b"Compliance tracking not initialized\n";
             if offset >= msg.len() as u64 {
                 return Ok(0);
             }

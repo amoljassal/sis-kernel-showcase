@@ -4,7 +4,8 @@
 //! manager during agent lifecycle events (spawn, exit, etc.).
 
 use super::types::*;
-use super::{AGENT_SUPERVISOR, TELEMETRY, FAULT_DETECTOR};
+use super::{AGENT_SUPERVISOR, TELEMETRY, FAULT_DETECTOR, COMPLIANCE_TRACKER};
+use super::compliance::{ComplianceEvent, RiskLevel};
 use crate::process::Pid;
 use crate::agent_sys::AgentId;
 
@@ -47,12 +48,31 @@ pub fn is_agent_process(pid: Pid) -> Option<AgentId> {
 /// }
 /// ```
 pub fn on_process_spawn(pid: Pid, spec: AgentSpec) -> AgentId {
+    let agent_id = spec.agent_id;
+    let name = spec.name.clone();
+
     let mut supervisor = AGENT_SUPERVISOR.lock();
     if let Some(ref mut sup) = *supervisor {
-        sup.on_agent_spawn(pid, spec)
+        sup.on_agent_spawn(pid, spec);
+
+        // Log compliance event for agent spawn
+        drop(supervisor); // Release lock before acquiring compliance lock
+        let mut compliance = COMPLIANCE_TRACKER.lock();
+        if let Some(ref mut tracker) = *compliance {
+            // Classify risk level based on agent capabilities
+            // For now, use Limited as default (can be enhanced later)
+            let event = ComplianceEvent::AgentSpawned {
+                agent_id,
+                risk_level: RiskLevel::Limited,
+                purpose: alloc::format!("Agent: {}", name),
+            };
+            tracker.log_event(event);
+        }
+
+        agent_id
     } else {
         crate::uart::print_str("[ASM] Warning: Supervisor not initialized during spawn\n");
-        spec.agent_id // Return the spec's ID if supervisor not ready
+        agent_id // Return the spec's ID if supervisor not ready
     }
 }
 
@@ -84,13 +104,39 @@ pub fn on_process_exit(pid: Pid, exit_code: i32) -> bool {
         if let Some(metadata) = sup.get_agent_by_pid(pid) {
             let agent_id = metadata.agent_id;
 
+            // Get operations count from telemetry before exit
+            let operations_count = {
+                let telemetry = TELEMETRY.lock();
+                if let Some(ref t) = *telemetry {
+                    if let Some(agent_metrics) = t.get_agent_metrics(agent_id) {
+                        agent_metrics.operations_count
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                }
+            };
+
             // Update supervisor
             sup.on_agent_exit(pid, exit_code);
+
+            // Log compliance event for agent exit
+            drop(supervisor); // Release lock before acquiring compliance lock
+            let mut compliance = COMPLIANCE_TRACKER.lock();
+            if let Some(ref mut tracker) = *compliance {
+                let event = ComplianceEvent::AgentExited {
+                    agent_id,
+                    exit_code,
+                    operations_count,
+                };
+                tracker.log_event(event);
+            }
+            drop(compliance);
 
             // Clean up Cloud Gateway rate limiter for this agent
             #[cfg(feature = "agentsys")]
             {
-                drop(supervisor); // Release lock before acquiring gateway lock
                 let mut gateway = crate::agent_sys::cloud_gateway::CLOUD_GATEWAY.lock();
                 if let Some(ref mut gw) = *gateway {
                     gw.remove_agent(agent_id);
@@ -129,6 +175,34 @@ pub fn on_process_exit(pid: Pid, exit_code: i32) -> bool {
 /// }
 /// ```
 pub fn report_agent_fault(agent_id: AgentId, fault: super::fault::Fault) -> super::fault::FaultAction {
+    // Log compliance event for policy violation
+    let violation_type = match &fault {
+        super::fault::Fault::CpuQuotaExceeded { .. } => "CPU Quota Exceeded",
+        super::fault::Fault::MemoryExceeded { .. } => "Memory Limit Exceeded",
+        super::fault::Fault::SyscallFlood { .. } => "Syscall Flood",
+        super::fault::Fault::WatchdogTimeout { .. } => "Watchdog Timeout",
+        super::fault::Fault::Crashed { .. } => "Agent Crashed",
+    };
+
+    let severity = match &fault {
+        super::fault::Fault::Crashed { .. } => RiskLevel::High,
+        super::fault::Fault::MemoryExceeded { .. } => RiskLevel::High,
+        super::fault::Fault::SyscallFlood { .. } => RiskLevel::Limited,
+        _ => RiskLevel::Limited,
+    };
+
+    let mut compliance = COMPLIANCE_TRACKER.lock();
+    if let Some(ref mut tracker) = *compliance {
+        let event = ComplianceEvent::PolicyViolation {
+            agent_id,
+            violation_type: violation_type.to_string(),
+            severity,
+        };
+        tracker.log_event(event);
+    }
+    drop(compliance);
+
+    // Handle fault
     let mut supervisor = AGENT_SUPERVISOR.lock();
     if let Some(ref mut sup) = *supervisor {
         sup.on_fault(agent_id, fault)
@@ -221,6 +295,34 @@ pub fn touch_agent_by_pid(pid: Pid) {
             touch_agent(agent_id);
         }
     }
+}
+
+/// Get compliance report for all agents
+///
+/// This provides a comprehensive EU AI Act compliance report
+/// for use by syscalls and /proc filesystem.
+pub fn get_compliance_report() -> Option<super::compliance::ComplianceReport> {
+    let compliance = COMPLIANCE_TRACKER.lock();
+    compliance.as_ref().map(|t| t.generate_report())
+}
+
+/// Log a compliance event (for use by syscall handlers)
+///
+/// This allows handlers to log compliance events when agents
+/// access sensitive data or make decisions.
+pub fn log_compliance_event(event: ComplianceEvent) {
+    let mut compliance = COMPLIANCE_TRACKER.lock();
+    if let Some(ref mut tracker) = *compliance {
+        tracker.log_event(event);
+    }
+}
+
+/// Get compliance score for an agent
+///
+/// Returns compliance score (0.0 - 1.0) for an agent
+pub fn get_agent_compliance_score(agent_id: AgentId) -> Option<f32> {
+    let compliance = COMPLIANCE_TRACKER.lock();
+    compliance.as_ref()?.get_agent_record(agent_id).map(|r| r.compliance_score)
 }
 
 #[cfg(test)]

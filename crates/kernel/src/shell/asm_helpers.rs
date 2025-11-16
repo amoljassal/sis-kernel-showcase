@@ -411,4 +411,106 @@ impl Shell {
             }
         }
     }
+
+    /// Show compliance report
+    pub fn cmd_compliance(&self) {
+        #[cfg(feature = "agentsys")]
+        {
+            use crate::agent_sys::supervisor::hooks::get_compliance_report;
+
+            unsafe {
+                crate::uart_print(b"\nEU AI Act Compliance Report\n");
+                crate::uart_print(b"===========================\n\n");
+            }
+
+            if let Some(report) = get_compliance_report() {
+                // System-wide compliance
+                unsafe {
+                    crate::uart_print(b"Timestamp:          ");
+                    self.print_number_simple(report.timestamp);
+                    crate::uart_print(b"\nTotal Agents:       ");
+                    self.print_number_simple(report.total_agents as u64);
+                    crate::uart_print(b"\nTotal Events:       ");
+                    self.print_number_simple(report.total_events as u64);
+                    crate::uart_print(b"\nPolicy Violations:  ");
+                    self.print_number_simple(report.policy_violations as u64);
+                    crate::uart_print(b"\nSystem Compliance:  ");
+                }
+
+                let compliance_pct = (report.system_compliance_score * 100.0) as u64;
+                self.print_number_simple(compliance_pct);
+                unsafe { crate::uart_print(b"%\n\n"); }
+
+                // Risk level distribution
+                unsafe {
+                    crate::uart_print(b"Risk Level Distribution:\n");
+                    crate::uart_print(b"  Minimal:          ");
+                    self.print_number_simple(report.minimal_risk_agents as u64);
+                    crate::uart_print(b"\n  Limited:          ");
+                    self.print_number_simple(report.limited_risk_agents as u64);
+                    crate::uart_print(b"\n  High:             ");
+                    self.print_number_simple(report.high_risk_agents as u64);
+                    crate::uart_print(b"\n  Unacceptable:     ");
+                    self.print_number_simple(report.unacceptable_risk_agents as u64);
+                    crate::uart_print(b"\n\n");
+                }
+
+                // Per-agent compliance
+                unsafe {
+                    crate::uart_print(b"Agent Compliance Details:\n");
+                    crate::uart_print(b"-------------------------\n");
+                }
+
+                for agent_record in &report.agent_records {
+                    unsafe {
+                        crate::uart_print(b"\nAgent ID: ");
+                        self.print_number_simple(agent_record.agent_id as u64);
+                        crate::uart_print(b"\n  Risk Level:       ");
+                        crate::uart_print(agent_record.risk_level.as_str().as_bytes());
+                        crate::uart_print(b"\n  Events Logged:    ");
+                        self.print_number_simple(agent_record.events_logged as u64);
+                        crate::uart_print(b"\n  Violations:       ");
+                        self.print_number_simple(agent_record.policy_violations as u64);
+                        crate::uart_print(b"\n  Human Oversight:  ");
+                        self.print_number_simple(agent_record.human_oversight_count as u64);
+                        crate::uart_print(b"\n  Compliance Score: ");
+                    }
+
+                    let score_pct = (agent_record.compliance_score * 100.0) as u64;
+                    self.print_number_simple(score_pct);
+                    unsafe {
+                        crate::uart_print(b"%\n  Status:           ");
+
+                        if agent_record.compliance_score >= 0.9 {
+                            crate::uart_print(b"COMPLIANT\n");
+                        } else if agent_record.compliance_score >= 0.7 {
+                            crate::uart_print(b"REVIEW_NEEDED\n");
+                        } else {
+                            crate::uart_print(b"NON_COMPLIANT\n");
+                        }
+                    }
+                }
+
+                unsafe {
+                    crate::uart_print(b"\nCompliance Requirements (EU AI Act):\n");
+                    crate::uart_print(b"- Transparency: All operations logged\n");
+                    crate::uart_print(b"- Risk Assessment: Agents classified by risk level\n");
+                    crate::uart_print(b"- Human Oversight: Available via compliance events\n");
+                    crate::uart_print(b"- Audit Trail: Complete event history maintained\n");
+                    crate::uart_print(b"- Robustness: Fault detection and recovery active\n");
+                }
+            } else {
+                unsafe {
+                    crate::uart_print(b"Compliance tracking not initialized\n");
+                }
+            }
+        }
+
+        #[cfg(not(feature = "agentsys"))]
+        {
+            unsafe {
+                crate::uart_print(b"Compliance tracking not available (feature not enabled)\n");
+            }
+        }
+    }
 }
