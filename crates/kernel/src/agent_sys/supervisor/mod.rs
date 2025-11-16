@@ -41,6 +41,7 @@ pub mod telemetry;
 pub mod fault;
 pub mod policy_controller;
 pub mod hooks;
+pub mod compliance;
 
 #[cfg(test)]
 mod tests;
@@ -50,6 +51,7 @@ pub use lifecycle::AgentSupervisor;
 pub use telemetry::TelemetryAggregator;
 pub use fault::{FaultDetector, Fault, FaultAction, RecoveryPolicy};
 pub use policy_controller::PolicyController;
+pub use compliance::{ComplianceTracker, ComplianceReport, RiskLevel, ComplianceEvent};
 
 use spin::Mutex;
 
@@ -65,6 +67,9 @@ pub static FAULT_DETECTOR: Mutex<Option<FaultDetector>> = Mutex::new(None);
 /// Global policy controller instance
 pub static POLICY_CONTROLLER: Mutex<Option<PolicyController>> = Mutex::new(None);
 
+/// Global compliance tracker instance
+pub static COMPLIANCE_TRACKER: Mutex<Option<ComplianceTracker>> = Mutex::new(None);
+
 /// Initialize the Agent Supervision Module
 ///
 /// This must be called during kernel initialization, after AgentSys is initialized.
@@ -73,8 +78,10 @@ pub fn init() {
     *TELEMETRY.lock() = Some(TelemetryAggregator::new());
     *FAULT_DETECTOR.lock() = Some(FaultDetector::new());
     *POLICY_CONTROLLER.lock() = Some(PolicyController::new());
+    *COMPLIANCE_TRACKER.lock() = Some(ComplianceTracker::new());
 
     crate::uart::print_str("[ASM] Agent Supervision Module initialized\n");
+    crate::uart::print_str("[ASM] EU AI Act compliance tracking enabled\n");
 }
 
 /// Check if ASM is initialized
