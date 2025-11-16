@@ -40,6 +40,7 @@ pub mod lifecycle;
 pub mod telemetry;
 pub mod fault;
 pub mod policy_controller;
+pub mod hooks;
 
 pub use types::*;
 pub use lifecycle::AgentSupervisor;

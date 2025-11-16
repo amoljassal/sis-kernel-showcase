@@ -10,7 +10,7 @@ use crate::process::signal::Signal;
 pub use super::FAULT_DETECTOR;
 
 /// Fault types that can be detected
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Fault {
     /// CPU usage exceeded quota
     CpuQuotaExceeded {

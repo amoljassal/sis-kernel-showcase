@@ -115,6 +115,12 @@ pub fn do_exit(current_pid: Pid, exit_code: i32) -> ! {
         }
     }
 
+    // Notify ASM if this was an agent process
+    #[cfg(feature = "agentsys")]
+    {
+        crate::agent_sys::supervisor::hooks::on_process_exit(current_pid, exit_code);
+    }
+
     // TODO: Wake parent if it's waiting
     // TODO: Send SIGCHLD to parent
 

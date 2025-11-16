@@ -52,6 +52,12 @@ impl InodeOps for ProcfsRoot {
                 0o444,
                 Box::leak(Box::new(MountsFile)) as &'static dyn InodeOps,
             ))),
+            #[cfg(feature = "agentsys")]
+            "agentsys" => Ok(Arc::new(Inode::new(
+                InodeType::Directory,
+                0o555,
+                Box::leak(Box::new(AgentSysDir)) as &'static dyn InodeOps,
+            ))),
             "self" => {
                 // /proc/self symlink to current process (Phase A2)
                 let pid = crate::process::current_pid();
@@ -120,6 +126,14 @@ impl InodeOps for ProcfsRoot {
             ino: 5,
             name: "mounts".to_string(),
             itype: InodeType::Regular,
+        });
+
+        // Add agentsys directory if feature is enabled
+        #[cfg(feature = "agentsys")]
+        entries.push(DirEntry {
+            ino: 6,
+            name: "agentsys".to_string(),
+            itype: InodeType::Directory,
         });
 
         // TODO: Add PID directories dynamically
@@ -760,6 +774,235 @@ impl InodeOps for ProcPidMaps {
         Err(Errno::ENOTDIR)
     }
 }
+
+// =============================================================================
+// Agent Supervision Module /proc entries
+// =============================================================================
+
+#[cfg(feature = "agentsys")]
+/// /proc/agentsys directory
+struct AgentSysDir;
+
+#[cfg(feature = "agentsys")]
+impl InodeOps for AgentSysDir {
+    fn getattr(&self) -> Result<super::inode::InodeMeta> {
+        Ok(super::inode::InodeMeta {
+            ino: 6,
+            itype: InodeType::Directory,
+            mode: crate::vfs::S_IFDIR | 0o555,
+            uid: 0,
+            gid: 0,
+            nlink: 2,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
+        })
+    }
+
+    fn lookup(&self, name: &str) -> Result<Arc<Inode>> {
+        match name {
+            "status" => Ok(Arc::new(Inode::new(
+                InodeType::Regular,
+                0o444,
+                Box::leak(Box::new(AgentStatusFile)) as &'static dyn InodeOps,
+            ))),
+            "telemetry" => Ok(Arc::new(Inode::new(
+                InodeType::Regular,
+                0o444,
+                Box::leak(Box::new(AgentTelemetryFile)) as &'static dyn InodeOps,
+            ))),
+            _ => Err(Errno::ENOENT),
+        }
+    }
+
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::EROFS)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        let mut entries = Vec::new();
+
+        entries.push(DirEntry {
+            ino: 6,
+            name: ".".to_string(),
+            itype: InodeType::Directory,
+        });
+        entries.push(DirEntry {
+            ino: 1,
+            name: "..".to_string(),
+            itype: InodeType::Directory,
+        });
+        entries.push(DirEntry {
+            ino: 7,
+            name: "status".to_string(),
+            itype: InodeType::Regular,
+        });
+        entries.push(DirEntry {
+            ino: 8,
+            name: "telemetry".to_string(),
+            itype: InodeType::Regular,
+        });
+
+        Ok(entries)
+    }
+
+    fn read(&self, _offset: u64, _buf: &mut [u8]) -> Result<usize> {
+        Err(Errno::EISDIR)
+    }
+
+    fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
+        Err(Errno::EISDIR)
+    }
+}
+
+#[cfg(feature = "agentsys")]
+/// /proc/agentsys/status file - human-readable telemetry
+struct AgentStatusFile;
+
+#[cfg(feature = "agentsys")]
+impl InodeOps for AgentStatusFile {
+    fn getattr(&self) -> Result<super::inode::InodeMeta> {
+        Ok(super::inode::InodeMeta {
+            ino: 7,
+            itype: InodeType::Regular,
+            mode: crate::vfs::S_IFREG | 0o444,
+            uid: 0,
+            gid: 0,
+            nlink: 1,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
+        })
+    }
+
+    fn read(&self, offset: u64, buf: &mut [u8]) -> Result<usize> {
+        // Get telemetry data from ASM
+        let telemetry = crate::agent_sys::supervisor::TELEMETRY.lock();
+
+        if let Some(ref telem) = *telemetry {
+            // Export to buffer
+            let written = telem.export_proc(buf);
+
+            if offset >= written as u64 {
+                return Ok(0);
+            }
+
+            let start = offset as usize;
+            let remaining = written - start;
+
+            // The data is already in buf, just return the length from offset
+            Ok(remaining.min(buf.len()))
+        } else {
+            let msg = b"Agent Supervision Module not initialized\n";
+            if offset >= msg.len() as u64 {
+                return Ok(0);
+            }
+
+            let start = offset as usize;
+            let to_copy = (msg.len() - start).min(buf.len());
+            buf[..to_copy].copy_from_slice(&msg[start..start + to_copy]);
+            Ok(to_copy)
+        }
+    }
+
+    fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
+        Err(Errno::EACCES)
+    }
+
+    fn lookup(&self, _name: &str) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        Err(Errno::ENOTDIR)
+    }
+}
+
+#[cfg(feature = "agentsys")]
+/// /proc/agentsys/telemetry file - JSON telemetry snapshot
+struct AgentTelemetryFile;
+
+#[cfg(feature = "agentsys")]
+impl InodeOps for AgentTelemetryFile {
+    fn getattr(&self) -> Result<super::inode::InodeMeta> {
+        Ok(super::inode::InodeMeta {
+            ino: 8,
+            itype: InodeType::Regular,
+            mode: crate::vfs::S_IFREG | 0o444,
+            uid: 0,
+            gid: 0,
+            nlink: 1,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
+        })
+    }
+
+    fn read(&self, offset: u64, buf: &mut [u8]) -> Result<usize> {
+        // Get telemetry snapshot
+        if let Some(snapshot) = crate::agent_sys::supervisor::hooks::get_telemetry_snapshot() {
+            // Serialize to JSON
+            if let Ok(json) = serde_json::to_string(&snapshot) {
+                let bytes = json.as_bytes();
+
+                if offset >= bytes.len() as u64 {
+                    return Ok(0);
+                }
+
+                let start = offset as usize;
+                let to_copy = (bytes.len() - start).min(buf.len());
+                buf[..to_copy].copy_from_slice(&bytes[start..start + to_copy]);
+                Ok(to_copy)
+            } else {
+                let msg = b"Failed to serialize telemetry\n";
+                if offset == 0 {
+                    let to_copy = msg.len().min(buf.len());
+                    buf[..to_copy].copy_from_slice(&msg[..to_copy]);
+                    Ok(to_copy)
+                } else {
+                    Ok(0)
+                }
+            }
+        } else {
+            let msg = b"Agent Supervision Module not initialized\n";
+            if offset >= msg.len() as u64 {
+                return Ok(0);
+            }
+
+            let start = offset as usize;
+            let to_copy = (msg.len() - start).min(buf.len());
+            buf[..to_copy].copy_from_slice(&msg[start..start + to_copy]);
+            Ok(to_copy)
+        }
+    }
+
+    fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
+        Err(Errno::EACCES)
+    }
+
+    fn lookup(&self, _name: &str) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        Err(Errno::ENOTDIR)
+    }
+}
+
+// =============================================================================
+// Mount function
+// =============================================================================
 
 /// Mount procfs at /proc
 pub fn mount_procfs() -> Result<Arc<Inode>> {

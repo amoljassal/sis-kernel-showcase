@@ -17,7 +17,7 @@ pub use super::TELEMETRY;
 const MAX_EVENTS: usize = 1024;
 
 /// Per-agent metrics
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AgentMetrics {
     /// Agent identifier
     pub agent_id: AgentId,
@@ -72,7 +72,7 @@ impl AgentMetrics {
 }
 
 /// System-wide aggregate metrics
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SystemMetrics {
     /// Total number of agent spawns since boot
     pub total_spawns: u64,
@@ -103,7 +103,7 @@ impl SystemMetrics {
 }
 
 /// Telemetry event for the ring buffer
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub enum TelemetryEvent {
     /// Agent spawned
     Spawn(AgentId, Timestamp),
@@ -355,7 +355,7 @@ impl Default for TelemetryAggregator {
 }
 
 /// Snapshot of telemetry data
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TelemetrySnapshot {
     /// Snapshot timestamp
     pub timestamp: Timestamp,
