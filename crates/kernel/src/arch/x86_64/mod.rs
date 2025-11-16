@@ -188,6 +188,10 @@ pub mod virtio_block;  // VirtIO block device driver
 // M7: VirtIO Network Driver (COMPLETE)
 pub mod virtio_net;    // VirtIO network device driver
 
+// Real Hardware Support
+pub mod ahci;          // AHCI/SATA disk controller driver
+pub mod ps2_keyboard;  // PS/2 keyboard driver (8042 controller)
+
 // M8: SMP & Per-CPU (COMPLETE)
 pub mod percpu;   // Per-CPU data structures (M8 Part 1: Per-CPU)
 pub mod smp;      // Full SMP support with AP boot (M8 Part 2: AP Startup)

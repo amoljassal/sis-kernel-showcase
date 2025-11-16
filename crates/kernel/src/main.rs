@@ -222,12 +222,23 @@ pub extern "C" fn _start(boot_info: *const crate::arch::x86_64::boot::BootInfo) 
     arch::serial::serial_write(b"[BOOT] Kernel initialization complete\n");
     arch::serial::serial_write(b"[BOOT] Entering idle loop with timer demonstration...\n");
     arch::serial::serial_write(b"[BOOT] Timer is configured for 1000 Hz (1 ms per tick)\n");
+    arch::serial::serial_write(b"[BOOT] PS/2 keyboard is active - press keys to test!\n");
     arch::serial::serial_write(b"\n");
 
     // Idle loop with periodic timer tick display (will be replaced with scheduler in M8)
     let mut last_displayed_second = 0u64;
     loop {
         x86_64::instructions::hlt();
+
+        // Check for keyboard input
+        #[cfg(target_arch = "x86_64")]
+        if let Some(ch) = arch::ps2_keyboard::read_char() {
+            arch::serial::serial_write(b"[KEYBOARD] Key pressed: '");
+            arch::serial::serial_write_byte(ch as u8);
+            arch::serial::serial_write(b"' (ASCII: ");
+            print_u64(ch as u64);
+            arch::serial::serial_write(b")\n");
+        }
 
         // Display timer ticks every second (1000 ticks)
         let ticks = arch::pit::ticks();
