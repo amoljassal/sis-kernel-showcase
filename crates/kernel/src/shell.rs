@@ -99,6 +99,8 @@ mod actorctl_helpers;
 mod llmctl_helpers;
 #[cfg(feature = "agentsys")]
 mod agentsys_helpers;
+#[cfg(feature = "agentsys")]
+mod asm_helpers;
 #[cfg(any(feature = "demos", feature = "deterministic"))]
 mod demos;
 
@@ -242,6 +244,14 @@ impl Shell {
                 "agentctl" => { self.agentctl_cmd(&parts[1..]); true },
                 #[cfg(feature = "agentsys")]
                 "agentsys" => { self.cmd_agentsys(&parts[1..]); true },
+                #[cfg(feature = "agentsys")]
+                "asmstatus" => { self.cmd_asmstatus(); true },
+                #[cfg(feature = "agentsys")]
+                "asmlist" => { self.cmd_asmlist(); true },
+                #[cfg(feature = "agentsys")]
+                "asminfo" => { self.cmd_asminfo(&parts); true },
+                #[cfg(feature = "agentsys")]
+                "asmpolicy" => { self.cmd_asmpolicy(&parts); true },
                 "coordctl" => { self.coordctl_cmd(&parts[1..]); true },
                 "deployctl" => { self.deployctl_cmd(&parts[1..]); true },
                 "driftctl" => { self.driftctl_cmd(&parts[1..]); true },

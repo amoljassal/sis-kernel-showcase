@@ -42,6 +42,9 @@ pub mod fault;
 pub mod policy_controller;
 pub mod hooks;
 
+#[cfg(test)]
+mod tests;
+
 pub use types::*;
 pub use lifecycle::AgentSupervisor;
 pub use telemetry::TelemetryAggregator;

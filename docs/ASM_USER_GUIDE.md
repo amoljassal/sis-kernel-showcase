@@ -13,11 +13,13 @@
 3. [Understanding ASM Components](#understanding-asm-components)
 4. [Working with Agents](#working-with-agents)
 5. [Monitoring and Telemetry](#monitoring-and-telemetry)
-6. [Policy Management](#policy-management)
-7. [Fault Handling](#fault-handling)
-8. [Best Practices](#best-practices)
-9. [Troubleshooting](#troubleshooting)
-10. [FAQ](#faq)
+6. [Using Shell Commands](#using-shell-commands)
+7. [Using Syscall Interface](#using-syscall-interface)
+8. [Policy Management](#policy-management)
+9. [Fault Handling](#fault-handling)
+10. [Best Practices](#best-practices)
+11. [Troubleshooting](#troubleshooting)
+12. [FAQ](#faq)
 
 ---
 
@@ -296,6 +298,304 @@ Cumulative CPU time in microseconds. Use this to:
 - Identify CPU-intensive agents
 - Detect performance regressions
 - Plan resource allocation
+
+---
+
+## Using Shell Commands
+
+ASM provides built-in shell commands for interactive monitoring and management.
+
+### Available Commands
+
+#### `asmstatus` - View System Status
+
+Display overall ASM telemetry:
+
+```bash
+$ asmstatus
+
+Agent Supervision Module - System Status
+========================================
+
+System Metrics:
+  Total Spawns:     15
+  Total Exits:      12
+  Total Crashes:    2
+  Total Faults:     3
+  Total Restarts:   2
+  Active Agents:    3
+  Total Syscalls:   45678
+
+Recent Events (last 10):
+  [12345678] Agent 103 exited (code 0)
+  [12345670] Agent 102 spawned
+  [12345665] Agent 101 fault: CPU quota exceeded
+```
+
+#### `asmlist` - List Active Agents
+
+Show all currently running agents:
+
+```bash
+$ asmlist
+
+Active Agents:
+ID    PID   Name              Capabilities        Restarts
+----  ----  ----------------  ------------------  --------
+100   42    fs_monitor        FsBasic             0
+101   43    net_agent         NetClient           2
+102   44    audio_ctrl        AudioControl        0
+```
+
+#### `asminfo <agent_id>` - Agent Details
+
+Get detailed information about a specific agent:
+
+```bash
+$ asminfo 100
+
+Agent Information:
+==================
+Agent ID:        100
+PID:             42
+Name:            fs_monitor
+State:           Active
+Capabilities:    FsBasic, FsExtended
+Auto-Restart:    Yes (max 3)
+Restart Count:   0
+
+Telemetry:
+  Spawn Count:   1
+  Exit Count:    0
+  Fault Count:   0
+  CPU Time:      125000 μs
+  Memory:        4096000 bytes
+
+Last Activity:   2 seconds ago
+```
+
+#### `asmpolicy <agent_id>` - View Agent Policy
+
+Display the current policy for an agent:
+
+```bash
+$ asmpolicy 100
+
+Policy for Agent 100:
+====================
+Capabilities:
+  - FsBasic
+  - FsExtended
+
+Scope:
+  Path: /tmp/agent_workspace/
+
+Auto-Restart: Yes
+Max Restarts: 3
+Current Restarts: 0
+
+Resource Limits:
+  CPU Quota:     1000000 μs
+  Memory Limit:  104857600 bytes
+  Syscall Rate:  1000/sec
+```
+
+### Shell Command Best Practices
+
+1. **Monitoring Loop**: Use `watch` for continuous monitoring:
+   ```bash
+   watch -n 2 asmstatus
+   ```
+
+2. **Quick Health Check**: Check for unhealthy agents:
+   ```bash
+   asmlist | awk '{if ($6 > 2) print "Agent " $1 " restarted " $6 " times"}'
+   ```
+
+3. **Audit Trail**: Log all agent info periodically:
+   ```bash
+   for id in $(asmlist | tail -n +3 | awk '{print $1}'); do
+       asminfo $id >> /var/log/asm_audit.log
+   done
+   ```
+
+---
+
+## Using Syscall Interface
+
+For programmatic access from userspace applications, ASM provides syscalls.
+
+### Available Syscalls
+
+#### Syscall 500: Get Telemetry
+
+Retrieve telemetry data as JSON:
+
+```c
+#include <syscall.h>
+#include <string.h>
+
+char buffer[8192];
+ssize_t len = syscall(500, buffer, sizeof(buffer));
+
+if (len > 0) {
+    // Parse JSON telemetry
+    printf("Telemetry: %.*s\n", (int)len, buffer);
+}
+```
+
+**Returns**: JSON-formatted telemetry snapshot, or negative errno on error.
+
+**Buffer Format**:
+```json
+{
+  "system": {
+    "total_agents_spawned": 15,
+    "total_agents_exited": 12,
+    "active_agents": 3,
+    "total_faults": 5
+  },
+  "agents": {
+    "100": {
+      "spawn_count": 1,
+      "exit_count": 0,
+      "fault_count": 0,
+      "cpu_time_us": 125000,
+      "memory_bytes": 4096000
+    }
+  },
+  "recent_events": [...]
+}
+```
+
+#### Syscall 501: Update Agent Policy
+
+Dynamically update an agent's policy:
+
+```c
+// Add a capability
+syscall(501, agent_id, 1 /* ADD_CAPABILITY */, capability_value);
+
+// Remove a capability
+syscall(501, agent_id, 2 /* REMOVE_CAPABILITY */, capability_value);
+
+// Update scope
+syscall(501, agent_id, 3 /* UPDATE_SCOPE */, scope_value);
+
+// Set auto-restart
+syscall(501, agent_id, 4 /* SET_AUTO_RESTART */, max_restarts);
+```
+
+**Patch Types**:
+- `1`: Add capability
+- `2`: Remove capability
+- `3`: Update scope
+- `4`: Set auto-restart limit
+
+**Returns**: 0 on success, negative errno on error.
+
+**Error Codes**:
+- `-EPERM` (1): Privilege escalation denied
+- `-EINVAL` (22): Invalid patch type or argument
+- `-ESRCH` (3): Agent not found
+
+#### Syscall 502: Get Agent Info
+
+Retrieve detailed information about a specific agent:
+
+```c
+char info_buffer[4096];
+ssize_t len = syscall(502, agent_id, info_buffer, sizeof(info_buffer));
+
+if (len > 0) {
+    // Parse JSON agent info
+    printf("Agent Info: %.*s\n", (int)len, info_buffer);
+}
+```
+
+**Returns**: JSON-formatted agent metadata, or negative errno on error.
+
+**Buffer Format**:
+```json
+{
+  "agent_id": 100,
+  "pid": 42,
+  "name": "my_agent",
+  "capabilities": ["FsBasic", "NetClient"],
+  "auto_restart": true,
+  "max_restarts": 3,
+  "restart_count": 0,
+  "spawn_count": 1,
+  "fault_count": 0
+}
+```
+
+### Syscall Usage Examples
+
+#### Python Wrapper
+
+```python
+import ctypes
+import json
+
+libc = ctypes.CDLL(None)
+
+def get_asm_telemetry():
+    """Get ASM telemetry as dict"""
+    buf = ctypes.create_string_buffer(8192)
+    ret = libc.syscall(500, buf, len(buf))
+    if ret < 0:
+        raise OSError(-ret, "syscall failed")
+    return json.loads(buf.value.decode())
+
+def update_agent_policy(agent_id, patch_type, arg):
+    """Update agent policy"""
+    ret = libc.syscall(501, agent_id, patch_type, arg)
+    if ret < 0:
+        raise OSError(-ret, "syscall failed")
+    return ret
+
+# Usage
+telemetry = get_asm_telemetry()
+print(f"Active agents: {telemetry['system']['active_agents']}")
+
+# Add capability (example)
+update_agent_policy(100, 1, 0x02)  # Add FsBasic (0x02)
+```
+
+#### C Monitoring Tool
+
+```c
+#include <stdio.h>
+#include <syscall.h>
+#include <unistd.h>
+
+int main() {
+    char buf[8192];
+
+    while (1) {
+        ssize_t len = syscall(500, buf, sizeof(buf));
+
+        if (len > 0) {
+            // Simple parsing - count active agents
+            // (In production, use proper JSON parser)
+            printf("\033[2J\033[H");  // Clear screen
+            printf("ASM Telemetry:\n%.*s\n", (int)len, buf);
+        }
+
+        sleep(2);
+    }
+
+    return 0;
+}
+```
+
+### Security Considerations
+
+1. **Buffer Size**: Always provide adequate buffer size (8KB+ recommended)
+2. **Validation**: Validate all inputs before syscall invocation
+3. **Permissions**: Policy updates may require elevated privileges
+4. **Rate Limiting**: Don't spam syscalls - cache telemetry when possible
 
 ---
 
