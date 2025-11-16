@@ -148,6 +148,17 @@ The kernel now boots successfully on **x86_64** in addition to ARM64, providing 
   - Successfully enumerates all PCI devices on bus 0
   - Detected 8 devices including VirtIO block (0x1af4:0x1042), network (0x1af4:0x1000), and AHCI (0x8086:0x2922)
   - Memory-mapped configuration space at 0xe0000000
+  - Multi-function device support and enhanced BAR parsing
+- **AHCI/SATA Controller**:
+  - Full AHCI controller initialization at BAR5 (248-line driver)
+  - Port detection and configuration (6 ports)
+  - SATA drive enumeration and signature detection
+  - Read/write command infrastructure (validation pending)
+- **PS/2 Keyboard Controller**:
+  - Complete PS/2 keyboard controller initialization (339-line driver)
+  - Scancode translation and keyboard event handling
+  - Interrupt-driven input on IRQ 1
+  - Successfully detects keypress events in QEMU
 - **Per-CPU Data**: BSP (Bootstrap Processor) initialization complete
 - **Syscall/Sysret**: SYSCALL/SYSRET mechanism initialized with per-CPU kernel stacks
 - **Serial Console**: Interrupt-driven UART I/O on COM1 (IRQ 4) with 256-byte RX buffer
@@ -162,14 +173,21 @@ OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd \
 ```
 
 **🔧 Known Limitations (x86_64):**
-- **Heap Allocator**: Cannot allocate large structs (PciDevice) at current boot stage
-  - PCI devices are enumerated and counted but not stored in global list
-  - VirtIO drivers cannot initialize without device info (pending heap improvements)
+- **VirtIO Drivers**: Not yet functional - requires VirtIO-PCI transport layer
+  - PCI-based VirtIO devices detected but driver probe fails
+  - VirtIO block and network drivers need PCI transport (currently only MMIO transport exists for ARM64)
+  - Fix needed in `crates/kernel/src/arch/x86_64/mod.rs::init_virtio_blk()` and `init_virtio_net()`
 - **Display Output**: Framebuffer info received but no text rendering implemented yet (serial console only)
-- **Disk I/O**: AHCI controller detected but driver not yet implemented
-- **Keyboard Input**: PS/2 keyboard driver not yet implemented
+- **Disk I/O**: AHCI driver initialized but read/write operations not fully validated
+  - Controller and port detection working
+  - Command infrastructure in place but needs integration testing
 - **SMP**: Multi-processor support pending (INIT/SIPI sequences not implemented)
-- **Hardware**: No physical x86_64 hardware validation yet—QEMU-only (targeting MacBook Pro Mid 2012)
+  - APIC timer not yet calibrated (using legacy PIT at 1000 Hz)
+- **Real Hardware**: Mac firmware compatibility issues documented
+  - Kernel boots successfully in QEMU with OVMF firmware
+  - MacBook Pro 2012 UEFI firmware issues: bootloader hangs/crashes (see `docs/guides/MAC_FIRMWARE_COMPATIBILITY.md`)
+  - Bootable USB creation scripts available (`scripts/create_bootable_usb*.sh`)
+  - Alternative: Use rEFInd or GRUB to chainload kernel on Mac hardware
 
 **Architecture Differences:**
 - ARM64 subsystems (SDHCI, BCM GPIO, mailbox) are cfg'd out on x86_64
@@ -196,14 +214,14 @@ This allows shared kernel code (e.g., `main.rs:print_u64()`) to use `arch::seria
 **Next Steps (Real Hardware Boot Readiness):**
 1. ✅ ~~Implement proper boot_info passing from UEFI bootloader~~ (COMPLETED)
 2. ✅ ~~Query GOP framebuffer information~~ (COMPLETED)
-3. Implement AHCI/SATA controller driver for disk I/O
-4. Implement PS/2 keyboard driver for input
-5. Add framebuffer text rendering for display output
-6. Validate Mac UEFI firmware compatibility
-7. Test on real hardware (MacBook Pro Mid 2012)
-8. Fix heap allocator to support PciDevice allocation
-9. Enable VirtIO block and network device initialization
-10. Implement SMP support (APIC, INIT/SIPI, AP startup)
+3. ✅ ~~Implement AHCI/SATA controller driver~~ (COMPLETED - validation pending)
+4. ✅ ~~Implement PS/2 keyboard driver~~ (COMPLETED - working in QEMU)
+5. Implement VirtIO-PCI transport layer for block/network drivers
+6. Calibrate APIC timer and enable per-CPU timers
+7. Add framebuffer text rendering for display output
+8. Fix Mac UEFI bootloader compatibility (see `docs/guides/MAC_FIRMWARE_COMPATIBILITY.md`)
+9. Test AHCI read/write operations with real disk
+10. Enable SMP multi-processor support (INIT/SIPI sequences)
 
 ### 2. Web GUI Live Dashboard (90 sec)
 ```bash
@@ -10302,6 +10320,20 @@ Comprehensive guides for all aspects of the SIS Kernel:
   - Bring-up procedures and validation criteria
   - Performance baselines: QEMU vs hardware
   - Production deployment checklist and monitoring
+- `docs/guides/BOOTABLE_USB_GUIDE.md` - Creating bootable USB for x86_64 (390 lines)
+  - Step-by-step USB creation for MacBook Pro Mid 2012
+  - Build UEFI bootloader and kernel binaries
+  - Partition scheme (GPT with EFI System Partition)
+  - UEFI boot process and troubleshooting
+  - Hardware detection checklist (CPU, ACPI, PCI, AHCI, PS/2)
+  - Serial console and framebuffer output
+- `docs/guides/MAC_FIRMWARE_COMPATIBILITY.md` - Mac UEFI firmware issues (376 lines)
+  - Comprehensive analysis of MacBook Pro 2012 boot failures
+  - UEFI bootloader compatibility investigation
+  - 4 root cause hypotheses with evidence
+  - Tested workarounds (USB boot, internal EFI, GRUB chainload)
+  - Comparison: QEMU/OVMF vs Mac firmware
+  - Recommended solutions (rEFInd, GRUB, bootloader fixes)
 
 **API & Integration:**
 - `docs/guides/API-REFERENCE.md` - Complete API documentation
