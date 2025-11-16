@@ -4,7 +4,7 @@
 //! manager during agent lifecycle events (spawn, exit, etc.).
 
 use super::types::*;
-use super::{AGENT_SUPERVISOR, TELEMETRY, FAULT_DETECTOR, COMPLIANCE_TRACKER};
+use super::{AGENT_SUPERVISOR, TELEMETRY, FAULT_DETECTOR, COMPLIANCE_TRACKER, RESOURCE_MONITOR, DEPENDENCY_GRAPH, SYSTEM_PROFILER};
 use super::compliance::{ComplianceEvent, RiskLevel};
 use crate::process::Pid;
 use crate::agent_sys::AgentId;
@@ -54,13 +54,11 @@ pub fn on_process_spawn(pid: Pid, spec: AgentSpec) -> AgentId {
     let mut supervisor = AGENT_SUPERVISOR.lock();
     if let Some(ref mut sup) = *supervisor {
         sup.on_agent_spawn(pid, spec);
+        drop(supervisor);
 
         // Log compliance event for agent spawn
-        drop(supervisor); // Release lock before acquiring compliance lock
         let mut compliance = COMPLIANCE_TRACKER.lock();
         if let Some(ref mut tracker) = *compliance {
-            // Classify risk level based on agent capabilities
-            // For now, use Limited as default (can be enhanced later)
             let event = ComplianceEvent::AgentSpawned {
                 agent_id,
                 risk_level: RiskLevel::Limited,
@@ -68,11 +66,33 @@ pub fn on_process_spawn(pid: Pid, spec: AgentSpec) -> AgentId {
             };
             tracker.log_event(event);
         }
+        drop(compliance);
+
+        // Register in resource monitor
+        let mut resource_mon = RESOURCE_MONITOR.lock();
+        if let Some(ref mut monitor) = *resource_mon {
+            monitor.add_agent(agent_id);
+        }
+        drop(resource_mon);
+
+        // Register in dependency graph
+        let mut dep_graph = DEPENDENCY_GRAPH.lock();
+        if let Some(ref mut graph) = *dep_graph {
+            graph.add_agent(agent_id);
+        }
+        drop(dep_graph);
+
+        // Register in profiler
+        let mut profiler = SYSTEM_PROFILER.lock();
+        if let Some(ref mut prof) = *profiler {
+            prof.add_agent(agent_id);
+        }
+        drop(profiler);
 
         agent_id
     } else {
         crate::uart::print_str("[ASM] Warning: Supervisor not initialized during spawn\n");
-        agent_id // Return the spec's ID if supervisor not ready
+        agent_id
     }
 }
 
@@ -142,6 +162,27 @@ pub fn on_process_exit(pid: Pid, exit_code: i32) -> bool {
                     gw.remove_agent(agent_id);
                 }
             }
+
+            // Clean up resource monitor
+            let mut resource_mon = RESOURCE_MONITOR.lock();
+            if let Some(ref mut monitor) = *resource_mon {
+                monitor.remove_agent(agent_id);
+            }
+            drop(resource_mon);
+
+            // Clean up dependency graph
+            let mut dep_graph = DEPENDENCY_GRAPH.lock();
+            if let Some(ref mut graph) = *dep_graph {
+                graph.remove_agent(agent_id);
+            }
+            drop(dep_graph);
+
+            // Clean up profiler
+            let mut profiler = SYSTEM_PROFILER.lock();
+            if let Some(ref mut prof) = *profiler {
+                prof.remove_agent(agent_id);
+            }
+            drop(profiler);
 
             return true;
         }

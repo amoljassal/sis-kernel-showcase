@@ -42,6 +42,9 @@ pub mod fault;
 pub mod policy_controller;
 pub mod hooks;
 pub mod compliance;
+pub mod resource_monitor;
+pub mod dependencies;
+pub mod profiling;
 
 #[cfg(test)]
 mod tests;
@@ -52,6 +55,9 @@ pub use telemetry::TelemetryAggregator;
 pub use fault::{FaultDetector, Fault, FaultAction, RecoveryPolicy};
 pub use policy_controller::PolicyController;
 pub use compliance::{ComplianceTracker, ComplianceReport, RiskLevel, ComplianceEvent};
+pub use resource_monitor::{SystemResourceMonitor, AgentResourceMonitor, ResourceSnapshot};
+pub use dependencies::{DependencyGraph, Dependency, DependencyType};
+pub use profiling::{SystemProfiler, AgentProfiler, ProfileStats, ProfileGuard};
 
 use spin::Mutex;
 
@@ -70,6 +76,15 @@ pub static POLICY_CONTROLLER: Mutex<Option<PolicyController>> = Mutex::new(None)
 /// Global compliance tracker instance
 pub static COMPLIANCE_TRACKER: Mutex<Option<ComplianceTracker>> = Mutex::new(None);
 
+/// Global resource monitor instance
+pub static RESOURCE_MONITOR: Mutex<Option<SystemResourceMonitor>> = Mutex::new(None);
+
+/// Global dependency graph instance
+pub static DEPENDENCY_GRAPH: Mutex<Option<DependencyGraph>> = Mutex::new(None);
+
+/// Global system profiler instance
+pub static SYSTEM_PROFILER: Mutex<Option<SystemProfiler>> = Mutex::new(None);
+
 /// Initialize the Agent Supervision Module
 ///
 /// This must be called during kernel initialization, after AgentSys is initialized.
@@ -79,9 +94,13 @@ pub fn init() {
     *FAULT_DETECTOR.lock() = Some(FaultDetector::new());
     *POLICY_CONTROLLER.lock() = Some(PolicyController::new());
     *COMPLIANCE_TRACKER.lock() = Some(ComplianceTracker::new());
+    *RESOURCE_MONITOR.lock() = Some(SystemResourceMonitor::new());
+    *DEPENDENCY_GRAPH.lock() = Some(DependencyGraph::new());
+    *SYSTEM_PROFILER.lock() = Some(SystemProfiler::new());
 
     crate::uart::print_str("[ASM] Agent Supervision Module initialized\n");
     crate::uart::print_str("[ASM] EU AI Act compliance tracking enabled\n");
+    crate::uart::print_str("[ASM] Advanced features: Resource monitoring, Dependencies, Profiling\n");
 }
 
 /// Check if ASM is initialized
