@@ -40,8 +40,12 @@ echo -e "${GREEN}✓ UEFI bootloader built${NC}"
 
 echo ""
 echo -e "${YELLOW}Step 2: Building x86_64 kernel...${NC}"
-SIS_FEATURES="llm,crypto-real" BRINGUP=1 cargo build --release --target crates/kernel/x86_64-sis.json -Z build-std=core,alloc,compiler_builtins -Z build-std-features=compiler-builtins-mem --manifest-path crates/kernel/Cargo.toml
-if [ ! -f "crates/kernel/target/x86_64-sis/release/sis_kernel" ]; then
+# Ensure x86_64-unknown-none target is installed
+rustup target add x86_64-unknown-none >/dev/null 2>&1 || true
+
+# Build kernel with features
+SIS_FEATURES="llm,crypto-real" BRINGUP=1 cargo +nightly build --release --target x86_64-unknown-none -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem --manifest-path crates/kernel/Cargo.toml --target-dir crates/kernel/target
+if [ ! -f "crates/kernel/target/x86_64-unknown-none/release/sis_kernel" ]; then
     echo -e "${RED}Error: Kernel build failed${NC}"
     exit 1
 fi
@@ -59,7 +63,7 @@ echo -e "${YELLOW}Step 4: Copying files...${NC}"
 cp crates/uefi-boot/target/x86_64-unknown-uefi/release/uefi-boot.efi "$OUTPUT_DIR/EFI/BOOT/BOOTX64.EFI"
 echo -e "${GREEN}✓ Copied UEFI bootloader to EFI/BOOT/BOOTX64.EFI${NC}"
 
-cp crates/kernel/target/x86_64-sis/release/sis_kernel "$OUTPUT_DIR/EFI/SIS/KERNEL.ELF"
+cp crates/kernel/target/x86_64-unknown-none/release/sis_kernel "$OUTPUT_DIR/EFI/SIS/KERNEL.ELF"
 echo -e "${GREEN}✓ Copied kernel to EFI/SIS/KERNEL.ELF${NC}"
 
 echo ""
