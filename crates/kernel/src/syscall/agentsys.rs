@@ -15,6 +15,7 @@ use alloc::vec::Vec;
 pub const SYS_ASM_GET_TELEMETRY: usize = 500;
 pub const SYS_ASM_UPDATE_POLICY: usize = 501;
 pub const SYS_ASM_GET_AGENT_INFO: usize = 502;
+pub const SYS_LLM_REQUEST: usize = 503;
 
 /// sys_asm_get_telemetry - Get telemetry snapshot
 ///
@@ -212,6 +213,125 @@ pub fn sys_asm_get_agent_info(agent_id: AgentId, buf: *mut u8, len: usize) -> Re
     } else {
         Err(Errno::EAGAIN)
     }
+}
+
+/// sys_llm_request - Make an LLM API request
+///
+/// Routes an LLM request through the Cloud Gateway with automatic fallback,
+/// rate limiting, and multi-provider support.
+///
+/// # Arguments
+///
+/// * `req_buf` - Pointer to JSON-encoded LLMRequest
+/// * `req_len` - Length of request buffer
+/// * `resp_buf` - Pointer to buffer for JSON response
+/// * `resp_len` - Size of response buffer
+///
+/// # Returns
+///
+/// Number of bytes written to resp_buf, or negative errno
+///
+/// # Request Format (JSON)
+///
+/// ```json
+/// {
+///   "agent_id": 100,
+///   "prompt": "Your prompt here",
+///   "max_tokens": 1000,
+///   "temperature": 0.7,
+///   "preferred_provider": "claude"  // optional
+/// }
+/// ```
+///
+/// # Response Format (JSON)
+///
+/// ```json
+/// {
+///   "provider": "claude",
+///   "text": "Response text...",
+///   "tokens_used": 450,
+///   "duration_us": 123456,
+///   "was_fallback": false
+/// }
+/// ```
+///
+/// # Example
+///
+/// ```c
+/// const char *req = "{\"agent_id\":100,\"prompt\":\"Hello\",\"max_tokens\":100}";
+/// char resp[4096];
+///
+/// ssize_t ret = syscall(503, req, strlen(req), resp, sizeof(resp));
+/// if (ret > 0) {
+///     printf("Response: %.*s\n", (int)ret, resp);
+/// }
+/// ```
+#[cfg(feature = "agentsys")]
+pub fn sys_llm_request(
+    req_buf: *const u8,
+    req_len: usize,
+    resp_buf: *mut u8,
+    resp_len: usize,
+) -> Result<isize> {
+    use crate::agent_sys::cloud_gateway::{CLOUD_GATEWAY, LLMRequest};
+
+    // Validate pointers
+    if req_buf.is_null() || resp_buf.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    if (req_buf as u64) < 0x1000 || (resp_buf as u64) < 0x1000 {
+        return Err(Errno::EFAULT);
+    }
+
+    // Read request from userspace
+    let req_slice = unsafe {
+        core::slice::from_raw_parts(req_buf, req_len)
+    };
+
+    // Parse JSON request
+    let request: LLMRequest = serde_json::from_slice(req_slice)
+        .map_err(|_| Errno::EINVAL)?;
+
+    // TODO: Check if caller has LLM_ACCESS capability
+    // For now, allow all requests
+
+    // Route through gateway
+    let mut gateway = CLOUD_GATEWAY.lock();
+    let gateway_ref = gateway.as_mut()
+        .ok_or(Errno::EAGAIN)?;
+
+    let response = gateway_ref.route_request(&request)
+        .map_err(|e| match e {
+            crate::agent_sys::cloud_gateway::GatewayError::RateLimitExceeded => Errno::EAGAIN,
+            crate::agent_sys::cloud_gateway::GatewayError::PermissionDenied => Errno::EPERM,
+            crate::agent_sys::cloud_gateway::GatewayError::Timeout => Errno::ETIMEDOUT,
+            _ => Errno::EIO,
+        })?;
+
+    // Serialize response to JSON
+    let json = serde_json::to_string(&response)
+        .map_err(|_| Errno::EINVAL)?;
+
+    let bytes = json.as_bytes();
+    let to_copy = bytes.len().min(resp_len);
+
+    // Copy to userspace
+    unsafe {
+        core::ptr::copy_nonoverlapping(bytes.as_ptr(), resp_buf, to_copy);
+    }
+
+    Ok(to_copy as isize)
+}
+
+#[cfg(not(feature = "agentsys"))]
+pub fn sys_llm_request(
+    _req_buf: *const u8,
+    _req_len: usize,
+    _resp_buf: *mut u8,
+    _resp_len: usize,
+) -> Result<isize> {
+    Err(Errno::ENOSYS)
 }
 
 /// Helper for writing to Vec<u8>

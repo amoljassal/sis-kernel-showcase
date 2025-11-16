@@ -24,6 +24,9 @@ pub mod protocol;
 pub mod handlers;
 pub mod supervisor;
 
+#[cfg(feature = "agentsys")]
+pub mod cloud_gateway;
+
 // Re-export for convenience
 pub use protocol::*;
 pub use crate::security::agent_policy::AgentId;
@@ -44,6 +47,10 @@ pub fn init() {
 
     // Initialize Agent Supervision Module
     supervisor::init();
+
+    // Initialize Cloud Gateway (if feature enabled)
+    #[cfg(feature = "agentsys")]
+    cloud_gateway::init();
 }
 
 /// Main dispatcher for AgentSys control frames

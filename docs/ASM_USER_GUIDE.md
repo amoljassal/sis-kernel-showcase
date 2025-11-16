@@ -14,12 +14,13 @@
 4. [Working with Agents](#working-with-agents)
 5. [Monitoring and Telemetry](#monitoring-and-telemetry)
 6. [Using Shell Commands](#using-shell-commands)
-7. [Using Syscall Interface](#using-syscall-interface)
-8. [Policy Management](#policy-management)
-9. [Fault Handling](#fault-handling)
-10. [Best Practices](#best-practices)
-11. [Troubleshooting](#troubleshooting)
-12. [FAQ](#faq)
+7. [Cloud Gateway for LLM Requests](#cloud-gateway-for-llm-requests)
+8. [Using Syscall Interface](#using-syscall-interface)
+9. [Policy Management](#policy-management)
+10. [Fault Handling](#fault-handling)
+11. [Best Practices](#best-practices)
+12. [Troubleshooting](#troubleshooting)
+13. [FAQ](#faq)
 
 ---
 
@@ -418,6 +419,275 @@ Resource Limits:
        asminfo $id >> /var/log/asm_audit.log
    done
    ```
+
+---
+
+## Cloud Gateway for LLM Requests
+
+The Cloud Gateway provides intelligent multi-provider routing for LLM API requests with automatic fallback, rate limiting, and comprehensive monitoring.
+
+### Architecture
+
+```
+Agent Process → syscall(503) → Cloud Gateway
+                                     ↓
+                         [Rate Limit Check]
+                                     ↓
+                         [Provider Selection]
+                                     ↓
+           ┌──────────────────┬──────────────┬──────────────┐
+           ▼                  ▼              ▼              ▼
+       Claude API         GPT-4 API     Gemini API    Local Fallback
+           │                  │              │              │
+           └──────────────────┴──────────────┴──────────────┘
+                                     ↓
+                         [Response / Fallback]
+                                     ↓
+                             Agent Process
+```
+
+### Key Features
+
+1. **Multi-Provider Support**: Claude, GPT-4, Gemini, Local Fallback
+2. **Intelligent Fallback**: Automatic failover on errors/timeouts
+3. **Per-Agent Rate Limiting**: Token bucket rate limiting
+4. **Cost Optimization**: Configurable provider selection policies
+5. **Comprehensive Metrics**: Track usage, costs, and performance
+
+### Making LLM Requests
+
+#### C Example
+
+```c
+#include <syscall.h>
+#include <string.h>
+#include <stdio.h>
+
+int main() {
+    // Build request JSON
+    const char *request =
+        "{\"agent_id\":100,"
+        "\"prompt\":\"Explain kernel memory management\","
+        "\"max_tokens\":500,"
+        "\"temperature\":0.7}";
+
+    char response[8192];
+
+    // Make syscall 503
+    ssize_t ret = syscall(503,
+        request, strlen(request),
+        response, sizeof(response)
+    );
+
+    if (ret > 0) {
+        printf("LLM Response:\n%.*s\n", (int)ret, response);
+    } else {
+        printf("Error: %ld\n", ret);
+    }
+
+    return 0;
+}
+```
+
+#### Python Example
+
+```python
+import ctypes
+import json
+
+libc = ctypes.CDLL(None)
+
+def llm_request(agent_id, prompt, max_tokens=1000, temperature=0.7):
+    """Make an LLM request via Cloud Gateway"""
+
+    req = {
+        "agent_id": agent_id,
+        "prompt": prompt,
+        "max_tokens": max_tokens,
+        "temperature": temperature
+    }
+
+    req_json = json.dumps(req).encode()
+    req_buf = ctypes.create_string_buffer(req_json)
+
+    resp_buf = ctypes.create_string_buffer(8192)
+
+    ret = libc.syscall(503,
+        req_buf, len(req_json),
+        resp_buf, len(resp_buf)
+    )
+
+    if ret > 0:
+        return json.loads(resp_buf.value.decode())
+    else:
+        raise OSError(-ret, "LLM request failed")
+
+# Usage
+response = llm_request(100, "What is an operating system kernel?")
+print(f"Provider: {response['provider']}")
+print(f"Response: {response['text']}")
+print(f"Tokens used: {response['tokens_used']}")
+```
+
+### Fallback Policies
+
+The Cloud Gateway supports multiple fallback policies:
+
+#### 1. Cost-Optimized (Default)
+
+Tries providers in order of cost (cheapest first):
+```
+Local → GPT-4 → Claude → Gemini
+```
+
+#### 2. Reliability-Optimized
+
+Tries providers in order of reliability:
+```
+Claude → GPT-4 → Gemini → Local
+```
+
+#### 3. Local-Only
+
+Only use local fallback (no cloud API calls):
+```
+Local only
+```
+
+#### 4. Explicit Chain
+
+Specify exact provider order:
+```
+Gemini → Claude → Local
+```
+
+### Rate Limiting
+
+Each agent has an independent rate limiter using the token bucket algorithm.
+
+**Default Limits**:
+- Burst capacity: 30 requests
+- Refill rate: 10 requests/second
+
+**Check Your Limits** (via Cloud Gateway metrics):
+```bash
+# View rate limit status
+cat /proc/agentsys/gateway_status
+```
+
+**Rate Limit Errors**:
+When rate limited, syscall 503 returns `-EAGAIN` (errno 11). Wait and retry.
+
+### Request Format
+
+**JSON Schema**:
+```json
+{
+  "agent_id": 100,           // Required: Your agent ID
+  "prompt": "Your prompt",   // Required: The prompt text
+  "max_tokens": 1000,        // Optional: Max response tokens (default: 1000)
+  "temperature": 0.7,        // Optional: Temperature 0.0-1.0 (default: 0.7)
+  "preferred_provider": "claude",  // Optional: "claude", "gpt4", "gemini", "local"
+  "system_message": "...",   // Optional: System message
+  "timeout_ms": 30000        // Optional: Request timeout (default: 30000)
+}
+```
+
+### Response Format
+
+**JSON Schema**:
+```json
+{
+  "provider": "claude",      // Provider that fulfilled request
+  "text": "Response...",     // The response text
+  "tokens_used": 450,        // Tokens consumed
+  "duration_us": 123456,     // Request duration in microseconds
+  "was_fallback": false      // True if fallback was used
+}
+```
+
+### Error Handling
+
+| Error Code | Errno | Meaning | Solution |
+|------------|-------|---------|----------|
+| `-EAGAIN` | 11 | Rate limit exceeded | Wait and retry |
+| `-EPERM` | 1 | Permission denied | Check capabilities |
+| `-ETIMEDOUT` | 110 | Request timeout | Retry or increase timeout |
+| `-EIO` | 5 | All providers failed | Check network/API keys |
+| `-EINVAL` | 22 | Invalid JSON | Fix request format |
+| `-EFAULT` | 14 | Bad pointer | Check buffer addresses |
+
+### Monitoring Gateway Performance
+
+View Cloud Gateway metrics:
+
+```bash
+$ cat /proc/agentsys/cloud_gateway
+
+Cloud Gateway Metrics:
+====================
+Total Requests:       1234
+Successful:           1198
+Failed:               36
+Rate Limited:         15
+Fallback Used:        42
+
+Provider Success Rates:
+  Claude:   890/900  (98.9%)
+  GPT-4:    250/270  (92.6%)
+  Gemini:   58/64    (90.6%)
+  Local:    42/42    (100%)
+
+Average Response Time: 245ms
+```
+
+### Best Practices
+
+1. **Always Check Return Value**: Handle errors appropriately
+   ```c
+   if (ret < 0) {
+       if (ret == -EAGAIN) {
+           // Rate limited, wait and retry
+           sleep(1);
+           ret = syscall(503, ...);
+       }
+   }
+   ```
+
+2. **Use Appropriate Timeouts**: Set `timeout_ms` based on prompt complexity
+   ```json
+   {
+       "prompt": "Complex multi-step task...",
+       "timeout_ms": 60000  // 60 seconds
+   }
+   ```
+
+3. **Specify Preferred Provider**: For consistency
+   ```json
+   {
+       "preferred_provider": "claude",
+       "prompt": "..."
+   }
+   ```
+
+4. **Monitor Token Usage**: Track costs via metrics
+   ```python
+   response = llm_request(100, prompt)
+   total_tokens += response['tokens_used']
+   ```
+
+5. **Handle Fallbacks Gracefully**: Check `was_fallback` flag
+   ```python
+   if response['was_fallback']:
+       print("Warning: Cloud providers unavailable, using fallback")
+   ```
+
+### Security Considerations
+
+1. **API Keys**: Stored securely in kernel memory (not in userspace)
+2. **Rate Limiting**: Prevents abuse and DoS attacks
+3. **Capability Checks**: Only agents with `LLM_ACCESS` capability can use
+4. **Audit Trail**: All LLM requests logged for compliance
 
 ---
 

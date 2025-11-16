@@ -263,6 +263,8 @@ pub fn syscall_dispatcher(nr: usize, args: &[u64; 6]) -> isize {
         501 => agentsys::sys_asm_update_policy(args[0] as u32, args[1] as u32, args[2]),
         #[cfg(feature = "agentsys")]
         502 => agentsys::sys_asm_get_agent_info(args[0] as u32, args[1] as *mut u8, args[2] as usize),
+        #[cfg(feature = "agentsys")]
+        503 => agentsys::sys_llm_request(args[0] as *const u8, args[1] as usize, args[2] as *mut u8, args[3] as usize),
 
         // Unimplemented
         _ => {
