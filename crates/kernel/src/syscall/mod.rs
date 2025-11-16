@@ -4,6 +4,9 @@
 pub mod uaccess;
 pub mod validation;
 
+#[cfg(feature = "agentsys")]
+pub mod agentsys;
+
 use crate::lib::error::{Errno, Result};
 use alloc::format;
 use alloc::sync::Arc;
@@ -252,6 +255,16 @@ pub fn syscall_dispatcher(nr: usize, args: &[u64; 6]) -> isize {
         206 => sys_sendto(args[0] as i32, args[1] as *const u8, args[2] as usize, args[3] as i32, args[4] as *const u8, args[5] as u32),
         207 => sys_recvfrom(args[0] as i32, args[1] as *mut u8, args[2] as usize, args[3] as i32, args[4] as *mut u8, args[5] as *mut u32),
         210 => sys_shutdown(args[0] as i32, args[1] as i32),
+
+        // Agent Supervision Module syscalls (500-509)
+        #[cfg(feature = "agentsys")]
+        500 => agentsys::sys_asm_get_telemetry(args[0] as *mut u8, args[1] as usize),
+        #[cfg(feature = "agentsys")]
+        501 => agentsys::sys_asm_update_policy(args[0] as u32, args[1] as u32, args[2]),
+        #[cfg(feature = "agentsys")]
+        502 => agentsys::sys_asm_get_agent_info(args[0] as u32, args[1] as *mut u8, args[2] as usize),
+        #[cfg(feature = "agentsys")]
+        503 => agentsys::sys_llm_request(args[0] as *const u8, args[1] as usize, args[2] as *mut u8, args[3] as usize),
 
         // Unimplemented
         _ => {
