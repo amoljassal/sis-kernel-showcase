@@ -1,0 +1,673 @@
+# Agent Supervision Module - User Guide
+
+**Version**: 1.0.0
+**Target Audience**: Kernel developers, system administrators, agent developers
+**Last Updated**: 2025-11-16
+
+---
+
+## Table of Contents
+
+1. [Introduction](#introduction)
+2. [Getting Started](#getting-started)
+3. [Understanding ASM Components](#understanding-asm-components)
+4. [Working with Agents](#working-with-agents)
+5. [Monitoring and Telemetry](#monitoring-and-telemetry)
+6. [Policy Management](#policy-management)
+7. [Fault Handling](#fault-handling)
+8. [Best Practices](#best-practices)
+9. [Troubleshooting](#troubleshooting)
+10. [FAQ](#faq)
+
+---
+
+## Introduction
+
+### What is ASM?
+
+The Agent Supervision Module (ASM) is a kernel-resident service that provides comprehensive lifecycle management for all agents running in the SIS kernel. Think of it as a "guardian angel" for your agents - it watches over them, helps them recover from failures, and ensures they play nicely with system resources.
+
+### Why ASM?
+
+Traditional operating systems treat all processes equally. ASM recognizes that agent processes have special characteristics and needs:
+
+- **Autonomous Operation**: Agents run without constant human supervision
+- **Resource Intensive**: LLM inference and decision-making consume significant resources
+- **Fault Tolerance**: Agents should gracefully recover from transient failures
+- **Policy Compliance**: Agents must adhere to security and resource policies
+- **Observability**: Agent behavior must be visible for debugging and auditing
+
+ASM provides specialized infrastructure to handle these unique requirements.
+
+### Key Benefits
+
+1. **Automatic Recovery**: Agents can automatically restart after crashes
+2. **Resource Protection**: System resources are protected from runaway agents
+3. **Comprehensive Monitoring**: Detailed telemetry for all agent activities
+4. **Dynamic Policies**: Update agent permissions without restarting
+5. **Compliance Ready**: Built-in audit trails for regulatory compliance
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- SIS Kernel with AgentSys enabled
+- Basic understanding of agent capabilities and policies
+- Familiarity with kernel modules and /proc filesystem
+
+### Enabling ASM
+
+ASM is automatically initialized when AgentSys starts. No additional configuration is needed for basic operation.
+
+To verify ASM is running:
+
+```bash
+# Check kernel log
+dmesg | grep ASM
+
+# Expected output:
+[ASM] Agent Supervision Module initialized
+```
+
+### First Steps
+
+1. **Verify Installation**
+   ```bash
+   cat /proc/agentsys/status
+   ```
+
+2. **Spawn a Test Agent**
+   ```rust
+   let spec = AgentSpec::new(100, "test_agent".to_string())
+       .with_capability(Capability::FsBasic);
+
+   let pid = spawn_agent(spec)?;
+   ```
+
+3. **Monitor Activity**
+   ```bash
+   watch -n 1 'cat /proc/agentsys/status'
+   ```
+
+---
+
+## Understanding ASM Components
+
+### The Four Pillars of ASM
+
+ASM consists of four main components, each with a specific responsibility:
+
+#### 1. AgentSupervisor 👁️
+
+**Role**: Lifecycle coordinator
+
+The supervisor is like a register at a hotel - it keeps track of all agents, knows when they arrive (spawn), when they leave (exit), and maintains their records (metadata).
+
+**Key Functions**:
+- Tracks all active agents
+- Maintains agent metadata
+- Coordinates recovery actions
+- Notifies other components of lifecycle events
+
+#### 2. TelemetryAggregator 📊
+
+**Role**: Metrics collector
+
+The telemetry aggregator is your dashboard - it collects statistics about what agents are doing and how they're performing.
+
+**Key Metrics**:
+- How many times an agent has spawned/exited
+- Resource usage (CPU, memory)
+- Fault history
+- Recent events
+
+#### 3. FaultDetector 🔍
+
+**Role**: Health monitor
+
+The fault detector is like a smoke alarm - it continuously monitors for problems and alerts when something goes wrong.
+
+**What It Watches**:
+- CPU usage exceeding quotas
+- Memory consumption
+- Syscall flood attacks
+- Watchdog timeouts (unresponsive agents)
+- Policy violations
+
+#### 4. PolicyController 📋
+
+**Role**: Permission manager
+
+The policy controller manages what each agent is allowed to do, and can update permissions on-the-fly.
+
+**Capabilities**:
+- Dynamic capability grants/revokes
+- Scope restrictions (e.g., file path limits)
+- Auto-restart configuration
+- Compliance reporting
+
+---
+
+## Working with Agents
+
+### Agent Lifecycle
+
+```
+┌─────────┐
+│ SPAWN   │  ← Agent process created
+└────┬────┘
+     │
+     ▼
+┌─────────┐
+│ ACTIVE  │  ← Agent running normally
+└────┬────┘
+     │
+     ├──► FAULT ──► RECOVERY ──┐
+     │                         │
+     │                         ▼
+     │                    ┌─────────┐
+     │                    │RESTARTED│
+     │                    └────┬────┘
+     │                         │
+     ▼                         ▼
+┌─────────┐             ┌──────────┐
+│  EXIT   │  ← Normal   │  FAILED  │
+└─────────┘    exit     └──────────┘
+```
+
+### Creating an Agent
+
+```rust
+use agent_sys::supervisor::{AgentSpec, AgentSupervisor};
+use security::agent_policy::{Capability, Scope};
+
+// Create agent specification
+let spec = AgentSpec::new(100, "my_agent".to_string())
+    .with_capability(Capability::FsBasic)
+    .with_capability(Capability::AudioControl)
+    .with_scope(Scope::with_path("/tmp/agent_workspace/"))
+    .with_auto_restart(3);  // Restart up to 3 times
+
+// Spawn the agent (this would be done by process manager)
+let pid = spawn_agent_process(spec)?;
+
+// ASM automatically tracks it!
+```
+
+### Configuring Auto-Restart
+
+Auto-restart allows agents to automatically recover from crashes:
+
+```rust
+// Enable auto-restart with 5 attempts
+let spec = AgentSpec::new(101, "resilient_agent".to_string())
+    .with_auto_restart(5);
+```
+
+**How It Works**:
+1. Agent crashes (non-zero exit code)
+2. ASM checks if auto-restart is enabled
+3. If restart_count < max_restarts, agent is respawned
+4. Otherwise, agent is marked as failed
+
+**Best Practice**: Set max_restarts based on criticality:
+- Critical agents: 5-10 restarts
+- Normal agents: 2-3 restarts
+- Experimental agents: 1 restart or disabled
+
+---
+
+## Monitoring and Telemetry
+
+### Reading Telemetry
+
+#### Via /proc Filesystem
+
+The easiest way to monitor ASM is through `/proc/agentsys/status`:
+
+```bash
+$ cat /proc/agentsys/status
+
+Agent Supervision Module - Telemetry Status
+===========================================
+
+System Metrics:
+  Total Spawns:    42
+  Total Exits:     38
+  Total Faults:    5
+  Total Restarts:  3
+  Active Agents:   4
+  Total Syscalls:  1234567
+
+Per-Agent Metrics:
+  ID    Spawns Exits  Faults CPU(us)   Mem(B)
+  ----  ------ -----  ------ --------  -------
+  100   1      0      0      125000    4096000
+  101   3      2      2      89000     2048000
+  102   1      0      1      45000     1024000
+  103   1      0      0      67000     3072000
+```
+
+#### Via Kernel API
+
+For programmatic access:
+
+```rust
+use agent_sys::supervisor::TELEMETRY;
+
+// Get snapshot of all telemetry
+let snapshot = TELEMETRY.lock().as_ref().unwrap().snapshot();
+
+println!("Active Agents: {}", snapshot.system_metrics.active_agents);
+
+// Get specific agent metrics
+if let Some(metrics) = snapshot.agent_metrics.get(&100) {
+    println!("Agent 100:");
+    println!("  Spawn count: {}", metrics.spawn_count);
+    println!("  Fault count: {}", metrics.fault_count);
+}
+```
+
+### Understanding Metrics
+
+#### Spawn Count vs. Exit Count
+
+- **Spawn Count**: How many times the agent has been started
+- **Exit Count**: How many times the agent has terminated
+
+If `spawn_count > exit_count + 1`, the agent has been restarted.
+
+#### Fault Count
+
+Number of times the agent triggered fault detection:
+- Resource limit exceeded
+- Policy violation
+- Crash/signal
+
+**Normal**: 0 faults
+**Warning**: 1-5 faults (investigate)
+**Critical**: >5 faults (agent misbehaving)
+
+#### CPU Time
+
+Cumulative CPU time in microseconds. Use this to:
+- Identify CPU-intensive agents
+- Detect performance regressions
+- Plan resource allocation
+
+---
+
+## Policy Management
+
+### Understanding Policies
+
+Each agent has a policy that defines:
+1. **Capabilities**: What operations the agent can perform
+2. **Scope**: Restrictions on those operations
+3. **Limits**: Resource quotas
+4. **Behavior**: Auto-restart, recovery actions
+
+### Updating Policies Dynamically
+
+One of ASM's most powerful features is hot-patching policies:
+
+```rust
+use agent_sys::supervisor::{POLICY_CONTROLLER, PolicyPatch};
+
+// Grant file access to agent 100
+let patch = PolicyPatch::AddCapability(Capability::FsBasic);
+POLICY_CONTROLLER
+    .lock()
+    .as_mut()
+    .unwrap()
+    .update_policy(100, patch)?;
+
+// Restrict to specific directory
+let patch = PolicyPatch::UpdateScope(
+    Scope::with_path("/tmp/safe_zone/")
+);
+POLICY_CONTROLLER
+    .lock()
+    .as_mut()
+    .unwrap()
+    .update_policy(100, patch)?;
+```
+
+### Policy Validation
+
+ASM validates all policy changes to prevent privilege escalation:
+
+```rust
+// ❌ This will FAIL - cannot grant Admin capability
+let patch = PolicyPatch::AddCapability(Capability::Admin);
+let result = update_policy(100, patch);
+assert_eq!(result, Err(PolicyError::PrivilegeEscalation));
+
+// ✅ This succeeds - normal capability
+let patch = PolicyPatch::AddCapability(Capability::FsBasic);
+let result = update_policy(100, patch);
+assert!(result.is_ok());
+```
+
+### Compliance Reporting
+
+Generate compliance reports for auditing:
+
+```rust
+let report = POLICY_CONTROLLER
+    .lock()
+    .as_ref()
+    .unwrap()
+    .export_compliance();
+
+for entry in report.agents {
+    println!("Agent {}: {} capabilities, {} violations",
+        entry.agent_id,
+        entry.capabilities.len(),
+        entry.violations.len()
+    );
+}
+```
+
+---
+
+## Fault Handling
+
+### Fault Types
+
+| Fault | Trigger | Default Action |
+|-------|---------|----------------|
+| CPU Quota | CPU time > quota | Throttle |
+| Memory Limit | Memory > limit | Kill |
+| Syscall Flood | Syscall rate > limit | Throttle |
+| Crash | Fatal signal received | Restart |
+| Capability Violation | Unauthorized operation | Kill |
+| Unresponsive | Watchdog timeout | Restart |
+
+### Recovery Policies
+
+Configure how ASM responds to faults:
+
+```rust
+use agent_sys::supervisor::fault::{RecoveryPolicy, FaultAction};
+
+// Permissive policy - just log faults
+let policy = RecoveryPolicy::permissive();
+
+// Strict policy - kill on any fault
+let policy = RecoveryPolicy::strict();
+
+// Custom policy
+let policy = RecoveryPolicy {
+    cpu_quota_action: FaultAction::Throttle,
+    memory_action: FaultAction::Kill,
+    syscall_flood_action: FaultAction::Throttle,
+    crash_action: FaultAction::Restart,
+    capability_violation_action: FaultAction::Kill,
+    unresponsive_action: FaultAction::Restart,
+    policy_violation_action: FaultAction::Kill,
+};
+
+FAULT_DETECTOR.lock().as_mut().unwrap()
+    .set_recovery_policy(policy);
+```
+
+### Resource Limits
+
+Set conservative limits to protect the system:
+
+```rust
+use agent_sys::supervisor::fault::ResourceLimits;
+
+let limits = ResourceLimits {
+    cpu_quota_us: Some(1_000_000),  // 1 second per window
+    memory_limit_bytes: Some(100 * 1024 * 1024),  // 100 MB
+    syscall_rate_limit: Some(1000),  // 1000 syscalls/sec
+    watchdog_timeout_us: Some(30_000_000),  // 30 seconds
+};
+
+FAULT_DETECTOR.lock().as_mut().unwrap()
+    .set_default_limits(limits);
+```
+
+### Handling Crashes
+
+When an agent crashes, ASM automatically:
+
+1. Records the crash in telemetry
+2. Notifies lifecycle listeners
+3. Checks auto-restart policy
+4. Either restarts or marks as failed
+
+Monitor crash patterns:
+
+```bash
+$ cat /proc/agentsys/status | grep "Agent 100"
+Agent 100: spawns=5 exits=4 faults=4
+
+# This agent has crashed 4 times and been restarted
+```
+
+---
+
+## Best Practices
+
+### 1. Configure Auto-Restart Appropriately
+
+**Do**:
+- Enable for production agents
+- Set max_restarts = 3-5 for normal agents
+- Use higher limits for critical services
+
+**Don't**:
+- Enable for debug/test agents
+- Set unlimited restarts (prevents failure detection)
+- Ignore restart patterns (indicates deeper issues)
+
+### 2. Monitor Telemetry Regularly
+
+Set up automated monitoring:
+
+```bash
+#!/bin/bash
+# Alert if any agent has >5 faults
+
+FAULTS=$(cat /proc/agentsys/status | awk '/Faults/ {if ($6 > 5) print $1}')
+if [ -n "$FAULTS" ]; then
+    echo "WARNING: Agents with high fault counts: $FAULTS"
+fi
+```
+
+### 3. Use Scoped Capabilities
+
+Always restrict agent access:
+
+```rust
+// ❌ Bad - unrestricted access
+let spec = AgentSpec::new(100, "agent".to_string())
+    .with_capability(Capability::FsBasic);
+
+// ✅ Good - scoped to specific directory
+let spec = AgentSpec::new(100, "agent".to_string())
+    .with_capability(Capability::FsBasic)
+    .with_scope(Scope::with_path("/tmp/agent_data/"));
+```
+
+### 4. Review Compliance Reports
+
+Periodically audit agent behavior:
+
+```rust
+// Monthly compliance audit
+let report = POLICY_CONTROLLER.lock().as_ref().unwrap()
+    .export_eu_ai_act_report();
+
+// Check for violations
+for entry in report.agents {
+    if !entry.violations.is_empty() {
+        println!("Agent {} has {} violations - review needed",
+            entry.agent_id, entry.violations.len());
+    }
+}
+```
+
+### 5. Test Fault Recovery
+
+Validate that your agents recover properly:
+
+```rust
+#[test]
+fn test_agent_recovery() {
+    let spec = AgentSpec::new(999, "test".to_string())
+        .with_auto_restart(2);
+
+    spawn_agent(spec)?;
+
+    // Simulate crash
+    kill(pid, SIGKILL);
+
+    // Wait for restart
+    sleep(Duration::from_millis(100));
+
+    // Verify agent restarted
+    let metadata = AGENT_SUPERVISOR.lock().as_ref().unwrap()
+        .get_agent(999).unwrap();
+    assert_eq!(metadata.restart_count, 1);
+}
+```
+
+---
+
+## Troubleshooting
+
+### Agent Won't Start
+
+**Symptom**: Agent spawns but immediately exits
+
+**Diagnosis**:
+```bash
+cat /proc/agentsys/status | grep "Agent <ID>"
+```
+
+**Common Causes**:
+1. Missing required capabilities
+2. Invalid scope configuration
+3. Resource limits too restrictive
+
+**Solution**: Review agent specification and ensure all required capabilities are granted.
+
+### Agent Keeps Restarting
+
+**Symptom**: Spawn count >> exit count
+
+**Diagnosis**:
+```rust
+let metrics = TELEMETRY.lock().as_ref().unwrap()
+    .get_agent_metrics(agent_id).unwrap();
+
+println!("Recent faults: {:?}", metrics.recent_faults);
+```
+
+**Common Causes**:
+1. Bug in agent code (crash loop)
+2. Resource limits too restrictive
+3. Missing dependencies
+
+**Solution**:
+- Review recent fault history
+- Check agent logs
+- Consider disabling auto-restart during debugging
+
+### High Fault Count
+
+**Symptom**: Agent has many faults but is still running
+
+**Diagnosis**: Check fault types in telemetry
+
+**Common Causes**:
+1. Resource-intensive workload
+2. Inefficient agent implementation
+3. Too-aggressive limits
+
+**Solution**:
+- Profile agent performance
+- Adjust resource limits
+- Optimize agent code
+
+### Memory Leaks
+
+**Symptom**: Agent memory usage grows over time
+
+**Diagnosis**:
+```bash
+watch -n 5 'cat /proc/agentsys/status | grep "Agent <ID>"'
+```
+
+**Solution**:
+- Review agent's memory management
+- Set memory limits to prevent system exhaustion
+- Consider periodic restarts for leaky agents
+
+---
+
+## FAQ
+
+### Q: Can I disable ASM?
+
+**A**: ASM is integral to agent management and cannot be disabled. However, you can use permissive policies for testing.
+
+### Q: How much overhead does ASM add?
+
+**A**: Minimal - approximately 50μs per spawn and 2μs per telemetry event. See [Performance Characteristics](ASM_API_REFERENCE.md#performance-characteristics).
+
+### Q: Can agents bypass ASM supervision?
+
+**A**: No. All lifecycle events are handled through kernel hooks that agents cannot bypass.
+
+### Q: What happens if an agent exceeds max restarts?
+
+**A**: The agent is marked as failed and won't be restarted again. You must manually spawn a new instance.
+
+### Q: Can I update policies for running agents?
+
+**A**: Yes! This is one of ASM's key features. Use `PolicyController::update_policy()`.
+
+### Q: Are policy changes audited?
+
+**A**: Yes. All policy changes are recorded in the agent's audit trail and included in compliance reports.
+
+### Q: How do I debug agent failures?
+
+**A**:
+1. Check `/proc/agentsys/status` for fault history
+2. Review telemetry for resource usage patterns
+3. Check kernel logs for ASM messages
+4. Use the fault detector to identify specific issues
+
+### Q: Can I have different recovery policies for different agents?
+
+**A**: Currently, recovery policy is global. Per-agent policies are planned for Milestone 4.
+
+### Q: How long are telemetry events retained?
+
+**A**: The ring buffer holds the last 1024 events. System metrics are cumulative since boot.
+
+### Q: What compliance standards does ASM support?
+
+**A**: ASM provides audit trails suitable for EU AI Act compliance. Additional standards can be supported via custom reporting.
+
+---
+
+## Next Steps
+
+- **Advanced Usage**: See [ASM API Reference](ASM_API_REFERENCE.md)
+- **Implementation Details**: Review [ASM Implementation Plan](plans/AGENT_SUPERVISION_MODULE_PLAN.md)
+- **Source Code**: Browse `crates/kernel/src/agent_sys/supervisor/`
+
+---
+
+**Document Version**: 1.0.0
+**Last Updated**: 2025-11-16
+**Maintained By**: SIS Kernel Team
