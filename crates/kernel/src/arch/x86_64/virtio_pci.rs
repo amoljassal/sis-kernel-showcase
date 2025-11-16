@@ -295,6 +295,7 @@ impl VirtioPciTransport {
             BarType::Memory64 { address, .. } => *address,
             BarType::IoPort { .. } => return Err("I/O port BARs not supported for VirtIO config"),
             BarType::Unused => return Err("BAR is not configured"),
+            BarType::None => return Err("BAR is uninitialized"),
         };
 
         // Calculate physical address of the capability structure

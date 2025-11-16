@@ -441,6 +441,40 @@ pub unsafe fn early_init() -> Result<(), &'static str> {
         }
     }
 
+    // Real Hardware: AHCI/SATA Controller Detection
+    serial::serial_write(b"\n[BOOT] AHCI/SATA Controller Detection\n");
+    if let Some(ahci_dev) = crate::arch::x86_64::pci::find_first_ahci_controller() {
+        serial::serial_write(b"[BOOT] Found AHCI controller at ");
+        print_hex_u8(ahci_dev.bus);
+        serial::serial_write(b":");
+        print_hex_u8(ahci_dev.device);
+        serial::serial_write(b".");
+        print_hex_u8(ahci_dev.function);
+        serial::serial_write(b"\n");
+
+        match crate::arch::x86_64::ahci::AhciController::new(&ahci_dev) {
+            Ok(controller) => {
+                serial::serial_write(b"[BOOT] AHCI controller initialized successfully\n");
+                controller.enumerate_ports();
+            }
+            Err(e) => {
+                serial::serial_write(b"[BOOT] Failed to initialize AHCI controller: ");
+                serial::serial_write(e.as_bytes());
+                serial::serial_write(b"\n");
+            }
+        }
+    } else {
+        serial::serial_write(b"[BOOT] No AHCI controllers found\n");
+    }
+
+    // Real Hardware: PS/2 Keyboard Controller
+    serial::serial_write(b"\n[BOOT] PS/2 Keyboard Controller Initialization\n");
+    crate::arch::x86_64::ps2_keyboard::init();
+
+    // Enable IRQ 1 (keyboard) in the PIC
+    crate::arch::x86_64::pic::enable_irq(crate::arch::x86_64::pic::Irq::Keyboard);
+    serial::serial_write(b"[BOOT] PS/2 keyboard driver enabled (IRQ 1)\n");
+
     // M7: VirtIO Network Driver
     serial::serial_write(b"\n[BOOT] Milestone M7: VirtIO Network Driver\n");
 

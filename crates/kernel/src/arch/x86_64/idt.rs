@@ -525,23 +525,10 @@ extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFr
 /// Keyboard Interrupt Handler - IRQ 1 (Vector 33)
 ///
 /// Called when a key is pressed or released on the PS/2 keyboard.
-///
-/// # Note
-///
-/// For M1, this is a stub. Full keyboard driver will be added later.
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    use x86_64::instructions::port::Port;
-
-    // Read scancode from keyboard (port 0x60)
-    // This is necessary to acknowledge the keystroke
+    // Call the PS/2 keyboard driver's IRQ handler
     unsafe {
-        let _scancode: u8 = Port::new(0x60).read();
-        // TODO: Process scancode in keyboard driver
-    }
-
-    // Send End of Interrupt
-    unsafe {
-        send_eoi(33);
+        crate::arch::x86_64::ps2_keyboard::keyboard_irq_handler();
     }
 }
 

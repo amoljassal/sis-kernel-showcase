@@ -186,10 +186,11 @@ pub enum BarType {
     Memory64 { address: u64, size: u64, prefetchable: bool },
     IoPort { port: u16, size: u32 },
     Unused,
+    None,  // For uninitialized/empty BARs
 }
 
 /// PCI device representation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct PciDevice {
     /// Bus number (0-255)
     pub bus: u8,
@@ -197,7 +198,7 @@ pub struct PciDevice {
     pub device: u8,
     /// Function number (0-7)
     pub function: u8,
-    /// Vendor ID
+    /// Vendor ID (0xFFFF = invalid/empty slot)
     pub vendor_id: u16,
     /// Device ID
     pub device_id: u16,
@@ -217,6 +218,26 @@ pub struct PciDevice {
     pub interrupt_line: u8,
     /// Interrupt pin (0 = none, 1-4 = INTA-INTD)
     pub interrupt_pin: u8,
+}
+
+impl Default for PciDevice {
+    fn default() -> Self {
+        Self {
+            bus: 0,
+            device: 0,
+            function: 0,
+            vendor_id: 0xFFFF,  // Sentinel value for empty slot
+            device_id: 0,
+            class: 0,
+            subclass: 0,
+            prog_if: 0,
+            revision: 0,
+            header_type: 0,
+            bars: [BarType::None; 6],
+            interrupt_line: 0,
+            interrupt_pin: 0,
+        }
+    }
 }
 
 impl PciDevice {
@@ -243,6 +264,22 @@ impl PciDevice {
     /// Get BDF (Bus:Device.Function) identifier
     pub fn bdf(&self) -> u16 {
         ((self.bus as u16) << 8) | ((self.device as u16) << 3) | (self.function as u16)
+    }
+
+    /// Get BAR5 address (used for AHCI ABAR)
+    pub fn bar5_address(&self) -> Option<u64> {
+        match self.bars[5] {
+            BarType::Memory32 { address, .. } => Some(address),
+            BarType::Memory64 { address, .. } => Some(address),
+            _ => None,
+        }
+    }
+
+    /// Check if this is an AHCI controller
+    /// Class 0x01 = Mass Storage Controller
+    /// Subclass 0x06 = SATA Controller
+    pub fn is_ahci(&self) -> bool {
+        self.class == 0x01 && self.subclass == 0x06
     }
 }
 
@@ -530,15 +567,60 @@ impl PciController {
     }
 }
 
+/// Maximum number of PCI devices we can store (most systems have < 100)
+const MAX_PCI_DEVICES: usize = 128;
+
+/// Static storage for PCI devices (no heap allocation required)
+struct PciDeviceList {
+    devices: [PciDevice; MAX_PCI_DEVICES],
+    count: usize,
+}
+
+impl PciDeviceList {
+    const fn new() -> Self {
+        Self {
+            devices: [PciDevice {
+                bus: 0,
+                device: 0,
+                function: 0,
+                vendor_id: 0xFFFF,
+                device_id: 0,
+                class: 0,
+                subclass: 0,
+                prog_if: 0,
+                revision: 0,
+                header_type: 0,
+                bars: [BarType::None, BarType::None, BarType::None, BarType::None, BarType::None, BarType::None],
+                interrupt_line: 0,
+                interrupt_pin: 0,
+            }; MAX_PCI_DEVICES],
+            count: 0,
+        }
+    }
+
+    fn add(&mut self, device: PciDevice) -> Result<(), &'static str> {
+        if self.count >= MAX_PCI_DEVICES {
+            return Err("PCI device list full");
+        }
+        self.devices[self.count] = device;
+        self.count += 1;
+        Ok(())
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &PciDevice> {
+        self.devices[..self.count].iter()
+    }
+}
+
 lazy_static! {
     /// Global PCI controller instance
     pub static ref PCI: Mutex<PciController> = {
         Mutex::new(unsafe { PciController::new() })
     };
-
-    /// List of discovered PCI devices
-    static ref PCI_DEVICES: Mutex<Vec<PciDevice>> = Mutex::new(Vec::new());
 }
+
+/// List of discovered PCI devices (static array, no heap required)
+static PCI_DEVICES: Mutex<PciDeviceList> = Mutex::new(PciDeviceList::new());
 
 /// MCFG table header (from ACPI)
 #[repr(C, packed)]
@@ -610,11 +692,9 @@ unsafe fn init_with_ecam(mcfg_addr: x86_64::PhysAddr) -> Result<usize, &'static 
     print_decimal(end_bus as usize);
     crate::arch::x86_64::serial::serial_write(b"\n");
 
-    // Scan devices using ECAM
-    crate::arch::x86_64::serial::serial_write(b"[PCI] Scanning for devices (not storing due to heap constraints)...\n");
+    // Scan devices using ECAM and store them
+    crate::arch::x86_64::serial::serial_write(b"[PCI] Scanning for devices via ECAM...\n");
 
-    // Don't store devices for now - heap can't handle PciDevice allocation yet
-    // Just count and report them
     let mut device_count = 0;
 
     // Scan only the first bus for now to test
@@ -659,6 +739,54 @@ unsafe fn init_with_ecam(mcfg_addr: x86_64::PhysAddr) -> Result<usize, &'static 
                 let interrupt_pin = read_volatile((config_addr + 0x3D) as *const u8);
                 crate::arch::x86_64::serial::serial_write(b"[PCI]   All config reads complete\n");
 
+                // Parse BARs from ECAM (offsets 0x10-0x24)
+                crate::arch::x86_64::serial::serial_write(b"[PCI]   Parsing BARs...\n");
+                let mut bars = [BarType::Unused; 6];
+                let mut bar_index = 0;
+                while bar_index < 6 {
+                    let bar_offset = 0x10 + (bar_index * 4);
+                    let bar_value = read_volatile((config_addr + bar_offset as u64) as *const u32);
+
+                    if bar_value == 0 {
+                        bars[bar_index] = BarType::Unused;
+                        bar_index += 1;
+                        continue;
+                    }
+
+                    if bar_value & 0x01 == 1 {
+                        // I/O space BAR
+                        let port = (bar_value & 0xFFFC) as u16;
+                        // Note: Size detection requires writing to BAR which we skip for now
+                        bars[bar_index] = BarType::IoPort { port, size: 0 };
+                        bar_index += 1;
+                    } else {
+                        // Memory space BAR
+                        let bar_type = (bar_value >> 1) & 0x03;
+                        let prefetchable = (bar_value & 0x08) != 0;
+
+                        if bar_type == 0 {
+                            // 32-bit memory
+                            let address = (bar_value & 0xFFFFFFF0) as u64;
+                            // Note: Size detection requires writing to BAR which we skip for now
+                            bars[bar_index] = BarType::Memory32 { address, size: 0, prefetchable };
+                            bar_index += 1;
+                        } else if bar_type == 2 && bar_index < 5 {
+                            // 64-bit memory
+                            let low = (bar_value & 0xFFFFFFF0) as u64;
+                            let high = read_volatile((config_addr + (bar_offset + 4) as u64) as *const u32) as u64;
+                            let address = low | (high << 32);
+                            // Note: Size detection requires writing to BAR which we skip for now
+                            bars[bar_index] = BarType::Memory64 { address, size: 0, prefetchable };
+                            bars[bar_index + 1] = BarType::Unused; // 64-bit BAR uses two slots
+                            bar_index += 2;
+                        } else {
+                            bars[bar_index] = BarType::Unused;
+                            bar_index += 1;
+                        }
+                    }
+                }
+                crate::arch::x86_64::serial::serial_write(b"[PCI]   BARs parsed\n");
+
                 crate::arch::x86_64::serial::serial_write(b"[PCI] Found device ");
                 print_bdf(bus, device, function);
                 crate::arch::x86_64::serial::serial_write(b": ");
@@ -679,8 +807,34 @@ unsafe fn init_with_ecam(mcfg_addr: x86_64::PhysAddr) -> Result<usize, &'static 
                 crate::arch::x86_64::serial::serial_write(b"[PCI]   Device found, incrementing count\n");
                 device_count += 1;
 
-                // Don't create/store PciDevice - heap can't handle it yet
-                // TODO: Store devices once heap is properly initialized
+                // Create PciDevice and store it (using static array, no heap required)
+                let pci_device = PciDevice {
+                    bus,
+                    device,
+                    function,
+                    vendor_id,
+                    device_id,
+                    class,
+                    subclass,
+                    prog_if,
+                    revision,
+                    header_type,
+                    bars,
+                    interrupt_line,
+                    interrupt_pin,
+                };
+
+                // Store in global device list
+                match PCI_DEVICES.lock().add(pci_device) {
+                    Ok(()) => {
+                        crate::arch::x86_64::serial::serial_write(b"[PCI]   Device stored successfully\n");
+                    }
+                    Err(e) => {
+                        crate::arch::x86_64::serial::serial_write(b"[PCI]   Failed to store device: ");
+                        crate::arch::x86_64::serial::serial_write(e.as_bytes());
+                        crate::arch::x86_64::serial::serial_write(b"\n");
+                    }
+                }
 
                 crate::arch::x86_64::serial::serial_write(b"[PCI]   Checking multi-function (header_type=0x");
                 print_hex_u8(header_type);
@@ -700,9 +854,6 @@ unsafe fn init_with_ecam(mcfg_addr: x86_64::PhysAddr) -> Result<usize, &'static 
     crate::arch::x86_64::serial::serial_write(b"[PCI] ECAM enumeration complete, found ");
     print_decimal(device_count);
     crate::arch::x86_64::serial::serial_write(b" device(s)\n");
-
-    // Don't store devices globally yet - heap constraints
-    // TODO: Store devices once heap is properly initialized
 
     Ok(device_count)
 }
@@ -724,9 +875,12 @@ pub unsafe fn init() -> Result<usize, &'static str> {
     crate::arch::x86_64::serial::serial_write(b"[PCI] Legacy I/O port scanning disabled (known to hang)\n");
 
     // For now, return empty device list if no ECAM available
-    let device_list: Vec<PciDevice> = Vec::new();
+    // Legacy I/O port scanning is disabled
+    let count = 0;
 
     /*
+    // Legacy I/O port scanning code (DISABLED - hangs on some systems)
+    let device_list: Vec<PciDevice> = Vec::new();
     // Create PCI controller
     let mut controller = PciController::new();
     crate::arch::x86_64::serial::serial_write(b"[PCI] Controller created\n");
@@ -818,64 +972,49 @@ pub unsafe fn init() -> Result<usize, &'static str> {
     }
     */
 
-    let count = device_list.len();
-
-    crate::arch::x86_64::serial::serial_write(b"[PCI] Found ");
-    print_decimal(count);
-    crate::arch::x86_64::serial::serial_write(b" devices\n");
-
-    // Print discovered devices
-    for dev in &device_list {
-        crate::arch::x86_64::serial::serial_write(b"[PCI]   ");
-        print_bdf(dev.bus, dev.device, dev.function);
-        crate::arch::x86_64::serial::serial_write(b" ");
-        print_hex_u16(dev.vendor_id);
-        crate::arch::x86_64::serial::serial_write(b":");
-        print_hex_u16(dev.device_id);
-        crate::arch::x86_64::serial::serial_write(b" Class ");
-        print_hex_u8(dev.class);
-        crate::arch::x86_64::serial::serial_write(b".");
-        print_hex_u8(dev.subclass);
-        crate::arch::x86_64::serial::serial_write(b"\n");
-
-        // Special logging for VirtIO devices
-        if dev.is_virtio() {
-            if let Some(vtype) = dev.virtio_device_type() {
-                crate::arch::x86_64::serial::serial_write(b"[PCI]     -> VirtIO device type ");
-                print_decimal(vtype as usize);
-                crate::arch::x86_64::serial::serial_write(b" (");
-                match vtype {
-                    1 => crate::arch::x86_64::serial::serial_write(b"Net"),
-                    2 => crate::arch::x86_64::serial::serial_write(b"Block"),
-                    3 => crate::arch::x86_64::serial::serial_write(b"Console"),
-                    16 => crate::arch::x86_64::serial::serial_write(b"GPU"),
-                    _ => crate::arch::x86_64::serial::serial_write(b"Unknown"),
-                }
-                crate::arch::x86_64::serial::serial_write(b")\n");
-            }
-        }
-    }
-
-    *PCI_DEVICES.lock() = device_list;
     Ok(count)
 }
 
 /// Get all discovered PCI devices
 pub fn devices() -> Vec<PciDevice> {
-    PCI_DEVICES.lock().clone()
+    PCI_DEVICES
+        .lock()
+        .iter()
+        .copied()
+        .collect()
 }
 
-/// Find VirtIO devices of a specific type
+/// Find VirtIO devices of a specific type (returns up to MAX results, no heap allocation)
 ///
 /// # Arguments
 /// * `device_type` - VirtIO device type (1 = Net, 2 = Block, etc.)
-pub fn find_virtio_devices(device_type: u16) -> Vec<PciDevice> {
+pub fn find_virtio_devices(device_type: u16) -> alloc::vec::Vec<PciDevice> {
+    // NOTE: This function still uses Vec for compatibility with existing code
+    // It will work once heap is initialized (after early_init returns)
     PCI_DEVICES
         .lock()
         .iter()
         .filter(|dev| dev.virtio_device_type() == Some(device_type))
-        .cloned()
+        .copied()
         .collect()
+}
+
+/// Find first VirtIO device of a specific type (no heap allocation)
+pub fn find_first_virtio_device(device_type: u16) -> Option<PciDevice> {
+    PCI_DEVICES
+        .lock()
+        .iter()
+        .find(|dev| dev.virtio_device_type() == Some(device_type))
+        .copied()
+}
+
+/// Find first AHCI/SATA controller on the PCI bus (no heap allocation)
+pub fn find_first_ahci_controller() -> Option<PciDevice> {
+    PCI_DEVICES
+        .lock()
+        .iter()
+        .find(|dev| dev.is_ahci())
+        .copied()
 }
 
 // Helper functions for serial output
