@@ -22,7 +22,7 @@ pub const AGENT_ID_AGENTD: AgentId = 1;
 pub const AGENT_ID_TEST: AgentId = 0xFFFF;
 
 /// Capability enum (what an agent can do)
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Capability {
     /// File operations: list, read, write, stat, create, delete
     FsBasic,
@@ -84,7 +84,7 @@ pub struct AgentToken {
 }
 
 /// Policy decision result
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PolicyDecision {
     Allow,
     Deny { reason: &'static str },

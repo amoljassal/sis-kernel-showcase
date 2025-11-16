@@ -103,7 +103,7 @@ impl SystemMetrics {
 }
 
 /// Telemetry event for the ring buffer
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum TelemetryEvent {
     /// Agent spawned
     Spawn(AgentId, Timestamp),
@@ -233,7 +233,7 @@ impl TelemetryAggregator {
         if metrics.recent_faults.len() >= 10 {
             metrics.recent_faults.remove(0);
         }
-        metrics.recent_faults.push(fault);
+        metrics.recent_faults.push(fault.clone());
 
         self.system_metrics.total_faults += 1;
 

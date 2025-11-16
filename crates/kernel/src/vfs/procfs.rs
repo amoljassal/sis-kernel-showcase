@@ -1168,19 +1168,36 @@ impl InodeOps for ComplianceFile {
             output.extend_from_slice(b"EU AI Act Compliance Report\n");
             output.extend_from_slice(b"===========================\n\n");
 
+            // Calculate system compliance score from agent records
+            let system_compliance_score = if report.agent_records.is_empty() {
+                1.0
+            } else {
+                let total_score: f32 = report.agent_records.iter()
+                    .map(|r| r.compliance_score())
+                    .sum();
+                total_score / report.agent_records.len() as f32
+            };
+
+            // Calculate risk level distribution
+            use crate::agent_sys::supervisor::compliance::RiskLevel;
+            let minimal_risk = report.agent_records.iter().filter(|r| r.risk_level == RiskLevel::Minimal).count();
+            let limited_risk = report.agent_records.iter().filter(|r| r.risk_level == RiskLevel::Limited).count();
+            let high_risk = report.agent_records.iter().filter(|r| r.risk_level == RiskLevel::High).count();
+            let unacceptable_risk = report.agent_records.iter().filter(|r| r.risk_level == RiskLevel::Unacceptable).count();
+
             // System-wide compliance
-            output.extend_from_slice(format!("Timestamp:            {}\n", report.timestamp).as_bytes());
+            output.extend_from_slice(format!("Timestamp:            {}\n", report.generated_at).as_bytes());
             output.extend_from_slice(format!("Total Agents:         {}\n", report.total_agents).as_bytes());
             output.extend_from_slice(format!("Total Events:         {}\n", report.total_events).as_bytes());
-            output.extend_from_slice(format!("Policy Violations:    {}\n", report.policy_violations).as_bytes());
-            output.extend_from_slice(format!("System Compliance:    {:.1}%\n\n", report.system_compliance_score * 100.0).as_bytes());
+            output.extend_from_slice(format!("Policy Violations:    {}\n", report.total_violations).as_bytes());
+            output.extend_from_slice(format!("System Compliance:    {:.1}%\n\n", system_compliance_score * 100.0).as_bytes());
 
             // Risk level distribution
             output.extend_from_slice(b"Risk Level Distribution:\n");
-            output.extend_from_slice(format!("  Minimal:            {}\n", report.minimal_risk_agents).as_bytes());
-            output.extend_from_slice(format!("  Limited:            {}\n", report.limited_risk_agents).as_bytes());
-            output.extend_from_slice(format!("  High:               {}\n", report.high_risk_agents).as_bytes());
-            output.extend_from_slice(format!("  Unacceptable:       {}\n", report.unacceptable_risk_agents).as_bytes());
+            output.extend_from_slice(format!("  Minimal:            {}\n", minimal_risk).as_bytes());
+            output.extend_from_slice(format!("  Limited:            {}\n", limited_risk).as_bytes());
+            output.extend_from_slice(format!("  High:               {}\n", high_risk).as_bytes());
+            output.extend_from_slice(format!("  Unacceptable:       {}\n", unacceptable_risk).as_bytes());
             output.extend_from_slice(b"\n");
 
             // Per-agent compliance
@@ -1190,14 +1207,14 @@ impl InodeOps for ComplianceFile {
             for agent_record in &report.agent_records {
                 output.extend_from_slice(format!("\nAgent ID: {}\n", agent_record.agent_id).as_bytes());
                 output.extend_from_slice(format!("  Risk Level:         {}\n", agent_record.risk_level.as_str()).as_bytes());
-                output.extend_from_slice(format!("  Events Logged:      {}\n", agent_record.events_logged).as_bytes());
+                output.extend_from_slice(format!("  Events Logged:      {}\n", agent_record.total_operations).as_bytes());
                 output.extend_from_slice(format!("  Violations:         {}\n", agent_record.policy_violations).as_bytes());
-                output.extend_from_slice(format!("  Human Oversight:    {}\n", agent_record.human_oversight_count).as_bytes());
-                output.extend_from_slice(format!("  Compliance Score:   {:.1}%\n", agent_record.compliance_score * 100.0).as_bytes());
+                output.extend_from_slice(format!("  Human Oversight:    {}\n", agent_record.human_reviews).as_bytes());
+                output.extend_from_slice(format!("  Compliance Score:   {:.1}%\n", agent_record.compliance_score() * 100.0).as_bytes());
 
-                let status = if agent_record.compliance_score >= 0.9 {
+                let status = if agent_record.compliance_score() >= 0.9 {
                     "COMPLIANT"
-                } else if agent_record.compliance_score >= 0.7 {
+                } else if agent_record.compliance_score() >= 0.7 {
                     "REVIEW_NEEDED"
                 } else {
                     "NON_COMPLIANT"

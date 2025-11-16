@@ -8,6 +8,7 @@ use super::{AGENT_SUPERVISOR, TELEMETRY, FAULT_DETECTOR, COMPLIANCE_TRACKER, RES
 use super::compliance::{ComplianceEvent, RiskLevel};
 use crate::process::Pid;
 use crate::agent_sys::AgentId;
+use alloc::string::ToString;
 
 /// Check if a process is an agent and return its AgentId
 ///
@@ -129,7 +130,7 @@ pub fn on_process_exit(pid: Pid, exit_code: i32) -> bool {
                 let telemetry = TELEMETRY.lock();
                 if let Some(ref t) = *telemetry {
                     if let Some(agent_metrics) = t.get_agent_metrics(agent_id) {
-                        agent_metrics.operations_count
+                        agent_metrics.syscall_count
                     } else {
                         0
                     }
@@ -221,8 +222,10 @@ pub fn report_agent_fault(agent_id: AgentId, fault: super::fault::Fault) -> supe
         super::fault::Fault::CpuQuotaExceeded { .. } => "CPU Quota Exceeded",
         super::fault::Fault::MemoryExceeded { .. } => "Memory Limit Exceeded",
         super::fault::Fault::SyscallFlood { .. } => "Syscall Flood",
-        super::fault::Fault::WatchdogTimeout { .. } => "Watchdog Timeout",
+        super::fault::Fault::Unresponsive { .. } => "Agent Unresponsive",
         super::fault::Fault::Crashed { .. } => "Agent Crashed",
+        super::fault::Fault::CapabilityViolation { .. } => "Capability Violation",
+        super::fault::Fault::PolicyViolation { .. } => "Policy Violation",
     };
 
     let severity = match &fault {
@@ -363,7 +366,7 @@ pub fn log_compliance_event(event: ComplianceEvent) {
 /// Returns compliance score (0.0 - 1.0) for an agent
 pub fn get_agent_compliance_score(agent_id: AgentId) -> Option<f32> {
     let compliance = COMPLIANCE_TRACKER.lock();
-    compliance.as_ref()?.get_agent_record(agent_id).map(|r| r.compliance_score)
+    compliance.as_ref()?.get_record(agent_id).map(|r| r.compliance_score())
 }
 
 #[cfg(test)]

@@ -146,7 +146,7 @@ impl Shell {
         }
 
         // Parse agent ID
-        let agent_id: AgentId = match self.parse_number(args[1]) {
+        let agent_id: AgentId = match self.parse_number_u64(args[1]) {
             Some(id) => id as AgentId,
             None => {
                 unsafe {
@@ -207,7 +207,7 @@ impl Shell {
             return;
         }
 
-        let agent_id: AgentId = match self.parse_number(args[1]) {
+        let agent_id: AgentId = match self.parse_number_u64(args[1]) {
             Some(id) => id as AgentId,
             None => {
                 unsafe {
@@ -277,8 +277,8 @@ impl Shell {
         }
     }
 
-    /// Helper: Parse number from string
-    fn parse_number(&self, s: &str) -> Option<u64> {
+    /// Helper: Parse number from string (u64 version for ASM commands)
+    fn parse_number_u64(&self, s: &str) -> Option<u64> {
         let mut result: u64 = 0;
         for ch in s.chars() {
             if !ch.is_ascii_digit() {
@@ -391,7 +391,7 @@ impl Shell {
                     self.print_number_simple(metrics.total_tokens);
                     crate::uart_print(b"\n  Avg Response Time:  ");
                     self.print_number_simple(metrics.avg_response_time_us);
-                    crate::uart_print(b" μs\n");
+                    crate::uart_print(b" us\n");
 
                     crate::uart_print(b"\nActive Agents: ");
                     self.print_number_simple(gateway.active_agents() as u64);
@@ -412,8 +412,8 @@ impl Shell {
         }
     }
 
-    /// Show compliance report
-    pub fn cmd_compliance(&self) {
+    /// Show compliance report (ASM-specific version)
+    pub fn cmd_asm_compliance(&self) {
         #[cfg(feature = "agentsys")]
         {
             use crate::agent_sys::supervisor::hooks::get_compliance_report;
@@ -424,20 +424,37 @@ impl Shell {
             }
 
             if let Some(report) = get_compliance_report() {
+                // Calculate system compliance score from agent records
+                let system_compliance_score = if report.agent_records.is_empty() {
+                    1.0
+                } else {
+                    let total_score: f32 = report.agent_records.iter()
+                        .map(|r| r.compliance_score())
+                        .sum();
+                    total_score / report.agent_records.len() as f32
+                };
+
+                // Calculate risk level distribution
+                use crate::agent_sys::supervisor::compliance::RiskLevel;
+                let minimal_risk = report.agent_records.iter().filter(|r| r.risk_level == RiskLevel::Minimal).count();
+                let limited_risk = report.agent_records.iter().filter(|r| r.risk_level == RiskLevel::Limited).count();
+                let high_risk = report.agent_records.iter().filter(|r| r.risk_level == RiskLevel::High).count();
+                let unacceptable_risk = report.agent_records.iter().filter(|r| r.risk_level == RiskLevel::Unacceptable).count();
+
                 // System-wide compliance
                 unsafe {
                     crate::uart_print(b"Timestamp:          ");
-                    self.print_number_simple(report.timestamp);
+                    self.print_number_simple(report.generated_at);
                     crate::uart_print(b"\nTotal Agents:       ");
                     self.print_number_simple(report.total_agents as u64);
                     crate::uart_print(b"\nTotal Events:       ");
                     self.print_number_simple(report.total_events as u64);
                     crate::uart_print(b"\nPolicy Violations:  ");
-                    self.print_number_simple(report.policy_violations as u64);
+                    self.print_number_simple(report.total_violations as u64);
                     crate::uart_print(b"\nSystem Compliance:  ");
                 }
 
-                let compliance_pct = (report.system_compliance_score * 100.0) as u64;
+                let compliance_pct = (system_compliance_score * 100.0) as u64;
                 self.print_number_simple(compliance_pct);
                 unsafe { crate::uart_print(b"%\n\n"); }
 
@@ -445,13 +462,13 @@ impl Shell {
                 unsafe {
                     crate::uart_print(b"Risk Level Distribution:\n");
                     crate::uart_print(b"  Minimal:          ");
-                    self.print_number_simple(report.minimal_risk_agents as u64);
+                    self.print_number_simple(minimal_risk as u64);
                     crate::uart_print(b"\n  Limited:          ");
-                    self.print_number_simple(report.limited_risk_agents as u64);
+                    self.print_number_simple(limited_risk as u64);
                     crate::uart_print(b"\n  High:             ");
-                    self.print_number_simple(report.high_risk_agents as u64);
+                    self.print_number_simple(high_risk as u64);
                     crate::uart_print(b"\n  Unacceptable:     ");
-                    self.print_number_simple(report.unacceptable_risk_agents as u64);
+                    self.print_number_simple(unacceptable_risk as u64);
                     crate::uart_print(b"\n\n");
                 }
 
@@ -468,22 +485,22 @@ impl Shell {
                         crate::uart_print(b"\n  Risk Level:       ");
                         crate::uart_print(agent_record.risk_level.as_str().as_bytes());
                         crate::uart_print(b"\n  Events Logged:    ");
-                        self.print_number_simple(agent_record.events_logged as u64);
+                        self.print_number_simple(agent_record.total_operations as u64);
                         crate::uart_print(b"\n  Violations:       ");
                         self.print_number_simple(agent_record.policy_violations as u64);
                         crate::uart_print(b"\n  Human Oversight:  ");
-                        self.print_number_simple(agent_record.human_oversight_count as u64);
+                        self.print_number_simple(agent_record.human_reviews as u64);
                         crate::uart_print(b"\n  Compliance Score: ");
                     }
 
-                    let score_pct = (agent_record.compliance_score * 100.0) as u64;
+                    let score_pct = (agent_record.compliance_score() * 100.0) as u64;
                     self.print_number_simple(score_pct);
                     unsafe {
                         crate::uart_print(b"%\n  Status:           ");
 
-                        if agent_record.compliance_score >= 0.9 {
+                        if agent_record.compliance_score() >= 0.9 {
                             crate::uart_print(b"COMPLIANT\n");
-                        } else if agent_record.compliance_score >= 0.7 {
+                        } else if agent_record.compliance_score() >= 0.7 {
                             crate::uart_print(b"REVIEW_NEEDED\n");
                         } else {
                             crate::uart_print(b"NON_COMPLIANT\n");

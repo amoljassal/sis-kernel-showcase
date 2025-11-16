@@ -6,11 +6,12 @@
 use crate::agent_sys::AgentId;
 use crate::security::agent_policy::Capability;
 use crate::process::signal::Signal;
+use alloc::string::String;
 
 pub use super::FAULT_DETECTOR;
 
 /// Fault types that can be detected
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Fault {
     /// CPU usage exceeded quota
     CpuQuotaExceeded {
@@ -59,7 +60,7 @@ pub enum Fault {
     /// Policy violation
     PolicyViolation {
         /// Description of the violation
-        reason: &'static str,
+        reason: String,
     },
 }
 
@@ -343,7 +344,7 @@ impl FaultDetector {
     }
 
     /// Report a policy violation
-    pub fn report_policy_violation(&self, agent_id: AgentId, reason: &'static str) -> Fault {
+    pub fn report_policy_violation(&self, agent_id: AgentId, reason: String) -> Fault {
         Fault::PolicyViolation { reason }
     }
 }

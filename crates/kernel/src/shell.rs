@@ -255,7 +255,7 @@ impl Shell {
                 #[cfg(feature = "agentsys")]
                 "gwstatus" => { self.cmd_gwstatus(); true },
                 #[cfg(feature = "agentsys")]
-                "compliance" => { self.cmd_compliance(); true },
+                "compliance" => { self.cmd_compliance(&parts[1..]); true },
                 "coordctl" => { self.coordctl_cmd(&parts[1..]); true },
                 "deployctl" => { self.deployctl_cmd(&parts[1..]); true },
                 "driftctl" => { self.driftctl_cmd(&parts[1..]); true },

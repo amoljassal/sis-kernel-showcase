@@ -10,6 +10,7 @@ use crate::agent_sys::supervisor::{TELEMETRY, POLICY_CONTROLLER};
 use crate::agent_sys::supervisor::policy_controller::{PolicyPatch, PolicyError};
 use crate::agent_sys::AgentId;
 use alloc::vec::Vec;
+use core::fmt::Write;
 
 /// Syscall numbers for ASM (500-509 range)
 pub const SYS_ASM_GET_TELEMETRY: usize = 500;

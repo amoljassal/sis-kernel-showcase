@@ -829,7 +829,7 @@ fn chainload_kernel(
         // Fallback: use the static BOOT_INFO address
         let _ = st.stdout().write_str("BOOT_INFO allocation failed, using static\r\n");
         st.boot_services().stall(50_000);
-        unsafe { &raw const BOOT_INFO as *const BootInfo }
+        &raw const BOOT_INFO as *const BootInfo
     };
 
     let _ = st.stdout().write_fmt(format_args!(

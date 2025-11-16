@@ -510,13 +510,17 @@ Sections marked Planned describe upcoming work with scaffolding present in code.
   - [Fork Scaffolding](#84-process-foundation-fork-scaffolding)
   - [Profiling Framework](#85-profiling-framework)
   - [Bug Fixes & Production Hardening](#86-bug-fixes--production-hardening)
-- [Phase 9: AgentSys - LLM Agent Platform (QEMU implementation)](#phase-9-agentsys---llm-agent-platform-qemu-implementation)
+- [Phase 9: Agent Supervision Module (ASM) - EU AI Act Compliance (COMPLETE ✅)](#phase-9-agent-supervision-module-asm---eu-ai-act-compliance-complete-)
   - [Capability-Based Security Model](#91-capability-based-security-model)
   - [TLV Protocol & Message Routing](#92-tlv-protocol--message-routing)
   - [Policy Engine & Scope Restrictions](#93-policy-engine--scope-restrictions)
   - [Audit Trail & Compliance](#94-audit-trail--compliance)
   - [Handler Architecture](#95-handler-architecture)
   - [Shell Integration & Testing](#96-shell-integration--testing)
+  - [Agent Lifecycle Supervision](#97-agent-lifecycle-supervision)
+  - [EU AI Act Compliance Tracking](#98-eu-ai-act-compliance-tracking)
+  - [Resource Monitoring & Telemetry](#99-resource-monitoring--telemetry)
+  - [Multi-Provider LLM Gateway](#910-multi-provider-llm-gateway)
 
 ### Validation & Testing
 - [Week 6: Closed-Loop Learning & Validation](#week-6-closed-loop-learning--validation)
@@ -4198,25 +4202,62 @@ During integration, 124 compilation errors were resolved:
 - ✅ No memory leaks detected during stress testing
 - ✅ Performance overhead <2% with all capability checks enabled
 
-**Phase 9 Impact:**
-- **Security:** Capability-based model prevents unauthorized agent operations
-- **Auditability:** Complete audit trail for compliance and forensics
-- **Efficiency:** TLV protocol minimizes message overhead
-- **Extensibility:** Easy to add new capabilities and handlers
-- **Foundation:** Enables future autonomous AI agent deployment
+**Agent Supervision Module (ASM) - EU AI Act Compliance Implementation:**
 
-**Files Added in Phase 9:**
-- `crates/kernel/src/agent_sys/mod.rs` - Main dispatcher
+**Core Capabilities:**
+- **Lifecycle Management:** Full agent spawn/exit supervision with automatic cleanup
+- **Fault Detection & Recovery:** Real-time monitoring with configurable recovery policies
+- **EU AI Act Compliance:** Risk-level classification, transparency scoring, audit trails
+- **Resource Monitoring:** CPU, memory, syscall tracking with per-agent limits
+- **Telemetry Aggregation:** System-wide metrics collection and event tracking
+- **Dynamic Policy Control:** Runtime capability hot-patching without restart
+- **Dependency Management:** Automatic cascading shutdown on dependency failures
+- **Performance Profiling:** Per-operation latency tracking and success rates
+- **Multi-Provider LLM Gateway:** Claude, GPT-4, Gemini routing with load balancing
+
+**Files Added/Modified in ASM Implementation (30 files, 10,352 lines):**
+
+*Supervision Core:*
+- `crates/kernel/src/agent_sys/supervisor/mod.rs` - Global state and initialization
+- `crates/kernel/src/agent_sys/supervisor/types.rs` - Core types and agent specifications
+- `crates/kernel/src/agent_sys/supervisor/supervisor.rs` - Agent lifecycle manager
+- `crates/kernel/src/agent_sys/supervisor/hooks.rs` - Process lifecycle integration
+- `crates/kernel/src/agent_sys/supervisor/lifecycle.rs` - Spawn/exit/fault handlers
+- `crates/kernel/src/agent_sys/supervisor/telemetry.rs` - Metrics aggregation (418 lines)
+- `crates/kernel/src/agent_sys/supervisor/fault.rs` - Fault detection (400 lines)
+- `crates/kernel/src/agent_sys/supervisor/policy_controller.rs` - Dynamic policy updates
+- `crates/kernel/src/agent_sys/supervisor/compliance.rs` - EU AI Act tracking (520 lines)
+- `crates/kernel/src/agent_sys/supervisor/resource_monitor.rs` - Resource tracking (380 lines)
+- `crates/kernel/src/agent_sys/supervisor/dependencies.rs` - Dependency graph (450 lines)
+- `crates/kernel/src/agent_sys/supervisor/profiling.rs` - Performance profiling (350 lines)
+- `crates/kernel/src/agent_sys/supervisor/integration_tests.rs` - Full lifecycle tests
+
+*Cloud Gateway:*
+- `crates/kernel/src/agent_sys/cloud_gateway/mod.rs` - Gateway core with load balancing
+- `crates/kernel/src/agent_sys/cloud_gateway/types.rs` - LLM request/response types
+- `crates/kernel/src/agent_sys/cloud_gateway/router.rs` - Provider selection
+
+*Protocol Handlers:*
+- `crates/kernel/src/agent_sys/mod.rs` - Main dispatcher and TLV protocol
 - `crates/kernel/src/agent_sys/protocol.rs` - TLV protocol definitions
 - `crates/kernel/src/agent_sys/handlers/mod.rs` - Handler module registry
 - `crates/kernel/src/agent_sys/handlers/fs.rs` - File system handlers
 - `crates/kernel/src/agent_sys/handlers/audio.rs` - Audio handlers
 - `crates/kernel/src/agent_sys/handlers/docs.rs` - Document handlers
 - `crates/kernel/src/agent_sys/handlers/io.rs` - I/O handlers
-- `crates/kernel/src/security/agent_policy.rs` - Policy engine
-- `crates/kernel/src/security/agent_audit.rs` - Audit logger
-- `crates/kernel/src/llm/basic.rs` - LLM audit export functions
-- Modified: `uart.rs`, `control.rs`, `shell.rs`, `llm/mod.rs`, `lib.rs`
+
+*Security & Policy:*
+- `crates/kernel/src/security/agent_policy.rs` - Capability-based access control
+- `crates/kernel/src/security/agent_audit.rs` - Audit logger with forensics
+
+*Shell Integration:*
+- `crates/kernel/src/shell/asm_helpers.rs` - ASM shell commands (600+ lines)
+
+*Documentation:*
+- `docs/plans/AGENT_SUPERVISION_MODULE_PLAN.md` - Complete implementation plan
+- `docs/troubleshooting/ASM_MERGE_COMPILATION_FIXES.md` - Merge troubleshooting (374 lines)
+
+*Modified:* `main.rs`, `shell.rs`, `lib.rs`, `syscall/agentsys.rs`, `vfs/procfs.rs`, `llm/basic.rs`
 
 ## Current Stats
 
@@ -4282,6 +4323,7 @@ sis-kernel/
 │   │       ├── shell/                  # Shell command helpers (modular)
 │   │       │   ├── agentctl_helpers.rs         # Agent network management
 │   │       │   ├── actorctl_helpers.rs         # Actor-critic control
+│   │       │   ├── asm_helpers.rs              # Agent Supervision Module (ASM) commands
 │   │       │   ├── autoctl_helpers.rs          # Autonomous control
 │   │       │   ├── benchmark_helpers.rs        # Comparative benchmarks
 │   │       │   ├── cmdctl_helpers.rs           # Command prediction
@@ -4385,7 +4427,40 @@ sis-kernel/
 │   │       │   ├── mod.rs              # Security core
 │   │       │   ├── cred.rs             # Credentials (UID/GID/caps)
 │   │       │   ├── perm.rs             # Permission checking
-│   │       │   └── random.rs           # Secure RNG
+│   │       │   ├── random.rs           # Secure RNG
+│   │       │   ├── agent_policy.rs     # Agent capability-based access control (ASM)
+│   │       │   └── agent_audit.rs      # Agent audit logging (ASM)
+│   │       │
+│   │       ├── agent_sys/              # Agent Supervision Module (ASM) - EU AI Act Compliance
+│   │       │   ├── mod.rs              # Main dispatcher and TLV protocol
+│   │       │   ├── protocol.rs         # TLV protocol definitions
+│   │       │   │
+│   │       │   ├── handlers/           # Capability-based request handlers
+│   │       │   │   ├── mod.rs          # Handler module registry
+│   │       │   │   ├── fs.rs           # File system handlers
+│   │       │   │   ├── audio.rs        # Audio handlers
+│   │       │   │   ├── docs.rs         # Document handlers
+│   │       │   │   └── io.rs           # I/O handlers
+│   │       │   │
+│   │       │   ├── supervisor/         # Agent lifecycle supervision
+│   │       │   │   ├── mod.rs          # Supervisor core with global state
+│   │       │   │   ├── types.rs        # Core types and agent specifications
+│   │       │   │   ├── supervisor.rs   # Agent lifecycle manager
+│   │       │   │   ├── hooks.rs        # Process lifecycle integration hooks
+│   │       │   │   ├── lifecycle.rs    # Spawn/exit handlers and fault recovery
+│   │       │   │   ├── telemetry.rs    # Metrics aggregation and event tracking
+│   │       │   │   ├── fault.rs        # Fault detection and recovery policies
+│   │       │   │   ├── policy_controller.rs # Dynamic policy hot-patching
+│   │       │   │   ├── compliance.rs   # EU AI Act compliance tracking
+│   │       │   │   ├── resource_monitor.rs # Real-time resource monitoring
+│   │       │   │   ├── dependencies.rs # Agent dependency graph
+│   │       │   │   ├── profiling.rs    # Performance profiling infrastructure
+│   │       │   │   └── integration_tests.rs # Full lifecycle integration tests
+│   │       │   │
+│   │       │   └── cloud_gateway/      # Multi-provider LLM routing
+│   │       │       ├── mod.rs          # Gateway core with load balancing
+│   │       │       ├── types.rs        # LLM request/response types
+│   │       │       └── router.rs       # Provider selection and failover
 │   │       │
 │   │       ├── window_manager/         # Window management
 │   │       │   ├── mod.rs              # Window manager core

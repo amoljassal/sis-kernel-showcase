@@ -167,7 +167,7 @@ impl AgentSupervisor {
 
         // Record telemetry
         if let Some(telemetry) = TELEMETRY.lock().as_mut() {
-            telemetry.record_fault(agent_id, fault);
+            telemetry.record_fault(agent_id, fault.clone());
         }
 
         // Log the fault

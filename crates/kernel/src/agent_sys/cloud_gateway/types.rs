@@ -5,8 +5,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 /// LLM Provider enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Provider {
     /// Anthropic Claude API
     Claude,
@@ -41,8 +40,7 @@ impl Provider {
 }
 
 /// LLM Request from agent
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LLMRequest {
     /// Agent making the request
     pub agent_id: AgentId,
@@ -100,8 +98,7 @@ impl LLMRequest {
 }
 
 /// LLM Response to agent
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LLMResponse {
     /// Provider that fulfilled the request
     pub provider: Provider,

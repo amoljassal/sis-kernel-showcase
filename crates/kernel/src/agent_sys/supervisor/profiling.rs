@@ -6,7 +6,7 @@
 use crate::agent_sys::AgentId;
 use crate::time::get_timestamp_us;
 use alloc::collections::BTreeMap;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 /// Maximum number of profile samples to keep per operation type

@@ -347,7 +347,7 @@ fn test_compliance_scoring_integration() {
 
     // Report violations to lower score
     for _ in 0..5 {
-        let fault = fault::Fault::PolicyViolation { reason: "Test violation" };
+        let fault = fault::Fault::PolicyViolation { reason: "Test violation".to_string() };
         hooks::report_agent_fault(700, fault);
     }
 
