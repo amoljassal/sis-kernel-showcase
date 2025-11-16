@@ -81,8 +81,22 @@ pub fn on_process_exit(pid: Pid, exit_code: i32) -> bool {
     let mut supervisor = AGENT_SUPERVISOR.lock();
     if let Some(ref mut sup) = *supervisor {
         // Check if this PID is an agent
-        if sup.get_agent_by_pid(pid).is_some() {
+        if let Some(metadata) = sup.get_agent_by_pid(pid) {
+            let agent_id = metadata.agent_id;
+
+            // Update supervisor
             sup.on_agent_exit(pid, exit_code);
+
+            // Clean up Cloud Gateway rate limiter for this agent
+            #[cfg(feature = "agentsys")]
+            {
+                drop(supervisor); // Release lock before acquiring gateway lock
+                let mut gateway = crate::agent_sys::cloud_gateway::CLOUD_GATEWAY.lock();
+                if let Some(ref mut gw) = *gateway {
+                    gw.remove_agent(agent_id);
+                }
+            }
+
             return true;
         }
     }

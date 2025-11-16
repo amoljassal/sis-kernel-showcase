@@ -812,6 +812,11 @@ impl InodeOps for AgentSysDir {
                 0o444,
                 Box::leak(Box::new(AgentTelemetryFile)) as &'static dyn InodeOps,
             ))),
+            "cloud_gateway" => Ok(Arc::new(Inode::new(
+                InodeType::Regular,
+                0o444,
+                Box::leak(Box::new(CloudGatewayFile)) as &'static dyn InodeOps,
+            ))),
             _ => Err(Errno::ENOENT),
         }
     }
@@ -841,6 +846,11 @@ impl InodeOps for AgentSysDir {
         entries.push(DirEntry {
             ino: 8,
             name: "telemetry".to_string(),
+            itype: InodeType::Regular,
+        });
+        entries.push(DirEntry {
+            ino: 9,
+            name: "cloud_gateway".to_string(),
             itype: InodeType::Regular,
         });
 
@@ -972,6 +982,121 @@ impl InodeOps for AgentTelemetryFile {
             }
         } else {
             let msg = b"Agent Supervision Module not initialized\n";
+            if offset >= msg.len() as u64 {
+                return Ok(0);
+            }
+
+            let start = offset as usize;
+            let to_copy = (msg.len() - start).min(buf.len());
+            buf[..to_copy].copy_from_slice(&msg[start..start + to_copy]);
+            Ok(to_copy)
+        }
+    }
+
+    fn write(&self, _offset: u64, _buf: &[u8]) -> Result<usize> {
+        Err(Errno::EACCES)
+    }
+
+    fn lookup(&self, _name: &str) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn create(&self, _name: &str, _mode: u32) -> Result<Arc<Inode>> {
+        Err(Errno::ENOTDIR)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>> {
+        Err(Errno::ENOTDIR)
+    }
+}
+
+#[cfg(feature = "agentsys")]
+/// /proc/agentsys/cloud_gateway file - Cloud Gateway metrics
+struct CloudGatewayFile;
+
+#[cfg(feature = "agentsys")]
+impl InodeOps for CloudGatewayFile {
+    fn getattr(&self) -> Result<super::inode::InodeMeta> {
+        Ok(super::inode::InodeMeta {
+            ino: 9,
+            itype: InodeType::Regular,
+            mode: crate::vfs::S_IFREG | 0o444,
+            uid: 0,
+            gid: 0,
+            nlink: 1,
+            size: 0,
+            atime: 0,
+            mtime: 0,
+            ctime: 0,
+        })
+    }
+
+    fn read(&self, offset: u64, buf: &mut [u8]) -> Result<usize> {
+        use alloc::format;
+        use alloc::string::ToString;
+
+        // Get gateway metrics
+        let gateway_guard = crate::agent_sys::cloud_gateway::CLOUD_GATEWAY.lock();
+        if let Some(ref gateway) = *gateway_guard {
+            let metrics = gateway.metrics();
+            let health = gateway.all_backend_health();
+
+            // Format metrics as human-readable text
+            let mut output = alloc::vec::Vec::new();
+
+            output.extend_from_slice(b"Cloud Gateway Metrics\n");
+            output.extend_from_slice(b"====================\n\n");
+
+            // System metrics
+            output.extend_from_slice(b"Request Statistics:\n");
+            output.extend_from_slice(format!("  Total Requests:       {}\n", metrics.total_requests).as_bytes());
+            output.extend_from_slice(format!("  Successful:           {}\n", metrics.successful_requests).as_bytes());
+            output.extend_from_slice(format!("  Failed:               {}\n", metrics.failed_requests).as_bytes());
+            output.extend_from_slice(format!("  Rate Limited:         {}\n", metrics.rate_limited_requests).as_bytes());
+            output.extend_from_slice(format!("  Fallback Used:        {}\n", metrics.fallback_requests).as_bytes());
+            output.extend_from_slice(b"\n");
+
+            // Per-provider stats
+            output.extend_from_slice(b"Provider Statistics:\n");
+            output.extend_from_slice(format!("  Claude:   Success: {}  Failures: {}\n",
+                metrics.claude_successes, metrics.claude_failures).as_bytes());
+            output.extend_from_slice(format!("  GPT-4:    Success: {}  Failures: {}\n",
+                metrics.gpt4_successes, metrics.gpt4_failures).as_bytes());
+            output.extend_from_slice(format!("  Gemini:   Success: {}  Failures: {}\n",
+                metrics.gemini_successes, metrics.gemini_failures).as_bytes());
+            output.extend_from_slice(format!("  Local:    Success: {}  Failures: {}\n",
+                metrics.local_successes, metrics.local_failures).as_bytes());
+            output.extend_from_slice(b"\n");
+
+            // Backend health
+            output.extend_from_slice(b"Backend Health:\n");
+            for (provider, health_val) in health.iter() {
+                let status = if *health_val > 0.8 { "HEALTHY" } else if *health_val > 0.5 { "DEGRADED" } else { "DOWN" };
+                output.extend_from_slice(format!("  {:12} {:.1}%  [{}]\n",
+                    provider.as_str(), health_val * 100.0, status).as_bytes());
+            }
+            output.extend_from_slice(b"\n");
+
+            // Performance
+            output.extend_from_slice(b"Performance:\n");
+            output.extend_from_slice(format!("  Total Tokens:         {}\n", metrics.total_tokens).as_bytes());
+            output.extend_from_slice(format!("  Avg Response Time:    {} μs\n", metrics.avg_response_time_us).as_bytes());
+            output.extend_from_slice(b"\n");
+
+            // Active agents
+            output.extend_from_slice(format!("Active Agents (rate limiters): {}\n", gateway.active_agents()).as_bytes());
+
+            let bytes = &output;
+            if offset >= bytes.len() as u64 {
+                return Ok(0);
+            }
+
+            let start = offset as usize;
+            let to_copy = (bytes.len() - start).min(buf.len());
+            buf[..to_copy].copy_from_slice(&bytes[start..start + to_copy]);
+            Ok(to_copy)
+        } else {
+            let msg = b"Cloud Gateway not initialized\n";
             if offset >= msg.len() as u64 {
                 return Ok(0);
             }

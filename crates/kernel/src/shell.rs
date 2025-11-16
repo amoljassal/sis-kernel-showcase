@@ -252,6 +252,8 @@ impl Shell {
                 "asminfo" => { self.cmd_asminfo(&parts); true },
                 #[cfg(feature = "agentsys")]
                 "asmpolicy" => { self.cmd_asmpolicy(&parts); true },
+                #[cfg(feature = "agentsys")]
+                "gwstatus" => { self.cmd_gwstatus(); true },
                 "coordctl" => { self.coordctl_cmd(&parts[1..]); true },
                 "deployctl" => { self.deployctl_cmd(&parts[1..]); true },
                 "driftctl" => { self.driftctl_cmd(&parts[1..]); true },

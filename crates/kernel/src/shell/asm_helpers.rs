@@ -289,4 +289,126 @@ impl Shell {
         }
         Some(result)
     }
+
+    /// gwstatus command - Show Cloud Gateway status
+    ///
+    /// Usage: gwstatus
+    pub fn cmd_gwstatus(&self) {
+        #[cfg(feature = "agentsys")]
+        {
+            use crate::agent_sys::cloud_gateway::CLOUD_GATEWAY;
+
+            unsafe {
+                crate::uart_print(b"\n=== Cloud Gateway Status ===\n\n");
+            }
+
+            let gateway_guard = CLOUD_GATEWAY.lock();
+            if let Some(ref gateway) = *gateway_guard {
+                let metrics = gateway.metrics();
+                let health = gateway.all_backend_health();
+
+                // Request statistics
+                unsafe {
+                    crate::uart_print(b"Request Statistics:\n");
+                    crate::uart_print(b"  Total Requests:    ");
+                    self.print_number_simple(metrics.total_requests);
+                    crate::uart_print(b"\n  Successful:        ");
+                    self.print_number_simple(metrics.successful_requests);
+                    crate::uart_print(b"\n  Failed:            ");
+                    self.print_number_simple(metrics.failed_requests);
+                    crate::uart_print(b"\n  Rate Limited:      ");
+                    self.print_number_simple(metrics.rate_limited_requests);
+                    crate::uart_print(b"\n  Fallback Used:     ");
+                    self.print_number_simple(metrics.fallback_requests);
+                    crate::uart_print(b"\n\n");
+
+                    // Provider statistics
+                    crate::uart_print(b"Provider Statistics:\n");
+                    crate::uart_print(b"  Provider    Success  Failures  Health\n");
+                    crate::uart_print(b"  ----------  -------  --------  --------\n");
+                }
+
+                // Claude
+                unsafe {
+                    crate::uart_print(b"  Claude      ");
+                }
+                self.print_number_padded(metrics.claude_successes, 7);
+                unsafe { crate::uart_print(b"  "); }
+                self.print_number_padded(metrics.claude_failures, 8);
+                unsafe { crate::uart_print(b"  "); }
+                if let Some(h) = health.get(&crate::agent_sys::cloud_gateway::Provider::Claude) {
+                    let pct = (h * 100.0) as u64;
+                    self.print_number_simple(pct);
+                    unsafe { crate::uart_print(b"%\n"); }
+                }
+
+                // GPT-4
+                unsafe {
+                    crate::uart_print(b"  GPT-4       ");
+                }
+                self.print_number_padded(metrics.gpt4_successes, 7);
+                unsafe { crate::uart_print(b"  "); }
+                self.print_number_padded(metrics.gpt4_failures, 8);
+                unsafe { crate::uart_print(b"  "); }
+                if let Some(h) = health.get(&crate::agent_sys::cloud_gateway::Provider::GPT4) {
+                    let pct = (h * 100.0) as u64;
+                    self.print_number_simple(pct);
+                    unsafe { crate::uart_print(b"%\n"); }
+                }
+
+                // Gemini
+                unsafe {
+                    crate::uart_print(b"  Gemini      ");
+                }
+                self.print_number_padded(metrics.gemini_successes, 7);
+                unsafe { crate::uart_print(b"  "); }
+                self.print_number_padded(metrics.gemini_failures, 8);
+                unsafe { crate::uart_print(b"  "); }
+                if let Some(h) = health.get(&crate::agent_sys::cloud_gateway::Provider::Gemini) {
+                    let pct = (h * 100.0) as u64;
+                    self.print_number_simple(pct);
+                    unsafe { crate::uart_print(b"%\n"); }
+                }
+
+                // Local
+                unsafe {
+                    crate::uart_print(b"  Local       ");
+                }
+                self.print_number_padded(metrics.local_successes, 7);
+                unsafe { crate::uart_print(b"  "); }
+                self.print_number_padded(metrics.local_failures, 8);
+                unsafe { crate::uart_print(b"  "); }
+                if let Some(h) = health.get(&crate::agent_sys::cloud_gateway::Provider::LocalFallback) {
+                    let pct = (h * 100.0) as u64;
+                    self.print_number_simple(pct);
+                    unsafe { crate::uart_print(b"%\n"); }
+                }
+
+                // Performance
+                unsafe {
+                    crate::uart_print(b"\nPerformance:\n");
+                    crate::uart_print(b"  Total Tokens:       ");
+                    self.print_number_simple(metrics.total_tokens);
+                    crate::uart_print(b"\n  Avg Response Time:  ");
+                    self.print_number_simple(metrics.avg_response_time_us);
+                    crate::uart_print(b" μs\n");
+
+                    crate::uart_print(b"\nActive Agents: ");
+                    self.print_number_simple(gateway.active_agents() as u64);
+                    crate::uart_print(b"\n");
+                }
+            } else {
+                unsafe {
+                    crate::uart_print(b"Cloud Gateway not initialized\n");
+                }
+            }
+        }
+
+        #[cfg(not(feature = "agentsys"))]
+        {
+            unsafe {
+                crate::uart_print(b"Cloud Gateway not available (feature not enabled)\n");
+            }
+        }
+    }
 }
