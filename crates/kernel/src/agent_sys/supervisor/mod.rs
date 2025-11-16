@@ -49,6 +49,9 @@ pub mod profiling;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod integration_tests;
+
 pub use types::*;
 pub use lifecycle::AgentSupervisor;
 pub use telemetry::TelemetryAggregator;

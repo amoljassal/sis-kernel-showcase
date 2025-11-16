@@ -21,6 +21,10 @@
 11. [Best Practices](#best-practices)
 12. [Troubleshooting](#troubleshooting)
 13. [FAQ](#faq)
+14. [EU AI Act Compliance Tracking](#14-eu-ai-act-compliance-tracking)
+15. [Resource Monitoring](#15-resource-monitoring)
+16. [Dependency Tracking](#16-dependency-tracking)
+17. [Performance Profiling](#17-performance-profiling)
 
 ---
 
@@ -1227,6 +1231,380 @@ watch -n 5 'cat /proc/agentsys/status | grep "Agent <ID>"'
 ### Q: What compliance standards does ASM support?
 
 **A**: ASM provides audit trails suitable for EU AI Act compliance. Additional standards can be supported via custom reporting.
+
+---
+
+## 14. EU AI Act Compliance Tracking
+
+### Overview
+
+ASM provides built-in EU AI Act compliance tracking that automatically logs all agent operations and generates compliance reports.
+
+### Compliance Features
+
+**Automatic Event Logging:**
+- Agent spawns with risk classification
+- Decision-making events
+- Sensitive data access
+- Policy violations
+- Human oversight actions
+- Agent exits with operation counts
+
+**Risk Levels:**
+- **Minimal**: Limited transparency obligations
+- **Limited**: Transparency obligations apply
+- **High**: Strict requirements apply
+- **Unacceptable**: Prohibited operations
+
+### Using the Compliance Shell Command
+
+```bash
+# View compliance report
+> compliance
+
+EU AI Act Compliance Report
+===========================
+
+Timestamp:          1234567890
+Total Agents:       5
+Total Events:       150
+Policy Violations:  2
+System Compliance:  95%
+
+Risk Level Distribution:
+  Minimal:          1
+  Limited:          3
+  High:             1
+  Unacceptable:     0
+
+Agent Compliance Details:
+-------------------------
+
+Agent ID: 100
+  Risk Level:       Limited
+  Events Logged:    45
+  Violations:       0
+  Human Oversight:  2
+  Compliance Score: 100%
+  Status:           COMPLIANT
+```
+
+### Viewing Compliance via /proc
+
+```bash
+$ cat /proc/agentsys/compliance
+```
+
+Returns the same formatted compliance report with:
+- System-wide compliance metrics
+- Per-agent compliance scores
+- Risk level distribution
+- Compliance requirements checklist
+
+### Programmatic Compliance Access
+
+```rust
+use crate::agent_sys::supervisor::hooks;
+
+// Get compliance report
+let report = hooks::get_compliance_report()?;
+
+println!("System compliance: {:.1}%", report.system_compliance_score * 100.0);
+println!("Total violations: {}", report.policy_violations);
+
+// Get agent compliance score
+let score = hooks::get_agent_compliance_score(agent_id)?;
+if score < 0.9 {
+    println!("Warning: Agent {} requires compliance review", agent_id);
+}
+```
+
+### Compliance Scoring
+
+Agents are scored on a 0.0-1.0 scale based on:
+- Number of policy violations (negative impact)
+- Human oversight actions (positive impact)
+- Clean exit records (positive impact)
+- Crash history (negative impact)
+
+**Compliance Statuses:**
+- **COMPLIANT**: Score ≥ 0.9
+- **REVIEW_NEEDED**: Score 0.7-0.89
+- **NON_COMPLIANT**: Score < 0.7
+
+---
+
+## 15. Resource Monitoring
+
+### Overview
+
+ASM provides time-windowed resource tracking with 60-second history for comprehensive resource usage analysis.
+
+### Monitored Resources
+
+- **CPU Time**: Microseconds of CPU time per window
+- **Memory Usage**: Current and peak memory consumption
+- **Syscall Count**: Number of system calls per window
+- **IO Operations**: File and network I/O operations
+
+### Resource Tracking Features
+
+**Time Windows:**
+- 1-second aggregation windows
+- 60-second rolling history
+- Automatic window rotation
+
+**Metrics:**
+- CPU usage rate (percentage over time)
+- Syscall rate (calls per second)
+- Peak memory usage
+- Lifetime statistics
+
+### Accessing Resource Data
+
+```rust
+use crate::agent_sys::supervisor::RESOURCE_MONITOR;
+
+let mut monitor = RESOURCE_MONITOR.lock();
+if let Some(ref mut resource_mon) = *monitor {
+    if let Some(agent_mon) = resource_mon.get_agent(agent_id) {
+        // Get current memory
+        let memory = agent_mon.current_memory();
+
+        // Get CPU usage rate over last 10 seconds
+        let cpu_rate = agent_mon.cpu_usage_rate(10);
+
+        // Get syscall rate over last 5 seconds
+        let syscall_rate = agent_mon.syscall_rate(5);
+
+        // Get peak memory
+        let peak = agent_mon.peak_memory();
+
+        // Get lifetime stats
+        let (total_cpu, total_syscalls, total_io) = agent_mon.lifetime_stats();
+    }
+}
+```
+
+### System-Wide Aggregation
+
+```rust
+// Get total system memory usage
+let total_memory = resource_mon.system_memory_usage();
+
+// Get total CPU usage across all agents
+let total_cpu = resource_mon.system_cpu_usage(10); // last 10 seconds
+```
+
+### Resource Snapshots
+
+Each snapshot contains:
+```rust
+pub struct ResourceSnapshot {
+    pub timestamp: u64,
+    pub cpu_time_us: u64,
+    pub memory_bytes: usize,
+    pub syscall_count: u64,
+    pub io_ops: u64,
+}
+```
+
+Access historical snapshots:
+```rust
+let history = agent_mon.history();
+for snapshot in history {
+    println!("Time: {} CPU: {}μs Memory: {} bytes",
+        snapshot.timestamp, snapshot.cpu_time_us, snapshot.memory_bytes);
+}
+```
+
+---
+
+## 16. Dependency Tracking
+
+### Overview
+
+ASM tracks dependencies and relationships between agents, enabling coordinated lifecycle management and cascade handling.
+
+### Dependency Types
+
+**Required**: Dependent must exit if dependency exits
+```rust
+graph.add_dependency(agent_a, agent_b, DependencyType::Required);
+// If agent_b exits, agent_a will cascade exit
+```
+
+**Optional**: Dependent is notified but can continue
+```rust
+graph.add_dependency(agent_a, agent_b, DependencyType::Optional);
+// If agent_b exits, agent_a is notified but continues
+```
+
+**Peer**: Coordination without hard dependencies
+```rust
+graph.add_dependency(agent_a, agent_b, DependencyType::Peer);
+// Agents coordinate but neither requires the other
+```
+
+### Working with Dependencies
+
+```rust
+use crate::agent_sys::supervisor::DEPENDENCY_GRAPH;
+
+let mut dep_graph = DEPENDENCY_GRAPH.lock();
+if let Some(ref mut graph) = *dep_graph {
+    // Add dependency
+    graph.add_dependency(100, 101, DependencyType::Required);
+
+    // Get dependencies for an agent
+    if let Some(deps) = graph.get_dependencies(100) {
+        for dep in deps {
+            println!("Agent {} depends on {}", dep.dependent, dep.dependency);
+        }
+    }
+
+    // Get agents that depend on this agent
+    if let Some(dependents) = graph.get_dependents(101) {
+        println!("Agents depending on 101: {:?}", dependents);
+    }
+
+    // Get cascade exits
+    let cascade = graph.get_cascade_exits(102);
+    println!("If 102 exits, these will cascade: {:?}", cascade);
+
+    // Detect circular dependencies
+    if graph.has_circular_dependency(100) {
+        println!("Warning: Circular dependency detected!");
+    }
+
+    // Get full dependency chain (transitive closure)
+    let chain = graph.get_dependency_chain(100);
+    println!("Full dependency chain: {:?}", chain);
+}
+```
+
+### Cascade Exit Handling
+
+When an agent with dependents exits:
+1. ASM checks all dependents
+2. For each Required dependency, the dependent agent is signaled to exit
+3. Cascade continues recursively through the dependency graph
+4. All affected agents exit in topological order
+
+### Circular Dependency Detection
+
+ASM automatically detects circular dependencies using depth-first search:
+```rust
+if graph.has_circular_dependency(agent_id) {
+    // Handle circular dependency - e.g., break the cycle or alert
+}
+```
+
+Circular dependencies are detected but not automatically broken - you must manually manage them.
+
+---
+
+## 17. Performance Profiling
+
+### Overview
+
+ASM provides lightweight performance profiling to track agent operation latencies, identify bottlenecks, and analyze performance characteristics.
+
+### Profiling Features
+
+- **Per-operation statistics**: Track individual operation types
+- **Percentile analysis**: Min/max/avg/median/p95/p99 latencies
+- **Success rate tracking**: Monitor operation success/failure rates
+- **Ring buffer sampling**: 100 samples per operation type
+- **System-wide aggregation**: Combined statistics across all agents
+
+### Using the Profiler
+
+**Basic Profiling:**
+```rust
+use crate::agent_sys::supervisor::SYSTEM_PROFILER;
+
+let mut profiler = SYSTEM_PROFILER.lock();
+if let Some(ref mut system_prof) = *profiler {
+    if let Some(agent_prof) = system_prof.get_agent(agent_id) {
+        // Start profiling
+        let start = agent_prof.start_operation("process_request");
+
+        // ... do work ...
+
+        // End profiling (success)
+        agent_prof.end_operation("process_request", start, true);
+    }
+}
+```
+
+**RAII Profiling (Automatic):**
+```rust
+use crate::agent_sys::supervisor::profiling::ProfileGuard;
+
+{
+    let mut guard = ProfileGuard::new(&mut agent_profiler, "complex_operation");
+
+    // ... do work ...
+
+    if error {
+        guard.set_failed();
+    }
+
+    // Profiling ends automatically when guard drops
+}
+```
+
+### Accessing Profile Statistics
+
+```rust
+// Get stats for a specific operation
+if let Some(stats) = agent_prof.get_stats("process_request") {
+    println!("Operation: {}", stats.operation);
+    println!("  Samples: {}", stats.sample_count);
+    println!("  Min: {}μs", stats.min_duration_us);
+    println!("  Max: {}μs", stats.max_duration_us);
+    println!("  Avg: {}μs", stats.avg_duration_us);
+    println!("  Median: {}μs", stats.median_duration_us);
+    println!("  p95: {}μs", stats.p95_duration_us);
+    println!("  p99: {}μs", stats.p99_duration_us);
+    println!("  Success rate: {:.1}%", stats.success_rate * 100.0);
+}
+
+// Get all profiled operations
+let operations = agent_prof.operations();
+for op in operations {
+    println!("Profiled operation: {}", op);
+}
+
+// Get all statistics
+let all_stats = agent_prof.get_all_stats();
+for stats in all_stats {
+    println!("{}: avg={}μs p95={}μs",
+        stats.operation, stats.avg_duration_us, stats.p95_duration_us);
+}
+```
+
+### System-Wide Aggregation
+
+```rust
+// Get aggregated stats across all agents for an operation
+if let Some(stats) = system_prof.aggregate_stats("llm_request") {
+    println!("System-wide LLM request stats:");
+    println!("  Total samples: {}", stats.sample_count);
+    println!("  Avg latency: {}μs", stats.avg_duration_us);
+    println!("  p99 latency: {}μs", stats.p99_duration_us);
+}
+```
+
+### Performance Insights
+
+Profile statistics help you:
+- **Identify slow operations**: High p99 latencies
+- **Detect variability**: Large gap between min and max
+- **Monitor reliability**: Low success rates
+- **Optimize hotspots**: Focus on high-frequency operations
+- **Track regressions**: Compare stats over time
 
 ---
 
