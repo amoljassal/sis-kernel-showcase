@@ -9,12 +9,28 @@
 //! ## Phase 2: AI Governance (NEW)
 //! - **Drift Detection**: Monitor model performance degradation
 //! - **Version Control**: Git-like versioning for LoRA adapters
+//!
+//! ## Phase 3: Transformer Backend (IN PROGRESS)
+//! - **Memory Arena**: Static allocation for deterministic bounds
+//! - **Tokenizer**: BPE (Byte-Pair Encoding) implementation
+//! - **Quantization**: Q4_0, Q8_0 support for compact models
+//! - **Transformer Core**: Multi-layer transformer inference
+//! - **GGUF Parser**: Model file format support
 
 pub mod basic;
 pub mod finetune;
 pub mod state_inference;
 pub mod drift_detector;
 pub mod version;
+
+// Phase 3: Transformer backend modules
+pub mod arena;
+pub mod tokenizer;
+pub mod quantize;
+pub mod transformer;
+pub mod gguf;
+pub mod backend;
+pub mod generate;
 
 // Re-export basic LLM functions and types (Phase 0/1 - inference, audit, control)
 pub use basic::{
