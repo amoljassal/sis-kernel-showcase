@@ -175,9 +175,9 @@ pub fn bench_tokenization(config: BenchmarkConfig) -> BenchmarkStats {
     // Measure
     let mut samples = Vec::new();
     for _ in 0..config.measurement_iterations {
-        let start = mock_timestamp();
+        let start = timestamp_us();
         let _ = tokenizer.encode(text);
-        let elapsed = mock_timestamp() - start;
+        let elapsed = timestamp_us() - start;
         samples.push(elapsed);
     }
 
@@ -206,9 +206,9 @@ pub fn bench_q4_0_dequant(config: BenchmarkConfig) -> BenchmarkStats {
     // Measure
     let mut samples = Vec::new();
     for _ in 0..config.measurement_iterations {
-        let start = mock_timestamp();
+        let start = timestamp_us();
         dequantize_q4_0(&blocks, &mut output);
-        let elapsed = mock_timestamp() - start;
+        let elapsed = timestamp_us() - start;
         samples.push(elapsed);
     }
 
@@ -236,13 +236,13 @@ pub fn bench_dot_product(config: BenchmarkConfig) -> BenchmarkStats {
     // Measure
     let mut samples = Vec::new();
     for _ in 0..config.measurement_iterations {
-        let start = mock_timestamp();
+        let start = timestamp_us();
         if config.use_simd {
             let _ = dot_product_simd(&a, &b);
         } else {
             let _ = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum::<f32>();
         }
-        let elapsed = mock_timestamp() - start;
+        let elapsed = timestamp_us() - start;
         samples.push(elapsed);
     }
 
@@ -275,13 +275,13 @@ pub fn bench_matmul(config: BenchmarkConfig) -> BenchmarkStats {
     // Measure
     let mut samples = Vec::new();
     for _ in 0..config.measurement_iterations {
-        let start = mock_timestamp();
+        let start = timestamp_us();
         if config.use_simd {
             let _ = matmul_vec_simd(&vec, &mat, 384, 384);
         } else {
             let _ = matmul_vec(&vec, &mat, 384, 384);
         }
-        let elapsed = mock_timestamp() - start;
+        let elapsed = timestamp_us() - start;
         samples.push(elapsed);
     }
 
@@ -311,9 +311,9 @@ pub fn bench_layer_norm(config: BenchmarkConfig) -> BenchmarkStats {
     // Measure
     let mut samples = Vec::new();
     for _ in 0..config.measurement_iterations {
-        let start = mock_timestamp();
+        let start = timestamp_us();
         let _ = layer_norm(&input, &weight, &bias);
-        let elapsed = mock_timestamp() - start;
+        let elapsed = timestamp_us() - start;
         samples.push(elapsed);
     }
 
@@ -347,9 +347,9 @@ pub fn bench_kv_cache(config: BenchmarkConfig) -> BenchmarkStats {
     // Measure
     let mut samples = Vec::new();
     for _ in 0..config.measurement_iterations {
-        let start = mock_timestamp();
+        let start = timestamp_us();
         let _ = cache.get(0);
-        let elapsed = mock_timestamp() - start;
+        let elapsed = timestamp_us() - start;
         samples.push(elapsed);
     }
 
@@ -372,13 +372,13 @@ pub fn bench_arena_allocation(config: BenchmarkConfig) -> BenchmarkStats {
     // Measure
     let mut samples = Vec::new();
     for _ in 0..config.measurement_iterations {
-        let start = mock_timestamp();
+        let start = timestamp_us();
         {
             let mut arena = arena().lock();
             let _ = arena.alloc(1024, 16);
             arena.reset();
         }
-        let elapsed = mock_timestamp() - start;
+        let elapsed = timestamp_us() - start;
         samples.push(elapsed);
     }
 
@@ -446,19 +446,12 @@ impl BenchmarkSuiteResults {
     }
 }
 
-/// Mock timestamp function (replace with actual cycle counter)
+/// Get current timestamp in microseconds
 ///
-/// TODO: Integrate with actual timer hardware
-fn mock_timestamp() -> u64 {
-    // In production, would use:
-    // - ARM: Read PMCCNTR_EL0 (cycle counter)
-    // - RISC-V: Read CYCLE CSR
-    // - x86: Read TSC (rdtsc)
-    static mut COUNTER: u64 = 0;
-    unsafe {
-        COUNTER += 1;
-        COUNTER
-    }
+/// Uses ARM Generic Timer for precise measurement
+#[inline(always)]
+fn timestamp_us() -> u64 {
+    crate::time::uptime_us()
 }
 
 #[cfg(test)]

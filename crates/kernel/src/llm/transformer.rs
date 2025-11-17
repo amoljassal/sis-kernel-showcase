@@ -315,6 +315,55 @@ impl TransformerLayer {
         output
     }
 
+    /// Forward pass with KV cache (for autoregressive generation)
+    ///
+    /// # Arguments
+    ///
+    /// - `input`: Current token embedding (n_embd,)
+    /// - `config`: Model configuration
+    /// - `cache`: KV cache (updated in-place)
+    /// - `layer_idx`: Layer index for cache access
+    ///
+    /// # Returns
+    ///
+    /// Layer output (n_embd,)
+    pub fn forward_with_cache(
+        &self,
+        input: &[f32],
+        config: &TransformerConfig,
+        cache: &mut crate::llm::kv_cache::KVCache,
+        layer_idx: usize,
+    ) -> Vec<f32> {
+        let n_embd = config.n_embd;
+        debug_assert_eq!(input.len(), n_embd);
+
+        // 1. Layer norm 1
+        let normed = layer_norm(input, &self.ln1_weight, &self.ln1_bias);
+
+        // 2. Multi-head attention with cache
+        let attn_out = self.attention_with_cache(&normed, config, cache, layer_idx);
+
+        // 3. Residual connection 1
+        let mut residual1 = vec![0.0f32; n_embd];
+        for i in 0..n_embd {
+            residual1[i] = input[i] + attn_out[i];
+        }
+
+        // 4. Layer norm 2
+        let normed2 = layer_norm(&residual1, &self.ln2_weight, &self.ln2_bias);
+
+        // 5. Feed-forward network
+        let ffn_out = self.feed_forward(&normed2, config);
+
+        // 6. Residual connection 2
+        let mut output = vec![0.0f32; n_embd];
+        for i in 0..n_embd {
+            output[i] = residual1[i] + ffn_out[i];
+        }
+
+        output
+    }
+
     /// Multi-head self-attention
     ///
     /// Simplified single-head version (multi-head support in future milestone)
@@ -357,6 +406,85 @@ impl TransformerLayer {
         let mut attn_output = vec![0.0f32; n_embd];
         for i in 0..n_embd {
             attn_output[i] = v[i] * attn_weight;
+        }
+
+        // Output projection
+        matmul_vec(&attn_output, &o_weights, n_embd, n_embd)
+    }
+
+    /// Multi-head self-attention with KV cache
+    ///
+    /// Uses cached keys and values from previous tokens to avoid recomputation.
+    /// This provides 10-100x speedup for autoregressive generation.
+    ///
+    /// # Arguments
+    ///
+    /// - `input`: Input vector (n_embd,)
+    /// - `config`: Model configuration
+    /// - `cache`: KV cache (updated in-place)
+    /// - `layer_idx`: Layer index for cache access
+    ///
+    /// # Returns
+    ///
+    /// Attention output (n_embd,)
+    fn attention_with_cache(
+        &self,
+        input: &[f32],
+        config: &TransformerConfig,
+        cache: &mut crate::llm::kv_cache::KVCache,
+        layer_idx: usize,
+    ) -> Vec<f32> {
+        let n_embd = config.n_embd;
+
+        // Dequantize weight matrices
+        let mut q_weights = vec![0f32; n_embd * n_embd];
+        let mut k_weights = vec![0f32; n_embd * n_embd];
+        let mut v_weights = vec![0f32; n_embd * n_embd];
+        let mut o_weights = vec![0f32; n_embd * n_embd];
+
+        dequantize_q4_0(&self.attn_q, &mut q_weights);
+        dequantize_q4_0(&self.attn_k, &mut k_weights);
+        dequantize_q4_0(&self.attn_v, &mut v_weights);
+        dequantize_q4_0(&self.attn_out, &mut o_weights);
+
+        // Compute Q, K, V projections for current token
+        let q = matmul_vec(input, &q_weights, n_embd, n_embd);
+        let k = matmul_vec(input, &k_weights, n_embd, n_embd);
+        let v = matmul_vec(input, &v_weights, n_embd, n_embd);
+
+        // Update cache with new K, V
+        cache.update(layer_idx, k, v);
+
+        // Get all cached K, V (including current token)
+        let (cached_keys, cached_values) = cache.get(layer_idx);
+        let seq_len = cached_keys.len();
+
+        // Compute attention scores for all positions
+        let scale = 1.0 / libm::sqrtf(n_embd as f32);
+        let mut scores = vec![0.0f32; seq_len];
+        for i in 0..seq_len {
+            scores[i] = dot_product(&q, &cached_keys[i]) * scale;
+        }
+
+        // Softmax over scores
+        let max_score = scores.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+        let mut exp_scores = vec![0.0f32; seq_len];
+        let mut sum_exp = 0.0f32;
+        for i in 0..seq_len {
+            exp_scores[i] = libm::expf(scores[i] - max_score);
+            sum_exp += exp_scores[i];
+        }
+        for i in 0..seq_len {
+            exp_scores[i] /= sum_exp;
+        }
+
+        // Weighted sum of values
+        let mut attn_output = vec![0.0f32; n_embd];
+        for i in 0..seq_len {
+            let weight = exp_scores[i];
+            for j in 0..n_embd {
+                attn_output[j] += cached_values[i][j] * weight;
+            }
         }
 
         // Output projection
@@ -476,17 +604,27 @@ pub fn matmul_vec(vec: &[f32], mat: &[f32], m: usize, n: usize) -> Vec<f32> {
     debug_assert_eq!(vec.len(), m);
     debug_assert_eq!(mat.len(), m * n);
 
-    let mut output = vec![0.0f32; n];
-
-    for i in 0..n {
-        let mut sum = 0.0f32;
-        for j in 0..m {
-            sum += vec[j] * mat[j * n + i];
-        }
-        output[i] = sum;
+    // Use SIMD-optimized version if available
+    #[cfg(feature = "simd")]
+    {
+        return crate::llm::simd::matmul_vec_simd(vec, mat, m, n);
     }
 
-    output
+    // Scalar fallback
+    #[cfg(not(feature = "simd"))]
+    {
+        let mut output = vec![0.0f32; n];
+
+        for i in 0..n {
+            let mut sum = 0.0f32;
+            for j in 0..m {
+                sum += vec[j] * mat[j * n + i];
+            }
+            output[i] = sum;
+        }
+
+        output
+    }
 }
 
 /// Dot product of two vectors

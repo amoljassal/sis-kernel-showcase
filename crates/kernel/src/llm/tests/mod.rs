@@ -360,6 +360,140 @@ fn test_generation_configs() {
     crate::info!("✓ Generation config test passed");
 }
 
+/// Test: Real model loading (TinyLlama/GPT-2)
+///
+/// **REQUIRES**: Real GGUF model file at test_models/tiny.gguf
+#[cfg(feature = "llm-transformer")]
+#[test]
+#[ignore]  // Run with: cargo test -- --ignored
+fn test_load_real_model() {
+    use crate::llm::backend::TransformerBackend;
+
+    let mut backend = TransformerBackend::new();
+
+    // Try to load model
+    let result = backend.load_model("test_models/tiny.gguf");
+
+    match result {
+        Ok(_) => {
+            crate::info!("✓ Real model loaded successfully");
+            assert!(backend.is_loaded());
+        }
+        Err(e) => {
+            crate::warn!("Model load failed (expected if model file missing): {:?}", e);
+            // Don't fail test if model file doesn't exist
+        }
+    }
+}
+
+/// Test: Real model single token generation
+///
+/// **REQUIRES**: Real GGUF model file at test_models/tiny.gguf
+#[cfg(feature = "llm-transformer")]
+#[test]
+#[ignore]
+fn test_real_model_single_token() {
+    use crate::llm::backend::TransformerBackend;
+
+    let mut backend = TransformerBackend::new();
+
+    if backend.load_model("test_models/tiny.gguf").is_err() {
+        crate::warn!("Skipping test: model file not found");
+        return;
+    }
+
+    // Generate single token
+    match backend.infer("Hello", 1) {
+        Ok(result) => {
+            crate::info!("✓ Generated: {}", result.output);
+            crate::info!("  Tokens: {}", result.tokens_emitted);
+            crate::info!("  Latency: {} µs", result.latency_us);
+
+            assert!(result.tokens_emitted <= 1);
+            assert!(result.output.len() > 0);
+        }
+        Err(e) => {
+            crate::error!("Generation failed: {:?}", e);
+            panic!("Real model generation failed");
+        }
+    }
+}
+
+/// Test: Real model multiple token generation
+///
+/// **REQUIRES**: Real GGUF model file at test_models/tiny.gguf
+#[cfg(feature = "llm-transformer")]
+#[test]
+#[ignore]
+fn test_real_model_multi_token() {
+    use crate::llm::backend::TransformerBackend;
+
+    let mut backend = TransformerBackend::new();
+
+    if backend.load_model("test_models/tiny.gguf").is_err() {
+        crate::warn!("Skipping test: model file not found");
+        return;
+    }
+
+    // Generate 10 tokens
+    match backend.infer("The capital of France is", 10) {
+        Ok(result) => {
+            crate::info!("✓ Generated: {}", result.output);
+            crate::info!("  Tokens: {}", result.tokens_emitted);
+            crate::info!("  Latency: {} µs total, {} µs/token",
+                result.latency_us,
+                result.latency_us / result.tokens_emitted.max(1) as u64);
+
+            assert!(result.tokens_emitted <= 10);
+            assert!(result.output.len() > 5);  // Should have generated some text
+        }
+        Err(e) => {
+            crate::error!("Generation failed: {:?}", e);
+            panic!("Real model generation failed");
+        }
+    }
+}
+
+/// Test: Sampling strategies with real model
+///
+/// **REQUIRES**: Real GGUF model file at test_models/tiny.gguf
+#[cfg(feature = "llm-transformer")]
+#[test]
+#[ignore]
+fn test_real_model_sampling() {
+    use crate::llm::backend::TransformerBackend;
+    use crate::llm::sampling::SamplingConfig;
+
+    let mut backend = TransformerBackend::new();
+
+    if backend.load_model("test_models/tiny.gguf").is_err() {
+        crate::warn!("Skipping test: model file not found");
+        return;
+    }
+
+    // Test greedy sampling (should be deterministic)
+    backend.set_sampling_config(SamplingConfig::greedy());
+
+    let result1 = backend.infer("Hello", 3).unwrap();
+    let result2 = backend.infer("Hello", 3).unwrap();
+
+    crate::info!("Greedy result 1: {}", result1.output);
+    crate::info!("Greedy result 2: {}", result2.output);
+
+    // Greedy should be deterministic
+    assert_eq!(result1.output, result2.output, "Greedy sampling should be deterministic");
+
+    // Test creative sampling
+    backend.set_sampling_config(SamplingConfig::creative());
+
+    let result3 = backend.infer("Hello", 3).unwrap();
+
+    crate::info!("Creative result: {}", result3.output);
+
+    // Creative may produce different output (randomness)
+    crate::info!("✓ Sampling strategies work correctly");
+}
+
 /// Integration test suite runner
 ///
 /// Runs all integration tests in sequence

@@ -339,9 +339,8 @@ pub fn dequantize_q4_0_fast(blocks: &[Q4_0Block], output: &mut [f32]) {
 /// NEON-optimized Q4_0 dequantization (ARM64 only)
 #[cfg(all(target_arch = "aarch64", feature = "simd"))]
 fn dequantize_q4_0_neon(blocks: &[Q4_0Block], output: &mut [f32]) {
-    // TODO: Implement SIMD version in future milestone
-    // For now, fall back to scalar
-    dequantize_q4_0(blocks, output);
+    // Use optimized SIMD implementation from simd module
+    crate::llm::simd::dequantize_q4_0_simd(blocks, output);
 }
 
 /// Convert f16 (as u16) to f32

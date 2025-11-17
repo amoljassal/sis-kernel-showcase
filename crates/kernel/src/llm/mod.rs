@@ -35,6 +35,7 @@ pub mod generate;
 // Phase 3: Optimization & Production (M4-M6)
 pub mod simd;
 pub mod kv_cache;
+pub mod sampling;
 pub mod errors;
 pub mod limits;
 pub mod metrics;

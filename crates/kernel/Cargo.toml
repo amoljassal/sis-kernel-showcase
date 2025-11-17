@@ -74,6 +74,8 @@ sntp = []            # Minimal SNTP client for best-effort time sync
 ext4-durability-test = [] # Run ext4 durability self-test harness at boot
 chaos = []           # Chaos engineering for failure injection testing (production readiness)
 mock-devices = []    # Mock device drivers for isolated testing (production readiness)
+llm-transformer = [] # Enable real transformer-based LLM inference (requires llm feature)
+simd = []            # Enable SIMD acceleration (ARM NEON on aarch64)
 # Phase 7: AI Operations Platform
 ai-ops = ["model-lifecycle", "shadow-mode", "otel", "decision-traces"]  # Meta-feature for all AI ops
 model-lifecycle = []  # Model registry, hot-swap, rollback
