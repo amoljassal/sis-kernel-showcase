@@ -87,6 +87,7 @@
 //! ```
 
 use alloc::vec::Vec;
+use alloc::vec;
 use alloc::string::String;
 use crate::llm::tokenizer::BpeTokenizer;
 use crate::llm::transformer::{TransformerConfig, TransformerLayer, softmax, argmax};
@@ -333,7 +334,7 @@ impl Generator {
             sample_top_p(&logits, gen_config.top_p)
         } else {
             // Standard sampling
-            sample_categorical(&logits)
+            sample_categorical(&logits) as u16
         };
 
         Ok(token)

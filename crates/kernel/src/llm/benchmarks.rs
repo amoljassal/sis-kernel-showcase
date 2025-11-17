@@ -98,7 +98,7 @@ impl BenchmarkStats {
             })
             .sum::<f64>() / iterations as f64;
 
-        let stddev = variance.sqrt();
+        let stddev = libm::sqrt(variance);
 
         let throughput = if mean > 0.0 {
             1_000_000.0 / mean  // ops/sec (assuming microseconds)

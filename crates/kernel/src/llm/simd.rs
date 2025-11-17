@@ -32,6 +32,7 @@
 //! ```
 
 use alloc::vec::Vec;
+use alloc::vec;
 
 /// Dot product of two vectors (SIMD-optimized)
 ///

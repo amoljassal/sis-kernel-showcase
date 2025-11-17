@@ -70,7 +70,7 @@
 //! - TinyLlama tokenizer (32k vocabulary)
 
 use alloc::vec::Vec;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::collections::BTreeMap;
 use alloc::format;
 

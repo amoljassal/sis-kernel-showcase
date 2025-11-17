@@ -51,6 +51,7 @@
 //! - Path traversal protection
 
 use alloc::vec::Vec;
+use alloc::vec;
 use alloc::string::{String, ToString};
 use alloc::format;
 use crate::llm::gguf::GgufModel;

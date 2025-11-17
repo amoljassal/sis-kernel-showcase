@@ -347,7 +347,7 @@ impl TransformerLayer {
         let v = matmul_vec(input, &v_weights, n_embd, n_embd);
 
         // Attention scores: Q * K^T / sqrt(d)
-        let scale = 1.0 / (n_embd as f32).sqrt();
+        let scale = 1.0 / libm::sqrtf(n_embd as f32);
         let score = dot_product(&q, &k) * scale;
 
         // Softmax (trivial for single token)
@@ -435,12 +435,12 @@ pub fn layer_norm(input: &[f32], weight: &[f32], bias: &[f32]) -> Vec<f32> {
     // Compute variance
     let variance: f32 = input
         .iter()
-        .map(|&x| (x - mean).powi(2))
+        .map(|&x| libm::powf(x - mean, 2.0))
         .sum::<f32>() / n as f32;
 
     // Compute standard deviation (with epsilon for numerical stability)
     const EPSILON: f32 = 1e-5;
-    let std = (variance + EPSILON).sqrt();
+    let std = libm::sqrtf(variance + EPSILON);
 
     // Normalize and scale
     let mut output = vec![0.0f32; n];
@@ -598,7 +598,7 @@ pub fn softmax(logits: &[f32]) -> Vec<f32> {
     // Compute exp(x - max)
     let mut sum = 0.0f32;
     for i in 0..n {
-        let exp_val = (logits[i] - max_logit).exp();
+        let exp_val = libm::expf(logits[i] - max_logit);
         output[i] = exp_val;
         sum += exp_val;
     }

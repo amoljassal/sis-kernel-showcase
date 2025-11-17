@@ -53,6 +53,7 @@
 
 use alloc::string::String;
 use alloc::boxed::Box;
+use alloc::format;
 use spin::Mutex;
 use crate::llm::basic::LlmResult;
 
@@ -155,7 +156,7 @@ impl LlmBackend for StubBackend {
         self.stats.total_tokens += max_tokens as u64;
 
         Ok(LlmResult {
-            infer_id: self.stats.total_inferences,
+            infer_id: self.stats.total_inferences as usize,
             tokens_emitted: max_tokens,
             output,
             latency_us: 1000, // Stub: 1ms
