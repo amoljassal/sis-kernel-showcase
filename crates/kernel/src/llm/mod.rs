@@ -32,6 +32,13 @@ pub mod gguf;
 pub mod backend;
 pub mod generate;
 
+// Phase 3: Optimization & Production (M4-M6)
+pub mod simd;
+pub mod kv_cache;
+pub mod errors;
+pub mod limits;
+pub mod metrics;
+
 // Re-export basic LLM functions and types (Phase 0/1 - inference, audit, control)
 pub use basic::{
     // Types
