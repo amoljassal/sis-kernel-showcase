@@ -104,6 +104,10 @@ mod asm_helpers;
 #[cfg(any(feature = "demos", feature = "deterministic"))]
 mod demos;
 
+// Enhanced help system
+mod help;
+mod help_content;
+
 impl Shell {
     /// Create new shell instance
     pub fn new() -> Self {
@@ -202,7 +206,7 @@ impl Shell {
             }
 
             let cmd_is_known = match parts[0] {
-                "help" => { self.cmd_help(); true },
+                "help" => { self.cmd_help(&parts[1..]); true },
                 "version" => { self.cmd_version(); true },
                 "echo" => { self.cmd_echo(&parts[1..]); true },
                 "info" => { self.cmd_info(); true },
@@ -386,118 +390,14 @@ impl Shell {
         }
     }
 
-    /// Help command
-    fn cmd_help(&self) {
-        unsafe {
-            crate::uart_print(b"Available commands:\n");
-            crate::uart_print(b"  help     - Show this help message\n");
-            crate::uart_print(b"  version  - Show kernel version and build info\n");
-            crate::uart_print(b"  echo     - Echo text to output\n");
-            crate::uart_print(b"  ls       - List directory: ls [path]\n");
-            crate::uart_print(b"  cat      - Print file (first 4KB): cat <path>\n");
-            crate::uart_print(b"  blkctl   - Block devices: list\n");
-            crate::uart_print(b"  info     - Show kernel information\n");
-            crate::uart_print(b"  test     - Run syscall tests\n");
-            crate::uart_print(b"  perf     - Show performance metrics report\n");
-            #[cfg(feature = "profiling")]
-            crate::uart_print(b"  profstart - Start sampling-based profiler\n");
-            #[cfg(feature = "profiling")]
-            crate::uart_print(b"  profstop  - Stop profiler\n");
-            #[cfg(feature = "profiling")]
-            crate::uart_print(b"  profreport- Show profiling report with hotspots\n");
-            crate::uart_print(b"  bench    - Run syscall performance benchmarks\n");
-            crate::uart_print(b"  stress   - Run syscall stress tests\n");
-            crate::uart_print(b"  overhead - Measure syscall overhead\n");
-            crate::uart_print(b"  stresstest - Run stress tests: memory|commands|multi|learning|redteam|chaos [--duration MS] [--episodes N] | compare <type> | report\n");
-            crate::uart_print(b"  graphdemo- Run graph demo (feature: graph-demo)\n");
-            crate::uart_print(b"  imagedemo- Run Image->Top5 labels demo (simulated)\n");
-            crate::uart_print(b"  detdemo  - Run deterministic scheduler demo (feature: deterministic)\n");
-            crate::uart_print(b"  det      - Deterministic control: on <wcet_ns> <period_ns> <deadline_ns> | off | status | reset\n");
-            crate::uart_print(b"  aidemo   - Run AI-enhanced scheduler demo with real-time inference\n");
-            crate::uart_print(b"  cbsdemo  - Run CBS+EDF budget management demo for AI inference\n");
-            crate::uart_print(b"  mldemo   - Run Phase 3 TinyML demo (AI inference)\n");
-            crate::uart_print(b"  infdemo  - Run deterministic inference demo (cycle-accurate)\n");
-            crate::uart_print(b"  npudemo  - Run NPU device emulation demo (MMIO/IRQ)\n");
-            crate::uart_print(b"  npudriver- Run NPU driver demo with interrupt handling\n");
-            #[cfg(feature = "llm")]
-            crate::uart_print(b"  llmctl   - LLM control: load [--wcet-cycles N] [--model ID] [--hash 0xHEX..64] [--sig 0xHEX..128] [--ctx N] [--vocab N] [--quant q4_0|q4_1|int8|fp16|fp32] [--name NAME] [--rev N] [--size-bytes N] | budget [--wcet-cycles N] [--period-ns N] [--max-tokens-per-period N] | status | audit\n");
-            #[cfg(feature = "llm")]
-            crate::uart_print(b"  llminfer - Submit a prompt for LLM inference: llminfer <text> [--max-tokens N]\n");
-            #[cfg(feature = "llm")]
-            crate::uart_print(b"  llmstats - Show LLM service stats\n");
-            #[cfg(feature = "llm")]
-            crate::uart_print(b"  llmstream- Stream tokens in chunks: llmstream <text> [--max-tokens N] [--chunk N]\n");
-            #[cfg(feature = "llm")]
-            crate::uart_print(b"  llmgraph - Graph-backed tokenize/print via SPSC: llmgraph <text>\n");
-            #[cfg(feature = "llm")]
-            crate::uart_print(b"  llmsig   - Print stub signature for model id: llmsig <id>\n");
-            #[cfg(feature = "llm")]
-            crate::uart_print(b"  llmpoll  - Poll last infer tokens: llmpoll [max]\n");
-            #[cfg(feature = "llm")]
-            crate::uart_print(b"  llmcancel- Cancel infer: llmcancel [id]\n");
-            crate::uart_print(b"  ctladmin - Show/rotate admin token: ctladmin [0xHEX]\n");
-            crate::uart_print(b"  ctlsubmit- Show/rotate submit token: ctlsubmit [0xHEX]\n");
-            crate::uart_print(b"  ctlembed - Print embedded-rights token: ctlembed admin|submit\n");
-            #[cfg(feature = "llm")]
-            crate::uart_print(b"  llmjson  - Print LLM audit log as JSON\n");
-            #[cfg(feature = "llm")]
-            crate::uart_print(b"  llmsummary - List recent LLM sessions (id, tokens, done)\n");
-            #[cfg(feature = "llm")]
-            crate::uart_print(b"  llmverify - Verify demo model package (stub SHA256+Ed25519)\n");
-            #[cfg(feature = "llm")]
-            crate::uart_print(b"  llmhash  - Compute demo hash: llmhash <model_id> [size_bytes]\n");
-            #[cfg(feature = "llm")]
-            crate::uart_print(b"  llmkey   - Show build-time Ed25519 public key (crypto-real)\n");
-            crate::uart_print(b"  ctlkey   - Show or rotate control-plane key: ctlkey [0xHEX]\n");
-            crate::uart_print(b"  rtaivalidation - Run comprehensive real-time AI inference validation\n");
-            crate::uart_print(b"  temporaliso - Run AI temporal isolation demonstration\n");
-            crate::uart_print(b"  phase3validation - Run complete Phase 3 AI-native kernel validation\n");
-            crate::uart_print(b"  neuralctl - Neural agent: status | feedback <helpful|not_helpful|expected> | retrain <N> | autonomous <on|off|status> | config --confidence N --boost N --max-boosts N | audit\n");
-            crate::uart_print(b"  agentctl - Agent message bus: bus | stats | clear\n");
-            crate::uart_print(b"  coordctl - Agent coordination: process | stats\n");
-            crate::uart_print(b"  coorddemo- Demo cross-agent coordination under stress\n");
-            crate::uart_print(b"  metaclassctl - Meta-agent: status | force | config --interval N --threshold N | on | off\n");
-            crate::uart_print(b"  metademo - Demo meta-agent with multi-subsystem stress\n");
-            crate::uart_print(b"  mlctl - Advanced ML: status | replay N | weights P W L | features --replay on/off --td on/off --topology on/off\n");
-            crate::uart_print(b"  mladvdemo - Demo advanced ML features (experience replay, TD learning, topology)\n");
-            crate::uart_print(b"  actorctl - Actor-critic: status | policy | sample | lambda N | natural on/off | kl N | on | off\n");
-            crate::uart_print(b"  actorcriticdemo - Demo actor-critic with policy gradients and eligibility traces\n");
-            crate::uart_print(b"  autoctl  - Autonomous control: on | off | reset | status | interval N | conf-threshold [N] | preview [N] | phase [A|B|C|D] | attention | limits | audit last N | rewards --breakdown | explain ID | dashboard | tick\n");
-            crate::uart_print(b"  learnctl - Prediction tracking: stats | train | feedback good|bad|verybad ID\n");
-            crate::uart_print(b"  memctl   - Memory neural agent: status | predict | stress [N] | query-mode on/off | approval on/off\n");
-            crate::uart_print(b"  schedctl - Scheduling control: workload | priorities | affinity | shadow on|off|compare | feature enable|disable|list NAME\n");
-            crate::uart_print(b"  ask-ai   - Ask a simple question: ask-ai \"<text>\" (maps to features, runs agent)\n");
-            crate::uart_print(b"  nnjson   - Print neural audit ring as JSON\n");
-            crate::uart_print(b"  nnact    - Run action and log op=3: nnact <milli...>\n");
-            crate::uart_print(b"  neuralctl learn on|off [limit N] | tick | dump | load <in> <hid> <out> | <weights...>\n");
-            crate::uart_print(b"  metricsctl - Runtime metric capture: on | off | status\n");
-            crate::uart_print(b"  metrics  - Show recent metrics: metrics [ctx|mem|real]\n");
-            crate::uart_print(b"  graphctl - Control graph: create | add-channel <cap> | add-operator <op_id> [--in N|none] [--out N|none] [--prio P] [--stage acquire|clean|explore|model|explain] [--in-schema S] [--out-schema S] | start <steps> | det <wcet_ns> <period_ns> <deadline_ns> | stats | show | export-json | predict <op_id> <latency_us> <depth> [prio] | feedback <op_id> <helpful|not_helpful|expected>\n");
-            crate::uart_print(b"  ctlhex   - Inject control frame as hex (Create/Add/Start)\n");
-            #[cfg(feature = "model-lifecycle")]
-            crate::uart_print(b"  modelctl - Model lifecycle: list | load <version> | swap <version> | rollback | health [version] | status | remove <version>\n");
-            #[cfg(feature = "decision-traces")]
-            crate::uart_print(b"  tracectl - Decision traces: list [N] | show <trace_id> | export <id...> | clear | stats\n");
-            #[cfg(feature = "shadow-mode")]
-            crate::uart_print(b"  shadowctl- Shadow/canary: enable <version> | disable | status | stats | promote | threshold <N> | mode <log|compare|canary10|canary100> | canary <10|100> | rollback | dry-run on|off|status\n");
-            #[cfg(feature = "virtio-console")]
-            crate::uart_print(b"  vconwrite- Send text to host via virtio-console: vconwrite <text>\n");
-            crate::uart_print(b"  pmu      - Run PMU demo (cycles/inst/l1d_refill)\n");
-            crate::uart_print(b"  gpio     - GPIO control: set|clear|toggle|read|output|input|blink <pin> [args]\n");
-            crate::uart_print(b"  mailbox  - Firmware interface: temp|info|serial|fw|mem|all\n");
-            crate::uart_print(b"  selftest - Run driver self-tests: all|gpio|mailbox|pmu (M8 hardening)\n");
-            crate::uart_print(b"  logctl   - Logging control: status|level <LEVEL>|production|development|testing|demo\n");
-            crate::uart_print(b"  validate - Production validation: all|stress|perf|integration|hardware|quick (M7)\n");
-            crate::uart_print(b"  mem      - Show memory information\n");
-            crate::uart_print(b"  regs     - Show system registers\n");
-            crate::uart_print(b"  dtb      - Show device tree information\n");
-            crate::uart_print(b"  vector   - Show vector extension information\n");
-            crate::uart_print(b"  board    - Show board-specific information\n");
-            crate::uart_print(b"  verify   - Run comprehensive verification tests (property-based, metamorphic)\n");
-            crate::uart_print(b"  perf_test- Run RISC-V performance optimization tests\n");
-            crate::uart_print(b"  ai_bench - Run AI/ML benchmarks (AI mode only)\n");
-            crate::uart_print(b"  clear    - Clear screen\n");
-            crate::uart_print(b"  exit     - Exit shell\n");
+    /// Help command - supports both general help and command-specific help
+    fn cmd_help(&self, args: &[&str]) {
+        if args.is_empty() {
+            // Show comprehensive categorical help
+            help::print_help();
+        } else {
+            // Show detailed help for specific command
+            help::print_command_help(args[0]);
         }
     }
 

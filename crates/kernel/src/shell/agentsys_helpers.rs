@@ -7,15 +7,91 @@ use crate::security::agent_policy::AGENT_ID_TEST;
 impl super::Shell {
     pub(crate) fn cmd_agentsys(&self, args: &[&str]) {
         if args.is_empty() {
-            unsafe { crate::uart_print(b"Usage: agentsys <status|test-fs-list|test-audio-play|audit>\n"); }
+            self.cmd_agentsys_help();
             return;
         }
         match args[0] {
-            "status" => { self.agentsys_status(); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            // Phase 9 protocol testing commands (original)
             "test-fs-list" => { self.agentsys_test_fs_list(); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
             "test-audio-play" => { self.agentsys_test_audio_play(); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
             "audit" => { self.agentsys_audit_dump(); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
-            _ => unsafe { crate::uart_print(b"Usage: agentsys <status|test-fs-list|test-audio-play|audit>\n"); }
+
+            // ASM Supervision commands (P0 - Critical)
+            "spawn" => self.cmd_agentsys_spawn(&args[1..]),
+            "kill" => self.cmd_agentsys_kill(&args[1..]),
+            "metrics" => self.cmd_agentsys_metrics(&args[1..]),
+            "resources" => self.cmd_agentsys_resources(&args[1..]),
+            "status" => self.cmd_agentsys_status(),
+
+            // ASM Supervision commands (P1 - Important)
+            "restart" => self.cmd_agentsys_restart(&args[1..]),
+            "risk" => self.cmd_agentsys_risk(&args[1..]),
+            "limits" => self.cmd_agentsys_limits(&args[1..]),
+            "deps" => self.cmd_agentsys_deps(&args[1..]),
+            "depgraph" => self.cmd_agentsys_depgraph(),
+            "profile" => self.cmd_agentsys_profile(&args[1..]),
+
+            // ASM Supervision commands (P2 - Advanced)
+            "policy-update" => self.cmd_agentsys_policy_update(&args[1..]),
+            "profile-reset" => self.cmd_agentsys_profile_reset(&args[1..]),
+            "dump" => self.cmd_agentsys_dump(),
+
+            // ASM Supervision commands (existing)
+            "list" => self.cmd_asmlist(),
+            "info" => self.cmd_asminfo(args),
+            "policy" => self.cmd_asmpolicy(args),
+            "telemetry" => self.cmd_asmstatus(),
+            "compliance" => self.cmd_asm_compliance(),
+            "gwstatus" => self.cmd_gwstatus(),
+
+            // Legacy command (old AgentSys status - keep for backward compatibility)
+            "protocol-status" => { self.agentsys_status(); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+
+            "help" | "--help" | "-h" => self.cmd_agentsys_help(),
+            _ => {
+                unsafe { crate::uart_print(b"Unknown agentsys subcommand. Use 'agentsys help' for usage.\n"); }
+                self.cmd_agentsys_help();
+            }
+        }
+    }
+
+    fn cmd_agentsys_help(&self) {
+        unsafe {
+            crate::uart_print(b"Usage: agentsys <subcommand> [args]\n\n");
+            crate::uart_print(b"Lifecycle & Status (P0 - Critical):\n");
+            crate::uart_print(b"  spawn <id> <name> <caps>    Spawn a new agent\n");
+            crate::uart_print(b"  kill <id>                   Terminate an agent\n");
+            crate::uart_print(b"  restart <id>                Restart an agent (P1)\n");
+            crate::uart_print(b"  list                        List all active agents\n");
+            crate::uart_print(b"  info <id>                   Show detailed agent info\n");
+            crate::uart_print(b"  status                      Show ASM system status\n\n");
+            crate::uart_print(b"Telemetry & Metrics (P0):\n");
+            crate::uart_print(b"  metrics <id>                Show agent metrics\n");
+            crate::uart_print(b"  resources <id>              Show agent resource usage\n");
+            crate::uart_print(b"  telemetry                   Show telemetry snapshot\n\n");
+            crate::uart_print(b"Compliance & Risk (EU AI Act):\n");
+            crate::uart_print(b"  compliance                  Show compliance report\n");
+            crate::uart_print(b"  risk <id>                   Show risk classification (P1)\n\n");
+            crate::uart_print(b"Resource Management (P1):\n");
+            crate::uart_print(b"  limits <id>                 Show resource limits\n\n");
+            crate::uart_print(b"Dependencies (P1):\n");
+            crate::uart_print(b"  deps <id>                   Show agent dependencies\n");
+            crate::uart_print(b"  depgraph                    Show full dependency graph\n\n");
+            crate::uart_print(b"Policy Management:\n");
+            crate::uart_print(b"  policy <id>                 Show agent policy\n");
+            crate::uart_print(b"  policy-update <id> <cap>    Update agent policy (P2)\n\n");
+            crate::uart_print(b"Performance Profiling (P1/P2):\n");
+            crate::uart_print(b"  profile <id>                Show performance profile\n");
+            crate::uart_print(b"  profile-reset [id]          Reset profiling data\n\n");
+            crate::uart_print(b"Cloud Gateway:\n");
+            crate::uart_print(b"  gwstatus                    Show cloud gateway status\n\n");
+            crate::uart_print(b"Debugging (P2):\n");
+            crate::uart_print(b"  dump                        Full ASM debug dump\n\n");
+            crate::uart_print(b"Phase 9 Protocol Testing:\n");
+            crate::uart_print(b"  test-fs-list                Test FS_LIST operation\n");
+            crate::uart_print(b"  test-audio-play             Test AUDIO_PLAY operation\n");
+            crate::uart_print(b"  audit                       Dump audit records\n");
+            crate::uart_print(b"  protocol-status             Show protocol layer status\n\n");
         }
     }
 
