@@ -39,6 +39,13 @@ pub mod errors;
 pub mod limits;
 pub mod metrics;
 
+// Integration, Testing & Benchmarking
+pub mod loader;
+pub mod benchmarks;
+
+#[cfg(test)]
+pub mod tests;
+
 // Re-export basic LLM functions and types (Phase 0/1 - inference, audit, control)
 pub use basic::{
     // Types
