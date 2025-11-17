@@ -19,6 +19,17 @@ pub struct CapabilityTestResults {
     pub multiple_agents_passed: bool,
 }
 
+impl Default for CapabilityTestResults {
+    fn default() -> Self {
+        Self {
+            passed: false,
+            deny_unauthorized_passed: false,
+            scope_restriction_passed: false,
+            multiple_agents_passed: false,
+        }
+    }
+}
+
 /// Capability enforcement test suite
 pub struct CapabilityEnforcementTests {
     kernel_interface: KernelCommandInterface,

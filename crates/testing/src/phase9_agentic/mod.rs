@@ -28,6 +28,7 @@
 pub mod agentsys_protocol_tests;
 pub mod capability_enforcement_tests;
 pub mod audit_validation_tests;
+pub mod asm_supervision_tests;
 
 use crate::kernel_interface::KernelCommandInterface;
 use serde::{Deserialize, Serialize};
@@ -42,10 +43,14 @@ pub struct Phase9Results {
     pub capability_tests_passed: bool,
     /// Audit validation tests passed
     pub audit_tests_passed: bool,
+    /// ASM supervision tests passed
+    pub asm_supervision_tests_passed: bool,
     /// Overall score (0-100)
     pub overall_score: f64,
     /// Individual test details
     pub test_details: Phase9TestDetails,
+    /// ASM supervision test details
+    pub asm_test_details: Option<asm_supervision_tests::ASMSupervisionResults>,
     /// Timestamp of validation
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
@@ -95,8 +100,10 @@ impl Default for Phase9Results {
             protocol_tests_passed: false,
             capability_tests_passed: false,
             audit_tests_passed: false,
+            asm_supervision_tests_passed: false,
             overall_score: 0.0,
             test_details: Phase9TestDetails::default(),
+            asm_test_details: None,
             timestamp: chrono::Utc::now(),
         }
     }
@@ -109,6 +116,7 @@ pub struct Phase9AgenticSuite {
     protocol_tests: agentsys_protocol_tests::AgentSysProtocolTests,
     capability_tests: capability_enforcement_tests::CapabilityEnforcementTests,
     audit_tests: audit_validation_tests::AuditValidationTests,
+    asm_supervision_tests: asm_supervision_tests::ASMSupervisionTests,
 }
 
 impl Phase9AgenticSuite {
@@ -150,6 +158,14 @@ impl Phase9AgenticSuite {
                 ),
             ),
             audit_tests: audit_validation_tests::AuditValidationTests::new(
+                KernelCommandInterface::new(
+                    serial_log_path.clone(),
+                    qemu_manager.clone(),
+                    node_id,
+                    monitor_port,
+                ),
+            ),
+            asm_supervision_tests: asm_supervision_tests::ASMSupervisionTests::new(
                 KernelCommandInterface::new(serial_log_path, qemu_manager, node_id, monitor_port),
             ),
         }
@@ -166,14 +182,48 @@ impl Phase9AgenticSuite {
     pub async fn validate_phase9(&mut self) -> Result<Phase9Results, Box<dyn Error>> {
         log::info!("🚀 Starting Phase 9: Agentic Platform validation");
 
-        // Run protocol tests
-        let protocol_result = self.protocol_tests.run_all_tests().await?;
+        // Run protocol tests (don't fail if they timeout)
+        let protocol_result = match self.protocol_tests.run_all_tests().await {
+            Ok(r) => r,
+            Err(e) => {
+                log::warn!("Protocol tests failed: {} - continuing with other tests", e);
+                agentsys_protocol_tests::ProtocolTestResults::default()
+            }
+        };
 
-        // Run capability tests
-        let capability_result = self.capability_tests.run_all_tests().await?;
+        // Run capability tests (don't fail if they timeout)
+        let capability_result = match self.capability_tests.run_all_tests().await {
+            Ok(r) => r,
+            Err(e) => {
+                log::warn!("Capability tests failed: {} - continuing with other tests", e);
+                capability_enforcement_tests::CapabilityTestResults::default()
+            }
+        };
 
-        // Run audit tests
-        let audit_result = self.audit_tests.run_all_tests().await?;
+        // Run audit tests (don't fail if they timeout)
+        let audit_result = match self.audit_tests.run_all_tests().await {
+            Ok(r) => r,
+            Err(e) => {
+                log::warn!("Audit tests failed: {} - continuing with other tests", e);
+                audit_validation_tests::AuditTestResults::default()
+            }
+        };
+
+        // Run ASM supervision tests (don't fail if they timeout)
+        let asm_result = match self.asm_supervision_tests.run_all_tests().await {
+            Ok(r) => r,
+            Err(e) => {
+                log::warn!("ASM supervision tests failed: {} - continuing", e);
+                asm_supervision_tests::ASMSupervisionResults {
+                    passed: false,
+                    lifecycle_tests_passed: false,
+                    telemetry_tests_passed: false,
+                    tests_passed: 0,
+                    total_tests: 11,
+                    test_details: asm_supervision_tests::ASMTestDetails::default(),
+                }
+            }
+        };
 
         // Collect detailed results
         let test_details = Phase9TestDetails {
@@ -211,12 +261,20 @@ impl Phase9AgenticSuite {
             all_tests.len()
         );
 
+        log::info!(
+            "   ASM Supervision: {}/{} tests passed",
+            asm_result.tests_passed,
+            asm_result.total_tests
+        );
+
         Ok(Phase9Results {
             protocol_tests_passed: protocol_result.passed,
             capability_tests_passed: capability_result.passed,
             audit_tests_passed: audit_result.passed,
+            asm_supervision_tests_passed: asm_result.passed,
             overall_score,
             test_details,
+            asm_test_details: Some(asm_result),
             timestamp: chrono::Utc::now(),
         })
     }

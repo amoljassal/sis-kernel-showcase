@@ -19,6 +19,17 @@ pub struct AuditTestResults {
     pub audit_completeness_passed: bool,
 }
 
+impl Default for AuditTestResults {
+    fn default() -> Self {
+        Self {
+            passed: false,
+            operation_logging_passed: false,
+            audit_dump_passed: false,
+            audit_completeness_passed: false,
+        }
+    }
+}
+
 /// Audit validation test suite
 pub struct AuditValidationTests {
     kernel_interface: KernelCommandInterface,

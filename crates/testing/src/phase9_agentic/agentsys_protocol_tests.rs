@@ -23,6 +23,19 @@ pub struct ProtocolTestResults {
     pub memory_overhead_check_passed: bool,
 }
 
+impl Default for ProtocolTestResults {
+    fn default() -> Self {
+        Self {
+            passed: false,
+            fs_list_passed: false,
+            audio_play_passed: false,
+            invalid_opcode_passed: false,
+            status_command_passed: false,
+            memory_overhead_check_passed: false,
+        }
+    }
+}
+
 /// AgentSys protocol test suite
 pub struct AgentSysProtocolTests {
     kernel_interface: KernelCommandInterface,

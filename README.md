@@ -68,7 +68,13 @@ These results are from QEMU (ARM64, stdio serial). They reflect recent runs with
 - Phase 8 – Performance Optimization: 33.3% (2/6 subsystems passed)
   - Stress Comparison: 1/3 passed (performance delta OK; other subtests pending)
   - Overall indicates deterministic/performance tuning needed; to be improved later.
-- Phase 9 – Agentic Platform: recent changes include real VFS-backed FS handlers and enriched audit output. Re-run Phase 9 to refresh results with these changes.
+- Phase 9 – Agentic Platform: recent changes include real VFS-backed FS handlers and enriched audit output. **NEW (2025-11-17)**: ASM (Agent Supervision Module) testing infrastructure complete - Weeks 1-4:
+  - **Week 1 (Complete)**: 22 shell commands implemented for ASM testing (`agentsys status`, `agentsys spawn`, `agentsys kill`, `agentsys metrics`, `agentsys resources`, `agentsys limits`, `agentsys deps`, `agentsys compliance`, `gwstatus`, etc.) - all commands validated in QEMU shell
+  - **Week 2 (Complete)**: 6 integration tests for lifecycle and telemetry (status, list, metrics, resources, telemetry, compliance)
+  - **Week 3 (Complete)**: 4 integration tests for resource monitoring and dependencies (limits, deps, depgraph, profile)
+  - **Week 4 (Complete)**: 1 Cloud Gateway integration test (gwstatus) + 1 debug test (dump) = **12 total ASM integration tests**
+  - **Phase 9 Resilience Fix**: Test suite now continues on failures instead of aborting, enabling comprehensive test coverage
+  - See `docs/testing/ASM_TEST_PLAN.md`, `docs/testing/WEEK1_SHELL_COMMANDS_STATUS.md`, `docs/testing/WEEK2_INTEGRATION_TESTS_STATUS.md`, `docs/testing/WEEK3_INTEGRATION_TESTS_STATUS.md`, `docs/testing/WEEK4_CLOUD_GATEWAY_TESTS.md`, and `docs/testing/PHASE9_FIX_RESILIENCE.md` for detailed documentation
 
 Artifacts for the latest runs are in `target/testing/` (JSON report, dashboard HTML).
 
@@ -84,6 +90,7 @@ This section reflects what is implemented today in the codebase when running und
 - AI‑Ops (governance): orchestrator, drift detector, and versioning code paths exist; exercised in QEMU tests; some heavy paths simulate behavior.
 - OpenTelemetry: span building implemented; exporter flushes JSON batches to `/otel/spans.json` (simple rotation).
 - AgentSys: capability policy and audit logger implemented; FS handlers perform real VFS I/O; screenshot/record/audio handlers create observable placeholder files under `/tmp/agentsys/`.
+- ASM (Agent Supervision Module): 8 subsystems operational (Agent Supervisor, Telemetry Aggregator, Fault Detector, Policy Controller, Compliance Tracker, Resource Monitor, Dependency Graph, System Profiler); 22 shell commands for testing and monitoring; 12 integration tests in Phase 9 suite (Weeks 2-4: lifecycle, telemetry, resource monitoring, dependencies, Cloud Gateway); EU AI Act compliance tracking; resilient test execution.
 - Shadow rollback: automatic rollback integrates with model lifecycle registry; events are appended to `/var/log/rollback.json`.
 - Syscalls: `readlinkat` implemented via VFS; `clock_gettime`/`nanosleep` and scheduler share a unified time base.
 - LLM: kernel‑resident control‑plane stub with budgets; per‑token pacing; adaptive auto‑pacing mode; deadline logging and metrics.
@@ -2446,15 +2453,196 @@ sis> driftctl status --json
 | `actorctl on/off` | Enable/disable actor-critic | Always available | `actorctl on` |
 | `actorcriticdemo` | Demo actor-critic with policy gradients | Requires `demos` | `actorcriticdemo` |
 
+#### **Phase 9: Agent Supervision Module (ASM)**
+
+| Command | Description | Feature Requirements | Example Usage |
+|---------|-------------|---------------------|---------------|
+| `agentsys status` | Show ASM system status (8 subsystems) | `agentsys` feature | `agentsys status` |
+| `agentsys list` | List all active agents | `agentsys` feature | `agentsys list` |
+| `agentsys spawn <id> <name> <caps>` | Spawn test agent with capabilities | `agentsys` feature | `agentsys spawn 100 test_agent FsBasic` |
+| `agentsys kill <id>` | Terminate agent by ID | `agentsys` feature | `agentsys kill 100` |
+| `agentsys restart <id>` | Restart agent | `agentsys` feature | `agentsys restart 100` |
+| `agentsys metrics <id>` | Show agent-specific metrics | `agentsys` feature | `agentsys metrics 100` |
+| `agentsys resources <id>` | Show agent resource usage | `agentsys` feature | `agentsys resources 100` |
+| `agentsys limits <id>` | Show resource limits for agent | `agentsys` feature | `agentsys limits 100` |
+| `agentsys telemetry` | Show system-wide telemetry aggregation | `agentsys` feature | `agentsys telemetry` |
+| `agentsys compliance` | EU AI Act compliance report | `agentsys` feature | `agentsys compliance` |
+| `agentsys risk <id>` | Show risk classification for agent | `agentsys` feature | `agentsys risk 100` |
+| `agentsys deps <id>` | Show agent dependencies | `agentsys` feature | `agentsys deps 100` |
+| `agentsys depgraph` | Visualize dependency graph | `agentsys` feature | `agentsys depgraph` |
+| `agentsys policy <id>` | Show agent policy | `agentsys` feature | `agentsys policy 100` |
+| `agentsys policy-update <id> <patch>` | Hot-patch agent policy | `agentsys` feature | `agentsys policy-update 100 caps+Admin` |
+| `agentsys profile <id>` | Show performance profiling data | `agentsys` feature | `agentsys profile 100` |
+| `agentsys profile-reset [id]` | Reset profiling data | `agentsys` feature | `agentsys profile-reset 100` |
+| `agentsys dump` | Debug dump (combines multiple outputs) | `agentsys` feature | `agentsys dump` |
+| `agentsys info <id>` | Show detailed agent information | `agentsys` feature | `agentsys info 100` |
+| `agentsys gwstatus` | Cloud gateway status | `agentsys` feature | `agentsys gwstatus` |
+| | | | |
+| `asmstatus` | Legacy: ASM telemetry snapshot | Always available | `asmstatus` |
+| `asmlist` | Legacy: List active agents | Always available | `asmlist` |
+| `asminfo <id>` | Legacy: Detailed agent info | Always available | `asminfo 100` |
+| `asmpolicy <id>` | Legacy: Show agent policy | Always available | `asmpolicy 100` |
+| `gwstatus` | Standalone: Cloud gateway status | Always available | `gwstatus` |
+| `compliance` | Standalone: EU AI Act compliance report | Always available | `compliance` |
+
+*Note: Legacy commands (asmstatus, asmlist, asminfo, asmpolicy) are superseded by the `agentsys` subcommands but remain for backwards compatibility.*
+
 #### **Build Configuration to Command Mapping**
 
 | Build Configuration | Available Command Groups |
 |---------------------|-------------------------|
-| `llm,ai-ops,crypto-real,demos` | ✅ Phase 1 (neuralctl, memctl, autoctl, ask-ai)<br>✅ Phase 2 (agentctl, coordctl, metaclassctl, mlctl, actorctl)<br>✅ Demos (coorddemo, metademo, actorcriticdemo, mladvdemo)<br>❌ LLM commands (llmctl, llminfer) |
-| `llm,crypto-real,demos` | ✅ Phase 1 (neuralctl, memctl, autoctl, ask-ai)<br>✅ LLM commands (llmctl, llminfer, llmstats)<br>✅ Demos (all demo commands)<br>❌ Phase 2 (agentctl, coordctl, metaclassctl) |
-| `llm,ai-ops,crypto-real` | ✅ Phase 1 (neuralctl, memctl, autoctl, ask-ai)<br>✅ Phase 2 (agentctl, coordctl, metaclassctl, mlctl, actorctl)<br>❌ Demos<br>❌ LLM commands (llmctl, llminfer) |
+| `llm,ai-ops,crypto-real,demos,agentsys` | ✅ Phase 1 (neuralctl, memctl, autoctl, ask-ai)<br>✅ Phase 2 (agentctl, coordctl, metaclassctl, mlctl, actorctl)<br>✅ Phase 9 ASM (agentsys + 20 subcommands)<br>✅ Demos (coorddemo, metademo, actorcriticdemo, mladvdemo)<br>❌ LLM commands (llmctl, llminfer) |
+| `llm,crypto-real,demos` | ✅ Phase 1 (neuralctl, memctl, autoctl, ask-ai)<br>✅ LLM commands (llmctl, llminfer, llmstats)<br>✅ Demos (all demo commands)<br>❌ Phase 2 (agentctl, coordctl, metaclassctl)<br>❌ Phase 9 ASM (agentsys) |
+| `llm,ai-ops,crypto-real` | ✅ Phase 1 (neuralctl, memctl, autoctl, ask-ai)<br>✅ Phase 2 (agentctl, coordctl, metaclassctl, mlctl, actorctl)<br>❌ Phase 9 ASM (agentsys)<br>❌ Demos<br>❌ LLM commands (llmctl, llminfer) |
 
 **See "Build Configurations - Quick Reference" section above for complete build command details.**
+
+---
+
+### Complete Shell Commands Table
+
+**Comprehensive list of all 105 shell commands organized by category.**
+
+Commands within each category are arranged in typical usage/testing sequence for ease of learning and validation.
+
+| Sr. No. | Category | Command | Subcommands |
+|---------|----------|---------|-------------|
+| **CORE SYSTEM** ||||
+| 1 | Core System | help | - |
+| 2 | Core System | version | - |
+| 3 | Core System | info | - |
+| 4 | Core System | clear | - |
+| 5 | Core System | echo | - |
+| 6 | Core System | exit | - |
+| 7 | Core System | mem | - |
+| 8 | Core System | regs | - |
+| 9 | Core System | dtb | - |
+| 10 | Core System | vector | - |
+| 11 | Core System | board | - |
+| 12 | Core System | verify | - |
+| **FILESYSTEM** ||||
+| 13 | Filesystem | ls | - |
+| 14 | Filesystem | cat | - |
+| 15 | Filesystem | blkctl | list |
+| **MEMORY MANAGEMENT** ||||
+| 16 | Memory Management | memctl | status, predict, stress, strategy, learn, query-mode, approval, approvals, approve, reject |
+| **NETWORK** ||||
+| 17 | Network | netctl | predict, buffers, flows, add-conn, simulate |
+| 18 | Network | webctl | start, stop, status, ws-status, ws-ping, subscribe, stream, subscribers, api-test, api-exec, auth-token, auth-test, session, auth-check |
+| **AGENT SUPERVISION (ASM)** ||||
+| 19 | Agent Supervision | agentsys | status, list, spawn, kill, restart, metrics, resources, limits, telemetry, compliance, risk, deps, depgraph, policy, policy-update, profile, profile-reset, dump, info, gwstatus, protocol-status, test-fs-list, test-audio-play, audit |
+| 20 | Agent Supervision | asmstatus | - |
+| 21 | Agent Supervision | asmlist | - |
+| 22 | Agent Supervision | asminfo | - |
+| 23 | Agent Supervision | asmpolicy | - |
+| 24 | Agent Supervision | gwstatus | - |
+| 25 | Agent Supervision | agentctl | bus, stats, clear |
+| **AI PHASE 1** ||||
+| 26 | AI Phase 1 | neuralctl | status, reset, infer, update, teach, selftest, learn, tick, dump, load, demo-metrics, retrain, feedback, autonomous, config, audit |
+| 27 | AI Phase 1 | autoctl | on, off, reset, status, limits, audit, rewards, anomalies, verify, interval, explain, dashboard, checkpoints, saveckpt, restoreckpt, restorebest, tick, oodcheck, driftcheck, rollout, preview, phase, attention, whatif |
+| 28 | AI Phase 1 | learnctl | stats, dump, train, feedback |
+| 29 | AI Phase 1 | schedctl | workload, priorities, affinity, shadow, feature, transformer |
+| 30 | AI Phase 1 | cmdctl | predict, batch, learn |
+| 31 | AI Phase 1 | crashctl | status, history, tune |
+| 32 | AI Phase 1 | ask-ai | - |
+| 33 | AI Phase 1 | nnjson | - |
+| 34 | AI Phase 1 | nnact | - |
+| **AI PHASE 2** ||||
+| 35 | AI Phase 2 | coordctl | status, history, agents, conflict-stats, conflict-history, priorities, process, stats |
+| 36 | AI Phase 2 | deployctl | status, history, advance, rollback, config |
+| 37 | AI Phase 2 | driftctl | status, history, retrain, reset-baseline |
+| 38 | AI Phase 2 | versionctl | list, commit, rollback, diff, tag, gc |
+| 39 | AI Phase 2 | metaclassctl | status, force, config, on, off |
+| 40 | AI Phase 2 | mlctl | status, replay, weights, features |
+| 41 | AI Phase 2 | actorctl | status, policy, sample, lambda, natural, kl, on, off |
+| **AI PHASE 7** ||||
+| 42 | AI Phase 7 | modelctl | list, dry-swap, history, load, swap, rollback, health, status, remove |
+| 43 | AI Phase 7 | tracectl | demo, export-divergences, list, show, export, clear, stats |
+| 44 | AI Phase 7 | shadowctl | dry-run, enable, stats, canary, rollback, disable, promote, status, threshold, mode |
+| **LLM** ||||
+| 45 | LLM | llmctl | load, register, list, query, swap, rollback, budget, pace, status, audit |
+| 46 | LLM | llminfer | - |
+| 47 | LLM | llmstats | - |
+| 48 | LLM | llmstream | - |
+| 49 | LLM | llmgraph | - |
+| 50 | LLM | llmjson | - |
+| 51 | LLM | llmsig | - |
+| 52 | LLM | llmpoll | - |
+| 53 | LLM | llmcancel | - |
+| 54 | LLM | llmsummary | - |
+| 55 | LLM | llmverify | - |
+| 56 | LLM | llmhash | - |
+| 57 | LLM | llmkey | - |
+| **CHAOS ENGINEERING** ||||
+| 58 | Chaos Engineering | chaos | mode, rate, stats, reset |
+| **OBSERVABILITY** ||||
+| 59 | Observability | metricsctl | on, off, status |
+| 60 | Observability | metrics | json, prometheus (prom), simple, help, ctx, mem, real |
+| 61 | Observability | pmu | stats |
+| 62 | Observability | perf | - |
+| 63 | Observability | profstart | - |
+| 64 | Observability | profstop | - |
+| 65 | Observability | profreport | - |
+| 66 | Observability | bench | - |
+| 67 | Observability | overhead | - |
+| **CONTROL PLANE** ||||
+| 68 | Control Plane | ctlkey | - |
+| 69 | Control Plane | ctladmin | - |
+| 70 | Control Plane | ctlsubmit | - |
+| 71 | Control Plane | ctlembed | admin, submit |
+| 72 | Control Plane | ctlhex | - |
+| **DETERMINISTIC CONTROL** ||||
+| 73 | Deterministic | det | on, off, status, reset |
+| 74 | Deterministic | graphctl | create, add-channel, add-operator, start, destroy, det, stats, show, export-json, predict, feedback |
+| **HARDWARE & DRIVERS** ||||
+| 75 | Hardware | gpio | set, clear, toggle, read, output, input, blink |
+| 76 | Hardware | mailbox | serial, all |
+| 77 | Hardware | vconwrite | - |
+| **LOGGING & VALIDATION** ||||
+| 78 | Logging | logctl | status, level, demo |
+| 79 | Validation | validate | all, stress, deterministic, quick |
+| 80 | Validation | selftest | all, gpio, mailbox, pmu |
+| **STRESS TESTING** ||||
+| 81 | Stress Testing | stress | - |
+| 82 | Stress Testing | stresstest | memory, commands, multi, learning, redteam, chaos, compare, report |
+| 83 | Benchmarking | benchmark | memory, commands, network, full, report |
+| **COMPLIANCE** ||||
+| 84 | Compliance | compliance | eu-ai-act, audit, transparency, checklist, incidents |
+| **DEVELOPMENT** ||||
+| 85 | Development | test | - |
+| 86 | Development | perf_test | - |
+| 87 | Development | ai_bench | - |
+| 88 | Development | rtaivalidation | - |
+| **DEMOS** ||||
+| 89 | Demos | graphdemo | - |
+| 90 | Demos | imagedemo | - |
+| 91 | Demos | detdemo | - |
+| 92 | Demos | aidemo | - |
+| 93 | Demos | cbsdemo | - |
+| 94 | Demos | mldemo | - |
+| 95 | Demos | infdemo | - |
+| 96 | Demos | npudemo | - |
+| 97 | Demos | npudriver | - |
+| 98 | Demos | coorddemo | - |
+| 99 | Demos | metademo | - |
+| 100 | Demos | mladvdemo | - |
+| 101 | Demos | actorcriticdemo | - |
+| 102 | Demos | temporaliso | - |
+| 103 | Demos | phase3validation | - |
+| 104 | Demos | fullautodemo | - |
+| 105 | Demos | vconwrite | - |
+
+**Summary:**
+- **Total Commands**: 105 top-level commands
+- **Total Subcommands**: ~280+
+- **Grand Total**: ~385+ commands including all subcommands
+- **Categories**: 16 functional categories
+
+**Notes:**
+- Many demo commands are feature-gated and require specific build flags
+- Subcommands are comma-separated; `-` indicates no subcommands
+- Commands within categories are ordered by typical usage/testing sequence
+- See individual command help via `help <command>` for detailed usage
 
 ---
 
@@ -4271,9 +4459,9 @@ During integration, 124 compilation errors were resolved:
 - **All text (incl. docs/notes): 522,512** (includes 7 production readiness docs)
 
 **Shell Commands:**
-- **Shell top-level commands: 72** (added `chaos` for chaos engineering)
-- **Shell first-level subcommands: 98** (chaos: status, mode, rate, off)
-- **Shell total commands including subcommands: 170**
+- **Shell top-level commands: 73** (added `chaos` for chaos engineering, `agentsys` for ASM)
+- **Shell first-level subcommands: 118** (chaos: 4 subcommands, agentsys: 20 subcommands)
+- **Shell total commands including subcommands: 191**
 
 **Production Readiness Additions (Phase 4):**
 - **55 new files** created (+8,988 lines total)
