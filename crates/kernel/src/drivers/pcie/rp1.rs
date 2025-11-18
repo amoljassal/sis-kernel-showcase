@@ -107,6 +107,9 @@ mod regs {
 
     /// GPIO controller base offset
     pub const GPIO_BASE: u32 = 0x4000;
+
+    /// XHCI (USB 3.0) controller base offset
+    pub const XHCI_BASE: u32 = 0x200000;
 }
 
 /// RP1 control register bits
@@ -159,6 +162,13 @@ pub enum Rp1State {
 
     /// RP1 error
     Error,
+}
+
+/// XHCI controller information
+#[derive(Debug, Clone, Copy)]
+pub struct XhciInfo {
+    /// Base MMIO address of XHCI controller
+    pub base_addr: usize,
 }
 
 /// RP1 I/O Hub driver
@@ -420,6 +430,20 @@ impl Rp1Driver {
     /// Physical MMIO address of the GPIO controller
     pub fn gpio_base(&self) -> usize {
         self.mmio_base + regs::GPIO_BASE as usize
+    }
+
+    /// Get XHCI controller information
+    ///
+    /// # Returns
+    /// XhciInfo struct with XHCI controller base address, or None if not initialized
+    pub fn get_xhci_info(&self) -> Option<XhciInfo> {
+        if !self.is_initialized() {
+            return None;
+        }
+
+        Some(XhciInfo {
+            base_addr: self.mmio_base + regs::XHCI_BASE as usize,
+        })
     }
 
     /// Get interrupt status

@@ -89,6 +89,7 @@ mod pwm_helpers;       // Phase 4: PWM control
 mod i2c_helpers;       // Phase 3: I2C control
 mod spi_helpers;       // Phase 7: SPI control
 mod sensor_helpers;    // Phase 9: Sensor control and reading
+mod usb_helpers;       // Phase 2: USB device management
 mod selftest_helpers;  // M8: Driver self-test framework
 mod logctl_helpers;    // M8: Production logging control
 mod validation_helpers;  // M7: Comprehensive validation suite
@@ -365,6 +366,7 @@ impl Shell {
                 "i2c" => { self.i2c_cmd(&parts[1..]); true },        // Phase 3: I2C commands
                 "spi" => { self.spi_cmd(&parts[1..]); true },        // Phase 7: SPI commands
                 "sensor" => { self.sensor_cmd(&parts[1..]); true },  // Phase 9: Sensor commands
+                "usb" => { self.usb_cmd(&parts[1..]); true },        // Phase 2: USB commands
                 "selftest" => {                                       // M8: Driver self-tests
                     if parts.len() > 1 {
                         match parts[1] {

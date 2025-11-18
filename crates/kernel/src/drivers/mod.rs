@@ -18,6 +18,7 @@ pub mod pwm;       // PWM drivers (servo/motor control) - Phase 4
 pub mod i2c;       // I2C bus drivers (sensor communication) - Phase 3
 pub mod spi;       // SPI bus drivers (displays, storage, sensors) - Phase 7
 pub mod sensors;   // Sensor drivers (IMU, environmental, ToF) - Phase 9
+pub mod usb;       // USB drivers (XHCI host controller) - Phase 2
 
 // Phase 6 - Production Readiness: Mock drivers and trait abstractions
 pub mod traits;

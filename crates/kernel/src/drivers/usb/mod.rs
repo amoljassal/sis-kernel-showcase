@@ -34,7 +34,7 @@
 //! - USB Device Class Specifications
 
 pub mod xhci;
-pub mod core;
+pub mod enumeration;
 pub mod descriptor;
 
 use crate::drivers::{DriverError, DriverResult};
