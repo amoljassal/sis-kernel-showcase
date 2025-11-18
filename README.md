@@ -12,7 +12,180 @@
 
 A **cross-platform** operating system prototype supporting both **AArch64 (ARM64)** and **x86_64** architectures. It boots under UEFI in QEMU with kernel‑resident AI/ML components. The kernel includes foundational OS subsystems (VFS, memory management, processes, device drivers, network stack, basic security, window manager) and experimental AI/ML modules (neural agents, meta‑agent coordination, stress tests, autonomy metrics). Results and examples in this repository are QEMU‑based.
 
-**🎯 Quick Links:** [Try It Now](#quick-start---single-command) | [Architecture](#architecture-overview) | [Latest Results](#latest-results) | [Test Results](#-comprehensive-test-suite---industry-grade-validation) | [Demo Videos](#demo-videos) | [Contributing](docs/CONTRIBUTING.md) | [Roadmap](#roadmap-near-term)
+**🎯 Quick Links:** [Build Commands](#-quick-start--build-commands) | [Architecture](#architecture-overview) | [Latest Results](#latest-results) | [Test Results](#-comprehensive-test-suite---industry-grade-validation) | [Demo Videos](#demo-videos) | [Contributing](docs/CONTRIBUTING.md) | [Roadmap](#roadmap-near-term)
+
+---
+
+## 🚀 Quick Start & Build Commands
+
+### Prerequisites
+```bash
+# Install Rust (stable channel recommended)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Add AArch64 target (for ARM64 builds)
+rustup target add aarch64-unknown-none
+
+# Install QEMU (for running the kernel)
+# macOS:
+brew install qemu
+# Ubuntu/Debian:
+sudo apt-get install qemu-system-aarch64 qemu-system-x86-64
+```
+
+### Standard Feature Set
+
+**Recommended features for full functionality:**
+```
+bringup, llm, crypto-real, graphctl-framed, ai-ops, decision-traces,
+deterministic, model-lifecycle, otel, shadow-mode, agentsys,
+llm-transformer, simd
+```
+
+### Build & Run Commands (Copy-Paste Ready)
+
+#### 1. Build & Run Kernel in QEMU (Recommended)
+```bash
+# Full feature build + automatic QEMU launch
+SIS_FEATURES="llm,crypto-real,ai-ops,decision-traces,deterministic,graphctl-framed,model-lifecycle,otel,shadow-mode,agentsys,llm-transformer,simd" BRINGUP=1 ./scripts/uefi_run.sh
+
+# Minimal build (faster, fewer features)
+SIS_FEATURES="llm,crypto-real" BRINGUP=1 ./scripts/uefi_run.sh
+```
+
+**What this does:**
+- Builds UEFI boot loader (`crates/uefi-boot`)
+- Builds kernel with specified features (`crates/kernel`)
+- Creates ESP (EFI System Partition) filesystem
+- Launches QEMU with GICv3, VirtIO devices, and UEFI firmware
+- Boots kernel to interactive shell
+
+**Exit QEMU:** Press `Ctrl+A`, then `X`
+
+#### 2. Build Only (No QEMU Launch)
+```bash
+# Build kernel binary only (dev profile)
+SIS_FEATURES="llm,crypto-real,ai-ops,agentsys,simd" BRINGUP=1 ./scripts/uefi_run.sh build
+
+# Build kernel binary (release profile - optimized)
+SIS_FEATURES="llm,crypto-real,ai-ops,agentsys,simd" BRINGUP=1 ./scripts/uefi_run.sh build --release
+```
+
+**What this does:**
+- Compiles kernel to `crates/kernel/target/aarch64-unknown-none/debug/sis_kernel`
+- Does NOT launch QEMU
+- Useful for CI/CD or cross-compilation
+
+#### 3. Run Automated Test Suite
+```bash
+# Full test suite (all phases)
+SIS_FEATURES="llm,crypto-real,ai-ops,agentsys" cargo run -p sis-testing --release
+
+# Specific test phase
+SIS_FEATURES="llm,crypto-real,ai-ops" cargo run -p sis-testing --release -- --phase 1
+
+# Quick smoke test (LLM functionality)
+SIS_FEATURES="llm,crypto-real" cargo run -p sis-testing --release -- --llm-smoke
+```
+
+**What this does:**
+- Launches QEMU in headless mode
+- Executes automated test commands via PTY injection
+- Generates test report: `target/testing/test_report.json`
+- Creates dashboard: `target/testing/test_dashboard.html`
+
+#### 4. Low-Level Cargo Commands (Advanced)
+
+**Direct kernel build** (bypasses build script):
+```bash
+cd crates/kernel
+cargo build --target aarch64-unknown-none --features bringup,llm,crypto-real,ai-ops,agentsys,simd
+```
+
+**Why you might NOT want this:**
+- Does NOT build UEFI boot loader
+- Does NOT create ESP filesystem
+- Does NOT launch QEMU
+- Only for kernel development/testing
+
+**When to use this:**
+- Checking compiler warnings: `cargo check --target aarch64-unknown-none --features bringup,llm,crypto-real`
+- Running kernel unit tests: `cargo test --target aarch64-unknown-none --features bringup,llm`
+- IDE integration (rust-analyzer)
+
+### Command Comparison Table
+
+| Command | Builds UEFI | Builds Kernel | Creates ESP | Launches QEMU | Use Case |
+|---------|-------------|---------------|-------------|---------------|----------|
+| `./scripts/uefi_run.sh` | ✅ | ✅ | ✅ | ✅ | **Daily development** (boot to shell) |
+| `./scripts/uefi_run.sh build` | ✅ | ✅ | ✅ | ❌ | **CI/CD** (compile only) |
+| `cargo run -p sis-testing` | ✅ | ✅ | ✅ | ✅ | **Automated testing** (headless) |
+| `cargo build` (in kernel/) | ❌ | ✅ | ❌ | ❌ | **Compiler checks** (warnings/errors) |
+
+### Feature Flags Explained
+
+| Feature | Description | Required For |
+|---------|-------------|--------------|
+| `bringup` | Early boot diagnostics, verbose logging | All builds |
+| `llm` | Kernel-resident LLM inference engine | AI features |
+| `crypto-real` | Real SHA-256 + Ed25519 (vs stubs) | Production |
+| `ai-ops` | Model lifecycle, drift detection | AI governance |
+| `agentsys` | Capability-based agent system | Agent supervision |
+| `llm-transformer` | Real transformer inference (vs stub) | LLM testing |
+| `simd` | ARM NEON / x86 SSE optimizations | Performance |
+| `graphctl-framed` | Framed graph control protocol | Advanced features |
+| `decision-traces` | Decision trace buffer + export | Debugging |
+| `otel` | OpenTelemetry span export | Observability |
+| `shadow-mode` | Canary deployment support | Production rollout |
+| `model-lifecycle` | Model registry, versioning, rollback | AI ops |
+| `deterministic` | CBS+EDF scheduler scaffolding | Real-time testing |
+
+### Common Use Cases
+
+**Scenario 1: Quick Test of Changes**
+```bash
+# Edit kernel code, then:
+SIS_FEATURES="llm,crypto-real" BRINGUP=1 ./scripts/uefi_run.sh
+# QEMU launches, test in shell, exit with Ctrl+A, X
+```
+
+**Scenario 2: Full Regression Test**
+```bash
+# Run complete test suite:
+SIS_FEATURES="llm,crypto-real,ai-ops,agentsys" cargo run -p sis-testing --release
+# Check results in target/testing/test_dashboard.html
+```
+
+**Scenario 3: Check for Compiler Warnings**
+```bash
+cd crates/kernel
+cargo check --target aarch64-unknown-none --features bringup,llm,crypto-real,ai-ops
+# Should show 0 warnings with these features
+```
+
+**Scenario 4: Build for Hardware Boot (Raspberry Pi 5)**
+```bash
+# Enable hardware-specific features:
+SIS_FEATURES="llm,crypto-real,simd,dt-override" BRINGUP=1 ./scripts/uefi_run.sh build --release
+# Copy ESP contents to SD card for hardware boot
+```
+
+### Troubleshooting
+
+**Problem:** Build warnings appear
+- **Cause:** Missing feature flags
+- **Solution:** Use full feature list shown above, or at minimum: `bringup,llm,crypto-real`
+- **Reference:** See `docs/troubleshooting/BUILD_WARNINGS.md`
+
+**Problem:** QEMU doesn't launch
+- **Cause:** QEMU not installed or wrong version
+- **Solution:** Install QEMU 8.0+ with `qemu-system-aarch64` support
+
+**Problem:** Tests timeout
+- **Cause:** PTY communication issue or kernel panic
+- **Solution:** Check `target/testing/qemu.log` for kernel output
+
+For more troubleshooting, see [docs/troubleshooting/](docs/troubleshooting/)
 
 ---
 
