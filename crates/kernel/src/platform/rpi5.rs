@@ -234,10 +234,22 @@ pub fn init_hardware() {
     match crate::drivers::pcie::initialize() {
         Ok(()) => {
             crate::info!("PCIe and RP1 I/O Hub initialized successfully");
+
+            // Initialize PWM controllers (depends on RP1)
+            crate::info!("Initializing PWM subsystem...");
+            match crate::drivers::pwm::initialize() {
+                Ok(()) => {
+                    crate::info!("PWM controllers initialized successfully");
+                }
+                Err(e) => {
+                    crate::warn!("Failed to initialize PWM: {:?}", e);
+                    crate::warn!("Servo and motor control will not be available");
+                }
+            }
         }
         Err(e) => {
             crate::warn!("Failed to initialize PCIe/RP1: {:?}", e);
-            crate::warn!("USB, Ethernet, and extended GPIO will not be available");
+            crate::warn!("USB, Ethernet, GPIO, and PWM will not be available");
         }
     }
 
