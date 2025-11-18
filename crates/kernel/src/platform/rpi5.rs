@@ -258,10 +258,22 @@ pub fn init_hardware() {
                     crate::warn!("Sensor communication will not be available");
                 }
             }
+
+            // Initialize SPI bus controllers (depends on RP1)
+            crate::info!("Initializing SPI subsystem...");
+            match crate::drivers::spi::initialize() {
+                Ok(()) => {
+                    crate::info!("SPI controllers initialized successfully");
+                }
+                Err(e) => {
+                    crate::warn!("Failed to initialize SPI: {:?}", e);
+                    crate::warn!("SPI peripherals will not be available");
+                }
+            }
         }
         Err(e) => {
             crate::warn!("Failed to initialize PCIe/RP1: {:?}", e);
-            crate::warn!("USB, Ethernet, GPIO, PWM, and I2C will not be available");
+            crate::warn!("USB, Ethernet, GPIO, PWM, I2C, and SPI will not be available");
         }
     }
 
