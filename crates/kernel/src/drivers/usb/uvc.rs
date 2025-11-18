@@ -36,10 +36,10 @@ pub enum UvcDescriptorType {
     String = 0x03,
     Interface = 0x04,
     Endpoint = 0x05,
-    /// Video Control Interface Header
+    /// Video Control Interface Header (CS_INTERFACE)
     VcHeader = 0x24,
-    /// Video Streaming Interface Header
-    VsHeader = 0x24,
+    /// Video Streaming Interface Header (CS_INTERFACE, same value, different context)
+    VsHeader = 0x25,
 }
 
 /// UVC Video Control Descriptor Subtypes
@@ -511,11 +511,10 @@ impl UvcCamera {
 
         Ok(Frame {
             data: alloc::vec![0u8; frame_size],
-            width: resolution.width,
-            height: resolution.height,
-            pixel_format,
+            resolution,
+            format: pixel_format,
+            timestamp: crate::time::get_timestamp_us(),
             sequence,
-            timestamp_us: crate::time::get_timestamp_us(),
         })
     }
 

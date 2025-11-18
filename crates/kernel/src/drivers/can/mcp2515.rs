@@ -25,7 +25,7 @@
 use super::{CanInterface, CanFrame, CanId, CanMode, CanSpeed, CanFilter};
 use super::{CanErrorCounters, CanStatistics, FrameType};
 use crate::drivers::{DriverError, DriverResult};
-use crate::drivers::spi;
+use crate::drivers::spi::{self, ChipSelect};
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
@@ -90,7 +90,7 @@ pub struct Mcp2515 {
     spi_bus: u8,
 
     /// SPI chip select
-    spi_cs: spi::ChipSelect,
+    spi_cs: ChipSelect,
 
     /// Current operating mode
     mode: CanMode,
@@ -114,7 +114,7 @@ impl Mcp2515 {
     /// # Arguments
     /// * `spi_bus` - SPI bus number (0-4 on RPi5)
     /// * `cs` - Chip select line
-    pub fn new(spi_bus: u8, cs: spi::ChipSelect) -> Self {
+    pub fn new(spi_bus: u8, cs: ChipSelect) -> Self {
         Self {
             spi_bus,
             spi_cs: cs,

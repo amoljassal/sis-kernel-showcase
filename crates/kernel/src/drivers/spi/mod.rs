@@ -42,7 +42,7 @@
 pub mod bcm2712;
 
 use crate::drivers::{DriverError, DriverResult};
-use bcm2712::{Bcm2712Spi, ChipSelect, SpiMode};
+use bcm2712::{Bcm2712Spi, SpiMode};
 use core::sync::atomic::{AtomicBool, Ordering};
 use spin::Once;
 
@@ -50,7 +50,7 @@ use spin::Once;
 pub const MAX_SPI_CONTROLLERS: usize = 6;
 
 /// Re-export types
-pub use bcm2712::{ChipSelect as Cs, SpiMode as Mode};
+pub use bcm2712::{ChipSelect, ChipSelect as Cs, SpiMode as Mode};
 
 /// SPI subsystem state
 struct SpiState {

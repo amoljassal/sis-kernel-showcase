@@ -38,6 +38,7 @@
 pub mod mcp2515;  // MCP2515 CAN controller driver
 
 use crate::drivers::{DriverError, DriverResult};
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use alloc::string::String;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -228,7 +229,9 @@ impl CanErrorCounters {
     }
 
     pub fn is_bus_off(&self) -> bool {
-        self.tx_errors >= 256
+        // TEC reaching 256 means bus-off, but u8 saturates at 255
+        // In CAN spec, TEC=255 indicates bus-off state
+        self.tx_errors == 255
     }
 }
 
@@ -431,7 +434,7 @@ mod tests {
         errors.tx_errors = 128;
         assert!(errors.is_error_passive());
 
-        errors.tx_errors = 256;
+        errors.tx_errors = 255;  // Bus-off state (TEC saturates at 255 for u8)
         assert!(errors.is_bus_off());
     }
 }
