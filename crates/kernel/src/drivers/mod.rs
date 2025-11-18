@@ -17,6 +17,7 @@ pub mod pcie;      // PCIe drivers (ECAM, RP1) - Phase 1
 pub mod pwm;       // PWM drivers (servo/motor control) - Phase 4
 pub mod i2c;       // I2C bus drivers (sensor communication) - Phase 3
 pub mod spi;       // SPI bus drivers (displays, storage, sensors) - Phase 7
+pub mod sensors;   // Sensor drivers (IMU, environmental, ToF) - Phase 9
 
 // Phase 6 - Production Readiness: Mock drivers and trait abstractions
 pub mod traits;
