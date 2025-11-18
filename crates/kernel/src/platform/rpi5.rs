@@ -228,11 +228,23 @@ pub fn init_hardware() {
         }
     }
 
-    // Additional RPi5-specific initialization can go here:
-    // - RP1 I/O Hub initialization
-    // - Clock configuration
-    // - Power management setup
-    // etc.
+    // Initialize PCIe and RP1 I/O Hub
+    // This is critical for RPi5 as the RP1 provides USB, Ethernet, and GPIO
+    crate::info!("Initializing PCIe subsystem...");
+    match crate::drivers::pcie::initialize() {
+        Ok(()) => {
+            crate::info!("PCIe and RP1 I/O Hub initialized successfully");
+        }
+        Err(e) => {
+            crate::warn!("Failed to initialize PCIe/RP1: {:?}", e);
+            crate::warn!("USB, Ethernet, and extended GPIO will not be available");
+        }
+    }
+
+    // Additional RPi5-specific initialization:
+    // - Clock configuration (if needed)
+    // - Power management setup (if needed)
+    // - Additional peripheral initialization
 }
 
 #[cfg(test)]
