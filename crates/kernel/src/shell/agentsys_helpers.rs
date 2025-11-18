@@ -17,32 +17,32 @@ impl super::Shell {
             "audit" => { self.agentsys_audit_dump(); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
 
             // ASM Supervision commands (P0 - Critical)
-            "spawn" => self.cmd_agentsys_spawn(&args[1..]),
-            "kill" => self.cmd_agentsys_kill(&args[1..]),
-            "metrics" => self.cmd_agentsys_metrics(&args[1..]),
-            "resources" => self.cmd_agentsys_resources(&args[1..]),
-            "status" => self.cmd_agentsys_status(),
+            "spawn" => { self.cmd_agentsys_spawn(&args[1..]); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "kill" => { self.cmd_agentsys_kill(&args[1..]); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "metrics" => { self.cmd_agentsys_metrics(&args[1..]); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "resources" => { self.cmd_agentsys_resources(&args[1..]); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "status" => { self.cmd_agentsys_status(); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
 
             // ASM Supervision commands (P1 - Important)
-            "restart" => self.cmd_agentsys_restart(&args[1..]),
-            "risk" => self.cmd_agentsys_risk(&args[1..]),
-            "limits" => self.cmd_agentsys_limits(&args[1..]),
-            "deps" => self.cmd_agentsys_deps(&args[1..]),
-            "depgraph" => self.cmd_agentsys_depgraph(),
-            "profile" => self.cmd_agentsys_profile(&args[1..]),
+            "restart" => { self.cmd_agentsys_restart(&args[1..]); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "risk" => { self.cmd_agentsys_risk(&args[1..]); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "limits" => { self.cmd_agentsys_limits(&args[1..]); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "deps" => { self.cmd_agentsys_deps(&args[1..]); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "depgraph" => { self.cmd_agentsys_depgraph(); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "profile" => { self.cmd_agentsys_profile(&args[1..]); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
 
             // ASM Supervision commands (P2 - Advanced)
-            "policy-update" => self.cmd_agentsys_policy_update(&args[1..]),
-            "profile-reset" => self.cmd_agentsys_profile_reset(&args[1..]),
-            "dump" => self.cmd_agentsys_dump(),
+            "policy-update" => { self.cmd_agentsys_policy_update(&args[1..]); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "profile-reset" => { self.cmd_agentsys_profile_reset(&args[1..]); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "dump" => { self.cmd_agentsys_dump(); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
 
             // ASM Supervision commands (existing)
-            "list" => self.cmd_asmlist(),
-            "info" => self.cmd_asminfo(args),
-            "policy" => self.cmd_asmpolicy(args),
-            "telemetry" => self.cmd_asmstatus(),
-            "compliance" => self.cmd_asm_compliance(),
-            "gwstatus" => self.cmd_gwstatus(),
+            "list" => { self.cmd_asmlist(); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "info" => { self.cmd_asminfo(args); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "policy" => { self.cmd_asmpolicy(args); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "telemetry" => { self.cmd_asmstatus(); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "compliance" => { self.cmd_asm_compliance(); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
+            "gwstatus" => { self.cmd_gwstatus(); unsafe { crate::uart_print(b"CMD_DONE\n"); } }
 
             // Legacy command (old AgentSys status - keep for backward compatibility)
             "protocol-status" => { self.agentsys_status(); unsafe { crate::uart_print(b"CMD_DONE\n"); } }

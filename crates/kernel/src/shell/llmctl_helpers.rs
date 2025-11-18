@@ -9,6 +9,7 @@ impl super::Shell {
             return;
         }
         match args[0] {
+            "backend" => { self.llmctl_backend_cmd(&args[1..]); }
             "load" => { self.llmctl_load_cmd(args); }
             "register" => { self.llmctl_register_cmd(&args[1..]); }
             "list" => { self.llmctl_list_cmd(); }
@@ -79,6 +80,57 @@ impl super::Shell {
             }
             "audit" => { crate::llm::audit_print(); }
             _ => unsafe { crate::uart_print(b"Usage: llmctl load [--wcet-cycles N] [--model ID] [--hash 0xHEX..64] [--sig 0xHEX..128] | budget [--wcet-cycles N] [--period-ns N] [--max-tokens-per-period N]\n"); },
+        }
+    }
+
+    pub(crate) fn llmctl_backend_cmd(&self, args: &[&str]) {
+        if args.is_empty() {
+            // Show current backend
+            let name = crate::llm::backend::get_backend_name();
+            unsafe {
+                crate::uart_print(b"[LLM][BACKEND] current: ");
+                crate::uart_print(name.as_bytes());
+                crate::uart_print(b"\n");
+                crate::uart_print(b"Usage: llmctl backend [stub|transformer]\n");
+            }
+            return;
+        }
+
+        match args[0] {
+            "stub" => {
+                let success = crate::llm::backend::init_backend(false);
+                unsafe {
+                    if success {
+                        crate::uart_print(b"[LLM][BACKEND] switched to: StubBackend\n");
+                    } else {
+                        crate::uart_print(b"[LLM][BACKEND] failed to switch\n");
+                    }
+                }
+            }
+            "transformer" | "real" => {
+                #[cfg(feature = "llm-transformer")]
+                {
+                    let success = crate::llm::backend::init_backend(true);
+                    unsafe {
+                        if success {
+                            crate::uart_print(b"[LLM][BACKEND] switched to: TransformerBackend\n");
+                        } else {
+                            crate::uart_print(b"[LLM][BACKEND] failed to initialize TransformerBackend, using stub\n");
+                        }
+                    }
+                }
+                #[cfg(not(feature = "llm-transformer"))]
+                unsafe {
+                    crate::uart_print(b"[LLM][BACKEND] transformer backend not compiled (missing llm-transformer feature)\n");
+                }
+            }
+            _ => {
+                unsafe {
+                    crate::uart_print(b"[LLM][BACKEND] unknown backend: ");
+                    crate::uart_print(args[0].as_bytes());
+                    crate::uart_print(b"\nUsage: llmctl backend [stub|transformer]\n");
+                }
+            }
         }
     }
 

@@ -237,7 +237,7 @@ pub fn get_board_serial() -> DriverResult<u64> {
     }
 
     unsafe {
-        let buffer = &mut MAILBOX_BUFFER.data;
+        let buffer = unsafe { &mut *(&raw mut MAILBOX_BUFFER.data) };
         buffer[0] = 8 * 4;                      // Total size
         buffer[1] = MAILBOX_REQUEST;            // Request code
         buffer[2] = tags::GET_BOARD_SERIAL;     // Tag ID
@@ -271,7 +271,7 @@ pub fn get_temperature() -> DriverResult<u32> {
     }
 
     unsafe {
-        let buffer = &mut MAILBOX_BUFFER.data;
+        let buffer = unsafe { &mut *(&raw mut MAILBOX_BUFFER.data) };
         buffer[0] = 8 * 4;                      // Total size
         buffer[1] = MAILBOX_REQUEST;            // Request code
         buffer[2] = tags::GET_TEMPERATURE;      // Tag ID
@@ -298,7 +298,7 @@ pub fn get_max_temperature() -> DriverResult<u32> {
     }
 
     unsafe {
-        let buffer = &mut MAILBOX_BUFFER.data;
+        let buffer = unsafe { &mut *(&raw mut MAILBOX_BUFFER.data) };
         buffer[0] = 8 * 4;
         buffer[1] = MAILBOX_REQUEST;
         buffer[2] = tags::GET_MAX_TEMPERATURE;
@@ -325,7 +325,7 @@ pub fn get_firmware_revision() -> DriverResult<u32> {
     }
 
     unsafe {
-        let buffer = &mut MAILBOX_BUFFER.data;
+        let buffer = unsafe { &mut *(&raw mut MAILBOX_BUFFER.data) };
         buffer[0] = 7 * 4;
         buffer[1] = MAILBOX_REQUEST;
         buffer[2] = tags::GET_FIRMWARE_REVISION;
@@ -351,7 +351,7 @@ pub fn get_board_model() -> DriverResult<u32> {
     }
 
     unsafe {
-        let buffer = &mut MAILBOX_BUFFER.data;
+        let buffer = unsafe { &mut *(&raw mut MAILBOX_BUFFER.data) };
         buffer[0] = 7 * 4;
         buffer[1] = MAILBOX_REQUEST;
         buffer[2] = tags::GET_BOARD_MODEL;
@@ -377,7 +377,7 @@ pub fn get_board_revision() -> DriverResult<u32> {
     }
 
     unsafe {
-        let buffer = &mut MAILBOX_BUFFER.data;
+        let buffer = unsafe { &mut *(&raw mut MAILBOX_BUFFER.data) };
         buffer[0] = 7 * 4;
         buffer[1] = MAILBOX_REQUEST;
         buffer[2] = tags::GET_BOARD_REVISION;
@@ -403,7 +403,7 @@ pub fn get_arm_memory() -> DriverResult<(u32, u32)> {
     }
 
     unsafe {
-        let buffer = &mut MAILBOX_BUFFER.data;
+        let buffer = unsafe { &mut *(&raw mut MAILBOX_BUFFER.data) };
         buffer[0] = 8 * 4;
         buffer[1] = MAILBOX_REQUEST;
         buffer[2] = tags::GET_ARM_MEMORY;
@@ -433,7 +433,7 @@ pub fn get_clock_rate(clock_id: u32) -> DriverResult<u32> {
     }
 
     unsafe {
-        let buffer = &mut MAILBOX_BUFFER.data;
+        let buffer = unsafe { &mut *(&raw mut MAILBOX_BUFFER.data) };
         buffer[0] = 8 * 4;
         buffer[1] = MAILBOX_REQUEST;
         buffer[2] = tags::GET_CLOCK_RATE;
@@ -463,7 +463,7 @@ pub fn get_voltage(voltage_id: u32) -> DriverResult<u32> {
     }
 
     unsafe {
-        let buffer = &mut MAILBOX_BUFFER.data;
+        let buffer = unsafe { &mut *(&raw mut MAILBOX_BUFFER.data) };
         buffer[0] = 8 * 4;
         buffer[1] = MAILBOX_REQUEST;
         buffer[2] = tags::GET_VOLTAGE;

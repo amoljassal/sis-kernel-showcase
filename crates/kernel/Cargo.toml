@@ -85,6 +85,15 @@ decision-traces = []  # Decision trace buffer and export
 initramfs-models = [] # Embed models as initramfs (cpio newc) for integration tests
 # Phase 9: Agentic Platform
 agentsys = []         # Capability-based system for LLM agents
+# Missing feature flags (fixes warning: unexpected `cfg` condition value)
+profiling = []        # Performance profiling and tracing
+crash-dump = []       # Crash dump generation and analysis
+structured-logging = [] # Structured logging output
+network = []          # Network operations (exports, remote logging)
+benchmarks = []       # Benchmark suite and performance tests
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(have_initramfs_models)'] }
 
 [build-dependencies]
 chrono = "0.4"

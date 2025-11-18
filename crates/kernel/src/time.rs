@@ -54,6 +54,12 @@ pub fn get_uptime_ms() -> u64 {
     get_time_since_boot_ms()
 }
 
+/// Get uptime in microseconds (alias for get_time_since_boot_us)
+/// This is the primary function used by LLM subsystem for latency measurement
+pub fn uptime_us() -> u64 {
+    get_time_since_boot_us()
+}
+
 // ========== Hardware Timer Base ==========
 // Additional timer functions for scheduler and syscalls
 
