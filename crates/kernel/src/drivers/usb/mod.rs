@@ -36,6 +36,8 @@
 pub mod xhci;
 pub mod enumeration;
 pub mod descriptor;
+pub mod uvc;  // USB Video Class (UVC) - Phase 5
+pub mod audio;  // USB Audio Class (UAC) - Phase 6
 
 use crate::drivers::{DriverError, DriverResult};
 use core::sync::atomic::{AtomicBool, Ordering};

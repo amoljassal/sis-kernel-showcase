@@ -72,7 +72,7 @@ impl CameraDevice {
         #[cfg(feature = "hardware")]
         {
             // Real USB UVC device detection
-            use crate::usb::{enumerate_devices, DeviceClass};
+            use crate::drivers::usb::{enumerate_devices, DeviceClass};
 
             let mut cameras = Vec::new();
 
@@ -80,7 +80,7 @@ impl CameraDevice {
                 if usb_device.class == DeviceClass::Video {
                     crate::info!("camera::capture: found UVC device: {}", usb_device.name);
 
-                    let mut device = Self::new(usb_device.id, usb_device.name);
+                    let mut device = Self::new(usb_device.id as u32, usb_device.name);
 
                     // Query capabilities from UVC descriptors
                     device.query_capabilities()?;

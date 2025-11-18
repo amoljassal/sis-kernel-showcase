@@ -19,6 +19,7 @@ pub mod i2c;       // I2C bus drivers (sensor communication) - Phase 3
 pub mod spi;       // SPI bus drivers (displays, storage, sensors) - Phase 7
 pub mod sensors;   // Sensor drivers (IMU, environmental, ToF) - Phase 9
 pub mod usb;       // USB drivers (XHCI host controller) - Phase 2
+pub mod can;       // CAN bus drivers (automotive/robotics) - Phase 8
 
 // Phase 6 - Production Readiness: Mock drivers and trait abstractions
 pub mod traits;
