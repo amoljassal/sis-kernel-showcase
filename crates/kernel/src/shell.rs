@@ -86,6 +86,7 @@ mod gpio_helpers;      // M6: GPIO control
 mod mailbox_helpers;   // M6: Firmware mailbox interface
 mod pcie_helpers;      // Phase 1: PCIe/RP1 control
 mod pwm_helpers;       // Phase 4: PWM control
+mod i2c_helpers;       // Phase 3: I2C control
 mod selftest_helpers;  // M8: Driver self-test framework
 mod logctl_helpers;    // M8: Production logging control
 mod validation_helpers;  // M7: Comprehensive validation suite
@@ -359,6 +360,7 @@ impl Shell {
                 "pcie" => { self.pcie_cmd(&parts[1..]); true },      // Phase 1: PCIe commands
                 "rp1" => { self.rp1_cmd(&parts[1..]); true },        // Phase 1: RP1 commands
                 "pwm" => { self.pwm_cmd(&parts[1..]); true },        // Phase 4: PWM commands
+                "i2c" => { self.i2c_cmd(&parts[1..]); true },        // Phase 3: I2C commands
                 "selftest" => {                                       // M8: Driver self-tests
                     if parts.len() > 1 {
                         match parts[1] {

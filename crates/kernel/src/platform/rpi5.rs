@@ -246,10 +246,22 @@ pub fn init_hardware() {
                     crate::warn!("Servo and motor control will not be available");
                 }
             }
+
+            // Initialize I2C bus controllers (depends on RP1)
+            crate::info!("Initializing I2C subsystem...");
+            match crate::drivers::i2c::initialize() {
+                Ok(()) => {
+                    crate::info!("I2C controllers initialized successfully");
+                }
+                Err(e) => {
+                    crate::warn!("Failed to initialize I2C: {:?}", e);
+                    crate::warn!("Sensor communication will not be available");
+                }
+            }
         }
         Err(e) => {
             crate::warn!("Failed to initialize PCIe/RP1: {:?}", e);
-            crate::warn!("USB, Ethernet, GPIO, and PWM will not be available");
+            crate::warn!("USB, Ethernet, GPIO, PWM, and I2C will not be available");
         }
     }
 

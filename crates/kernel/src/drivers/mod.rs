@@ -15,6 +15,7 @@ pub mod gpio;      // GPIO drivers - M6
 pub mod firmware;  // Firmware interface (mailbox) - M6
 pub mod pcie;      // PCIe drivers (ECAM, RP1) - Phase 1
 pub mod pwm;       // PWM drivers (servo/motor control) - Phase 4
+pub mod i2c;       // I2C bus drivers (sensor communication) - Phase 3
 
 // Phase 6 - Production Readiness: Mock drivers and trait abstractions
 pub mod traits;
