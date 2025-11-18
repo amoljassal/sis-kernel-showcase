@@ -149,7 +149,7 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
 
     match cmd {
         0x01 => { // CreateGraph
-            let (tok, _p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
             check_token(tok)?;
             unsafe { CTRL_GRAPH = Some(GraphApi::create()); }
             ctrl_print(b"CTRL: graph created\n");
@@ -538,7 +538,7 @@ pub fn handle_frame(frame: &[u8]) -> Result<(), CtrlError> {
             Ok(())
         }
         0x23 => { // NeuralStatus {}
-            let (tok, _p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
+            let (tok, p) = read_token(payload).ok_or(CtrlError::BadFrame)?;
             check_token(tok)?;
             crate::neural::print_status();
             #[cfg(feature = "virtio-console")]

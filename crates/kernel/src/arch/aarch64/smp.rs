@@ -197,7 +197,7 @@ fn bring_up_cpu(cpu_id: usize) {
 /// 5. Never return
 #[no_mangle]
 #[link_section = ".text"]
-pub unsafe extern "C" fn secondary_entry(cpu_id: u64, stack_ptr: u64) -> ! {
+pub unsafe extern "C" fn secondary_entry(cpu_id: u64, _stack_ptr: u64) -> ! {
     // Extract CPU ID from MPIDR
     let cpu = (cpu_id & 0xFF) as usize;
 
@@ -226,7 +226,7 @@ fn secondary_rust_entry(cpu_id: usize) -> ! {
     // 2. Initialize timer for this CPU
     // (The timer itself is per-CPU, but the configuration is shared)
     #[cfg(not(test))]
-    unsafe {
+    {
         // Enable timer IRQ for this CPU
         if let Some(_) = crate::arch::aarch64::gicv3::enable_irq_checked(
             crate::arch::aarch64::timer::TIMER_IRQ_PHYS
