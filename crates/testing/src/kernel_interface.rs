@@ -486,6 +486,7 @@ impl KernelCommandInterface {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
 
     // Unit tests disabled - require QEMURuntimeManager instance

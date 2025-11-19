@@ -37,6 +37,9 @@ pub mod hardware_backend;
 pub mod backends;
 pub mod npu_backend;
 
+// Scheduler validation with formal verification
+pub mod scheduler_validation;
+
 // Core test result types
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

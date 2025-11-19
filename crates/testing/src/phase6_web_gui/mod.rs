@@ -137,8 +137,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_phase6_suite_creation() {
-        let suite = Phase6WebGUISuite::new(
+        use std::sync::Arc;
+        use crate::qemu_runtime::QEMURuntimeManager;
+        use crate::TestSuiteConfig;
+
+        let config = TestSuiteConfig::default();
+        let qemu_manager = Arc::new(QEMURuntimeManager::new(&config));
+        let _suite = Phase6WebGUISuite::new(
             "/tmp/serial.log".to_string(),
+            qemu_manager,
+            0,
             9999,
         );
 
