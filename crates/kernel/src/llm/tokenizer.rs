@@ -69,6 +69,7 @@
 //! - Llama tokenizer (32k vocabulary)
 //! - TinyLlama tokenizer (32k vocabulary)
 
+use alloc::vec;
 use alloc::vec::Vec;
 use alloc::string::{String, ToString};
 use alloc::collections::BTreeMap;
@@ -114,9 +115,14 @@ pub struct BpeTokenizer {
     /// Reverse mapping: byte sequence → token_id (for encoding)
     reverse_vocab: BTreeMap<Vec<u8>, u16>,
 
-    /// Merge rules for BPE algorithm (optional, for training)
-    /// Each entry: (pair, merged_token_id)
+    /// Merge rules for BPE algorithm
+    /// Each entry: (left_token, right_token) with implicit priority by index
+    /// Lower index = higher priority (applied first)
     merges: Vec<(Vec<u8>, Vec<u8>)>,
+
+    /// Merge priority map: (left, right) -> priority index
+    /// Used for fast lookup during encoding
+    merge_priority: BTreeMap<(Vec<u8>, Vec<u8>), usize>,
 
     /// Vocabulary size
     vocab_size: usize,
@@ -140,6 +146,7 @@ impl BpeTokenizer {
             vocab: BTreeMap::new(),
             reverse_vocab: BTreeMap::new(),
             merges: Vec::new(),
+            merge_priority: BTreeMap::new(),
             vocab_size: 0,
             has_special_tokens: false,
         }
@@ -281,13 +288,118 @@ impl BpeTokenizer {
         Ok(())
     }
 
+    /// Load BPE merge rules from text format
+    ///
+    /// # Format
+    ///
+    /// Each line: `left_hex right_hex`
+    ///
+    /// Example:
+    /// ```text
+    /// 48 65    # H + e -> He
+    /// 6c 6c    # l + l -> ll
+    /// 6f 20    # o + space -> "o "
+    /// ```
+    ///
+    /// # Arguments
+    ///
+    /// - `data`: Text data with merge rules
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(())`: Merges loaded successfully
+    /// - `Err(msg)`: Parse error
+    pub fn load_merges_from_text(&mut self, data: &str) -> Result<(), &'static str> {
+        self.merges.clear();
+        self.merge_priority.clear();
+
+        for (idx, line) in data.lines().enumerate() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() < 2 {
+                return Err("Invalid merge format: expected 'left right'");
+            }
+
+            let left = hex_decode(parts[0])?;
+            let right = hex_decode(parts[1])?;
+
+            self.merge_priority.insert((left.clone(), right.clone()), idx);
+            self.merges.push((left, right));
+        }
+
+        Ok(())
+    }
+
+    /// Apply BPE merges to a sequence of tokens
+    ///
+    /// Iteratively finds and applies the highest-priority merge until no more merges are possible.
+    ///
+    /// # Arguments
+    ///
+    /// - `tokens`: Initial token sequence (byte-level)
+    ///
+    /// # Returns
+    ///
+    /// Merged token sequence
+    fn apply_bpe_merges(&self, mut tokens: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+        if self.merges.is_empty() || tokens.len() < 2 {
+            return tokens;
+        }
+
+        loop {
+            // Find best merge (highest priority = lowest index)
+            let mut best_merge: Option<(usize, usize)> = None;  // (position, priority)
+
+            for i in 0..(tokens.len() - 1) {
+                let pair = (tokens[i].clone(), tokens[i + 1].clone());
+                if let Some(&priority) = self.merge_priority.get(&pair) {
+                    if best_merge.is_none() || priority < best_merge.unwrap().1 {
+                        best_merge = Some((i, priority));
+                    }
+                }
+            }
+
+            // If no merge found, we're done
+            if best_merge.is_none() {
+                break;
+            }
+
+            let (pos, _) = best_merge.unwrap();
+
+            // Merge tokens at position pos and pos+1
+            let mut merged = tokens[pos].clone();
+            merged.extend_from_slice(&tokens[pos + 1]);
+
+            // Create new token sequence
+            let mut new_tokens = Vec::new();
+            for (i, token) in tokens.iter().enumerate() {
+                if i == pos {
+                    new_tokens.push(merged.clone());
+                } else if i == pos + 1 {
+                    // Skip - already merged
+                } else {
+                    new_tokens.push(token.clone());
+                }
+            }
+
+            tokens = new_tokens;
+
+            // Safety: prevent infinite loops
+            if tokens.len() == 1 {
+                break;
+            }
+        }
+
+        tokens
+    }
+
     /// Encode text to token IDs
     ///
-    /// Uses greedy longest-match algorithm:
-    /// 1. Find longest token matching current position
-    /// 2. Add token to output
-    /// 3. Advance position
-    /// 4. Repeat until end of text
+    /// Uses BPE merge algorithm if merges are loaded, otherwise falls back to greedy longest-match.
     ///
     /// # Arguments
     ///
@@ -304,6 +416,57 @@ impl BpeTokenizer {
     /// // tokens = [15496, 11, 995, 0]
     /// ```
     pub fn encode(&self, text: &str) -> Vec<u16> {
+        if !self.merges.is_empty() {
+            self.encode_bpe(text)
+        } else {
+            self.encode_greedy(text)
+        }
+    }
+
+    /// Encode text using BPE merge algorithm
+    ///
+    /// # Arguments
+    ///
+    /// - `text`: Input text to encode
+    ///
+    /// # Returns
+    ///
+    /// Vector of token IDs after applying BPE merges
+    fn encode_bpe(&self, text: &str) -> Vec<u16> {
+        let bytes = text.as_bytes();
+
+        // Start with byte-level tokens
+        let mut tokens: Vec<Vec<u8>> = bytes.iter().map(|&b| vec![b]).collect();
+
+        // Apply BPE merges
+        tokens = self.apply_bpe_merges(tokens);
+
+        // Convert byte sequences to token IDs
+        let mut result = Vec::new();
+        for token_bytes in tokens {
+            if let Some(&token_id) = self.reverse_vocab.get(&token_bytes) {
+                result.push(token_id);
+            } else {
+                // Unknown token - use UNK
+                result.push(UNK_TOKEN_ID);
+            }
+        }
+
+        result
+    }
+
+    /// Encode text using greedy longest-match algorithm
+    ///
+    /// This is a fallback for when BPE merges are not loaded.
+    ///
+    /// # Arguments
+    ///
+    /// - `text`: Input text to encode
+    ///
+    /// # Returns
+    ///
+    /// Vector of token IDs
+    fn encode_greedy(&self, text: &str) -> Vec<u16> {
         let mut tokens = Vec::new();
         let bytes = text.as_bytes();
 
@@ -640,5 +803,129 @@ mod tests {
         let stats = tokenizer.stats();
         assert_eq!(stats.vocab_size, 2);
         assert_eq!(stats.avg_token_len, 5.0); // Both tokens are 5 bytes
+    }
+
+    #[test]
+    fn test_load_merges() {
+        let merges = "48 65\n6c 6c\n6f 20";
+        let mut tokenizer = BpeTokenizer::new();
+        tokenizer.load_merges_from_text(merges).unwrap();
+
+        assert_eq!(tokenizer.merges.len(), 3);
+        assert_eq!(tokenizer.merges[0], (vec![0x48], vec![0x65])); // H + e
+        assert_eq!(tokenizer.merges[1], (vec![0x6c], vec![0x6c])); // l + l
+        assert_eq!(tokenizer.merges[2], (vec![0x6f], vec![0x20])); // o + space
+    }
+
+    #[test]
+    fn test_bpe_merging() {
+        // Create a simple tokenizer with byte-level vocab
+        let mut tokenizer = BpeTokenizer::new();
+
+        // Add byte-level tokens
+        for i in 0..=255u8 {
+            tokenizer.vocab.insert(i as u16, vec![i]);
+            tokenizer.reverse_vocab.insert(vec![i], i as u16);
+        }
+
+        // Add merged tokens
+        tokenizer.vocab.insert(256, vec![0x48, 0x65]); // "He"
+        tokenizer.reverse_vocab.insert(vec![0x48, 0x65], 256);
+
+        tokenizer.vocab.insert(257, vec![0x6c, 0x6c]); // "ll"
+        tokenizer.reverse_vocab.insert(vec![0x6c, 0x6c], 257);
+
+        tokenizer.vocab.insert(258, vec![0x6f, 0x20]); // "o "
+        tokenizer.reverse_vocab.insert(vec![0x6f, 0x20], 258);
+
+        // Load merge rules
+        let merges = "48 65\n6c 6c\n6f 20";
+        tokenizer.load_merges_from_text(merges).unwrap();
+
+        // Test encoding "Hello "
+        let tokens = tokenizer.encode("Hello ");
+
+        // Should merge: H+e -> He, l+l -> ll, o+space -> "o "
+        // Result: [He(256), ll(257), o (258)]
+        assert_eq!(tokens.len(), 3);
+        assert_eq!(tokens[0], 256); // He
+        assert_eq!(tokens[1], 257); // ll
+        assert_eq!(tokens[2], 258); // o<space>
+    }
+
+    #[test]
+    fn test_encode_decode_roundtrip() {
+        // Setup tokenizer with vocab and merges
+        let mut tokenizer = BpeTokenizer::new();
+
+        // Add byte-level tokens
+        for i in 0..=255u8 {
+            tokenizer.vocab.insert(i as u16, vec![i]);
+            tokenizer.reverse_vocab.insert(vec![i], i as u16);
+        }
+
+        // Add common merged tokens
+        tokenizer.vocab.insert(256, b"He".to_vec());
+        tokenizer.reverse_vocab.insert(b"He".to_vec(), 256);
+        tokenizer.vocab.insert(257, b"ll".to_vec());
+        tokenizer.reverse_vocab.insert(b"ll".to_vec(), 257);
+
+        // Load merges
+        tokenizer.load_merges_from_text("48 65\n6c 6c").unwrap();
+
+        // Encode and decode
+        let test_text = "Hello";
+        let tokens = tokenizer.encode(test_text);
+        let decoded = tokenizer.decode(&tokens);
+
+        // Verify roundtrip
+        assert_eq!(decoded, test_text);
+    }
+
+    #[test]
+    fn test_bpe_priority() {
+        // Test that earlier merges have higher priority
+        let mut tokenizer = BpeTokenizer::new();
+
+        // Setup byte-level vocab
+        for i in 0..=255u8 {
+            tokenizer.vocab.insert(i as u16, vec![i]);
+            tokenizer.reverse_vocab.insert(vec![i], i as u16);
+        }
+
+        // Add tokens for "abc"
+        tokenizer.vocab.insert(256, vec![b'a', b'b']); // "ab"
+        tokenizer.reverse_vocab.insert(vec![b'a', b'b'], 256);
+
+        tokenizer.vocab.insert(257, vec![b'b', b'c']); // "bc"
+        tokenizer.reverse_vocab.insert(vec![b'b', b'c'], 257);
+
+        // Load merges with different priorities
+        // First rule (higher priority): a+b -> ab
+        // Second rule (lower priority): b+c -> bc
+        let merges = "61 62\n62 63"; // a+b, b+c
+        tokenizer.load_merges_from_text(merges).unwrap();
+
+        // For input "abc", should merge "ab" first (higher priority)
+        // Result: [ab(256), c(99)]
+        let tokens = tokenizer.encode("abc");
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0], 256); // ab
+        assert_eq!(tokens[1], 99);  // c
+    }
+
+    #[test]
+    fn test_empty_and_edge_cases() {
+        let mut tokenizer = BpeTokenizer::new();
+
+        // Empty text
+        let tokens = tokenizer.encode("");
+        assert_eq!(tokens.len(), 0);
+
+        // Single character
+        tokenizer.vocab.insert(65, vec![b'A']);
+        tokenizer.reverse_vocab.insert(vec![b'A'], 65);
+        let tokens = tokenizer.encode("A");
+        assert_eq!(tokens, vec![65]);
     }
 }

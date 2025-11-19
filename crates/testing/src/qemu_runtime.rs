@@ -466,6 +466,11 @@ impl QEMURuntimeManager {
             .unwrap_or(7100) // Default monitor port
     }
 
+    /// Get access to serial writers for sending commands to QEMU instances
+    pub fn serial_writers(&self) -> Arc<Mutex<HashMap<usize, ChildStdin>>> {
+        Arc::clone(&self.serial_writers)
+    }
+
     pub async fn wait_for_boot(&self, node_id: usize, timeout_secs: u64) -> Result<bool, TestError> {
         log::info!("Waiting for instance {} to boot (timeout: {}s)", node_id, timeout_secs);
         

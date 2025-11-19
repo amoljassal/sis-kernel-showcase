@@ -32,6 +32,11 @@ pub mod phase7_ai_ops;
 pub mod phase8_deterministic;
 pub mod phase9_agentic;
 
+// Hardware backend abstraction for testing
+pub mod hardware_backend;
+pub mod backends;
+pub mod npu_backend;
+
 // Core test result types
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1392,7 +1397,13 @@ pub enum TestError {
     
     #[error("Validation failed: {message}")]
     ValidationError { message: String },
-    
+
+    #[error("Serial port error: {message}")]
+    SerialError { message: String },
+
+    #[error("Timeout error: {message}")]
+    TimeoutError { message: String },
+
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
     
