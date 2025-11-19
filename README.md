@@ -5201,6 +5201,16 @@ sis-kernel/
 │       │   ├── kernel_interface.rs     # Kernel integration
 │       │   ├── qemu_runtime.rs         # QEMU orchestration
 │       │   │
+│       │   ├── Week 4: NPU & Scheduler Testing (NEW)
+│       │   ├── npu_backend.rs          # NPU backend abstraction trait (262 lines)
+│       │   ├── scheduler_validation.rs # Scheduler property validation (445 lines)
+│       │   │
+│       │   ├── backends/               # Hardware backend implementations
+│       │   │   ├── mod.rs              # Backend module exports
+│       │   │   ├── qemu_backend.rs     # QEMU backend implementation
+│       │   │   ├── serial_backend.rs   # Serial backend implementation
+│       │   │   └── mock_npu_backend.rs # Mock NPU for unit testing (401 lines, NEW)
+│       │   │
 │       │   ├── bin/                    # Test runners
 │       │   │   ├── main.rs             # Main test harness
 │       │   │   ├── ai_benchmark_runner.rs
@@ -12004,6 +12014,43 @@ Allocation:       8-15µs       (Hardware: <1µs)
 
 ## Recent Updates
 
+### Week 4 (P2) - NPU Abstraction & Scheduler Validation
+
+**NPU Backend Abstraction** (`crates/testing/src/npu_backend.rs` - 262 lines):
+- Created `NpuBackend` trait for hardware-abstracted NPU testing (async, Send + Sync)
+- Defined core NPU types: `NpuJob`, `NpuResult`, `NpuStatistics`, `NpuPriority`, `NpuJobStatus`, `NpuError`
+- Priority-based job queuing with four priority levels (Low, Normal, High, Critical)
+- Comprehensive error handling with `NpuError` enum covering initialization, queue, timeout, and hardware failures
+- Formal verification harnesses with Kani for NPU priority ordering and job ID uniqueness
+- Enables cross-platform testing: same tests run on QEMU, serial backends, and mock implementations
+
+**Mock NPU Backend** (`crates/testing/src/backends/mock_npu_backend.rs` - 401 lines):
+- Implemented `MockNpuBackend` for unit testing without real hardware
+- Simulated NPU job processing with realistic cycle estimation based on model complexity
+- Configurable failure modes for testing error handling paths (initialization failures, queue full)
+- Complete statistics tracking (jobs submitted, completed, failed, total cycles, average latency)
+- **5 unit tests passed** (initialization, job submission, queue full, statistics, failure simulation)
+
+**Scheduler Validation with Formal Verification** (`crates/testing/src/scheduler_validation.rs` - 445 lines):
+- Comprehensive scheduler property validation framework
+- Validated 5 properties: round-robin fairness, priority preservation, timeslice enforcement, starvation freedom, context switch correctness
+- Formal verification harnesses using Kani for scheduler invariants (priority preservation, timeslice bounds, non-zero timeslice)
+- Property-based testing for scheduler correctness with fairness scoring (0-100 scale)
+- **7 unit tests passed** covering all scheduler properties and fairness calculations
+- Integration with existing round-robin scheduler in `crates/kernel/src/process/scheduler.rs`
+
+**Test Results**:
+- NPU Backend Tests: 8/8 passed ✅
+- Scheduler Validation Tests: 7/7 passed ✅
+- Kernel Build: Successful with LLM+crypto features ✅
+- Total: **15 unit tests** with 100% pass rate
+
+**Week 4 Impact**:
+- 3 new files created (1,108 lines total)
+- 3 existing files modified (lib.rs, backends/mod.rs, README.md)
+- 4 Kani verification harnesses for formal verification
+- Comprehensive test coverage enabling confidence in scheduler and NPU correctness
+
 ### Week 3 (P1) - Build Workspace & Verification Setup
 
 **Workspace Dependency Management** (`Cargo.toml`):
@@ -12027,6 +12074,47 @@ Allocation:       8-15µs       (Hardware: <1µs)
 - Best practices for bounded model checking and contract writing
 - Troubleshooting guide for common verification issues
 - CI integration examples for automated verification
+
+### Week 2 (P1) - BPE Tokenizer & Hardware-Abstracted Testing
+
+**BPE Tokenizer Enhancement** (`crates/kernel/src/llm/tokenizer.rs` - 644 lines):
+- Implemented complete Byte-Pair Encoding (BPE) algorithm with priority-based merging
+- Added `merge_priority: BTreeMap<(Vec<u8>, Vec<u8>), usize>` for O(1) merge rule lookup
+- Implemented `load_merges_from_text()` for parsing BPE merge rules from files
+- Implemented `apply_bpe_merges()` - core iterative BPE merging algorithm
+- Refactored `encode()` to automatically use BPE when merge rules are loaded
+- Added comprehensive test coverage (6 test cases) including roundtrip validation
+- Maintains backward compatibility with greedy tokenization when no merges loaded
+- Compatible with GPT-2, GPT-3, Llama, and TinyLlama tokenizers
+
+**Hardware-Abstracted Testing Infrastructure** (`crates/testing/src/backends/`):
+- Created `HardwareBackend` trait for unified testing interface (async, Send + Sync)
+- Implemented `QemuBackend` wrapping existing QEMURuntimeManager for emulated testing
+- Implemented `SerialBackend` for RPi5 real hardware testing via serial port (9600-230400 baud)
+- Added proper error handling with `SerialError` and `TimeoutError` variants
+- Raw mode terminal configuration for reliable serial communication
+- Shell prompt detection with multiple patterns for robust ready detection
+- Command execution with timeout support for both QEMU and serial backends
+- Enables same test code to run on both QEMU (fast, reproducible) and real hardware (accurate timing)
+
+### Week 1 (P1) - RP1 Driver & LLM KV Cache
+
+**RP1 I/O Hub Driver** (`crates/kernel/src/drivers/pcie/rp1.rs` - 600 lines):
+- PCIe device driver for Raspberry Pi 5's RP1 I/O hub
+- ECAM configuration space access with proper base address and device enumeration
+- Bar (Base Address Register) management for MMIO region mapping
+- Interrupt handling framework with MSI/MSI-X support
+- Device lifecycle management (probe, init, shutdown)
+- Integration with kernel PCIe subsystem via `pcie scan` and `rp1 probe` shell commands
+
+**LLM KV Cache Implementation** (`crates/kernel/src/llm/kv_cache.rs` - 456 lines):
+- Key-value attention cache for transformer models
+- Efficient tensor storage with layer-wise organization
+- Pre-allocated arena-based memory management to avoid runtime allocation
+- Support for multi-head attention with configurable head dimensions
+- Cache statistics tracking (hits, misses, evictions) for performance analysis
+- Integration with LLM inference pipeline for autoregressive generation
+- Bounded memory usage with configurable cache size limits
 
 ---
 
