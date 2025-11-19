@@ -39,7 +39,7 @@ pub struct RamRange {
 }
 
 /// Platform trait provides device descriptors and ranges.
-pub trait Platform {
+pub trait Platform: Sync {
     fn uart(&self) -> UartDesc;
     fn gic(&self) -> GicDesc;
     fn timer(&self) -> TimerDesc;
@@ -56,27 +56,35 @@ pub mod rpi5;
 
 /// Platform type enumeration
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
 pub enum PlatformType {
     /// QEMU aarch64 virt machine
-    QemuVirt,
+    QemuVirt = 0,
     /// Raspberry Pi 5 (BCM2712)
-    RaspberryPi5,
+    RaspberryPi5 = 1,
     /// Unknown/generic platform
-    Unknown,
+    Unknown = 2,
 }
 
-/// Return the active platform implementation
-static mut ACTIVE_OVERRIDE: Option<&'static dyn Platform> = None;
-static mut DETECTED_PLATFORM: PlatformType = PlatformType::Unknown;
+use core::sync::atomic::{AtomicU8, Ordering};
+use spin::Once;
 
-#[allow(static_mut_refs)]
+/// Return the active platform implementation
+static ACTIVE_PLATFORM: Once<&'static dyn Platform> = Once::new();
+static DETECTED_PLATFORM: AtomicU8 = AtomicU8::new(PlatformType::Unknown as u8);
+
 pub fn active() -> &'static dyn Platform {
-    unsafe { ACTIVE_OVERRIDE.unwrap_or(&qemu_virt::INSTANCE) }
+    ACTIVE_PLATFORM.get().copied().unwrap_or(&qemu_virt::INSTANCE)
 }
 
 /// Get the detected platform type
 pub fn detected_type() -> PlatformType {
-    unsafe { DETECTED_PLATFORM }
+    match DETECTED_PLATFORM.load(Ordering::Acquire) {
+        0 => PlatformType::QemuVirt,
+        1 => PlatformType::RaspberryPi5,
+        2 => PlatformType::Unknown,
+        _ => PlatformType::Unknown,
+    }
 }
 
 /// Try to override the active platform by parsing a provided DTB pointer.
@@ -89,9 +97,8 @@ pub fn detected_type() -> PlatformType {
 ///
 /// # Safety
 /// Must be called with a valid FDT pointer during early boot, before the platform is used.
-#[allow(static_mut_refs)]
 pub unsafe fn override_with_dtb(dtb_ptr: *const u8) -> bool {
-    if ACTIVE_OVERRIDE.is_some() { return true; }
+    if ACTIVE_PLATFORM.get().is_some() { return true; }
 
     // Parse the FDT first
     if let Some(p) = dt::from_dtb(dtb_ptr) {
@@ -100,24 +107,24 @@ pub unsafe fn override_with_dtb(dtb_ptr: *const u8) -> bool {
 
         crate::info!("Platform detected: {:?}", platform_type);
 
-        // Set the detected platform type
-        DETECTED_PLATFORM = platform_type;
+        // Set the detected platform type atomically
+        DETECTED_PLATFORM.store(platform_type as u8, Ordering::Release);
 
         // Select the appropriate platform implementation
         match platform_type {
             PlatformType::RaspberryPi5 => {
                 // Use the FDT-based platform for RPi5
                 // This gives us access to all the parsed device information
-                ACTIVE_OVERRIDE = Some(p);
+                ACTIVE_PLATFORM.call_once(|| p);
                 rpi5::init_hardware();
             }
             PlatformType::QemuVirt => {
                 // Use the FDT-based platform for QEMU as well
-                ACTIVE_OVERRIDE = Some(p);
+                ACTIVE_PLATFORM.call_once(|| p);
             }
             PlatformType::Unknown => {
                 // Default to FDT-based platform
-                ACTIVE_OVERRIDE = Some(p);
+                ACTIVE_PLATFORM.call_once(|| p);
                 crate::warn!("Unknown platform, using FDT-based configuration");
             }
         }
@@ -125,7 +132,7 @@ pub unsafe fn override_with_dtb(dtb_ptr: *const u8) -> bool {
         true
     } else {
         crate::warn!("Failed to parse FDT, using default platform");
-        DETECTED_PLATFORM = PlatformType::QemuVirt;
+        DETECTED_PLATFORM.store(PlatformType::QemuVirt as u8, Ordering::Release);
         false
     }
 }

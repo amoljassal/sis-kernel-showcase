@@ -85,6 +85,12 @@ pub enum PcieError {
 
     /// BAR is not a memory BAR
     NoBar,
+
+    /// PCIe subsystem not initialized
+    NotInitialized,
+
+    /// Requested feature not supported by device
+    UnsupportedFeature,
 }
 
 impl From<PcieError> for DriverError {
@@ -100,14 +106,18 @@ impl From<PcieError> for DriverError {
             PcieError::NoDevice => DriverError::DeviceNotFound,
             PcieError::InvalidBar => DriverError::DeviceNotFound,
             PcieError::NoBar => DriverError::DeviceNotFound,
+            PcieError::NotInitialized => DriverError::NotInitialized,
+            PcieError::UnsupportedFeature => DriverError::NotSupported,
         }
     }
 }
 
+use spin::Mutex;
+
 /// Global PCIe state
 struct PcieState {
-    /// ECAM accessor
-    ecam: ecam::Ecam,
+    /// ECAM accessor (thread-safe via Mutex)
+    ecam: Mutex<ecam::Ecam>,
 
     /// RP1 driver (if detected)
     rp1: Option<rp1::Rp1Driver>,
@@ -167,9 +177,9 @@ pub fn initialize() -> DriverResult<()> {
     crate::info!("[PCIe] Initializing RP1 I/O Hub...");
     let rp1 = rp1::initialize_rp1(&ecam)?;
 
-    // Store global state
+    // Store global state (wrap ECAM in Mutex for thread safety)
     PCIE_STATE.call_once(|| PcieState {
-        ecam,
+        ecam: Mutex::new(ecam),
         rp1: Some(rp1),
         initialized: AtomicBool::new(true),
     });
@@ -187,11 +197,26 @@ pub fn is_initialized() -> bool {
         .unwrap_or(false)
 }
 
-/// Get ECAM accessor
+/// Execute a closure with exclusive access to the ECAM accessor
 ///
-/// Returns a reference to the ECAM accessor if PCIe is initialized.
-pub fn get_ecam() -> Option<&'static ecam::Ecam> {
-    PCIE_STATE.get().map(|state| &state.ecam)
+/// This is the thread-safe way to access PCIe configuration space.
+/// The closure receives a reference to the ECAM accessor and can perform
+/// configuration reads/writes atomically.
+///
+/// # Example
+/// ```
+/// pcie::with_ecam(|ecam| {
+///     let vendor = ecam.read_config_u16(addr, 0)?;
+///     Ok(())
+/// })?;
+/// ```
+pub fn with_ecam<F, R>(f: F) -> DriverResult<R>
+where
+    F: FnOnce(&ecam::Ecam) -> DriverResult<R>,
+{
+    let state = PCIE_STATE.get().ok_or(PcieError::NotInitialized)?;
+    let ecam = state.ecam.lock();
+    f(&ecam)
 }
 
 /// Get RP1 driver
@@ -213,8 +238,7 @@ pub fn get_rp1() -> Option<&'static rp1::Rp1Driver> {
 /// # Returns
 /// Vector of PCIe device information, or error if PCIe not initialized
 pub fn scan_bus(bus: u8) -> DriverResult<alloc::vec::Vec<ecam::PciDevice>> {
-    let ecam = get_ecam().ok_or(DriverError::NotInitialized)?;
-    Ok(ecam.scan_bus(bus))
+    with_ecam(|ecam| Ok(ecam.scan_bus(bus)))
 }
 
 /// Find devices by vendor and device ID
@@ -243,8 +267,7 @@ pub fn find_devices(vendor_id: u16, device_id: u16) -> DriverResult<alloc::vec::
 /// # Returns
 /// Device information, or error if device not found or PCIe not initialized
 pub fn get_device_info(address: ecam::PciAddress) -> DriverResult<ecam::PciDevice> {
-    let ecam = get_ecam().ok_or(DriverError::NotInitialized)?;
-    ecam.read_device_info(address)
+    with_ecam(|ecam| ecam.read_device_info(address))
 }
 
 #[cfg(test)]

@@ -69,15 +69,18 @@ impl super::Shell {
         unsafe {
             crate::uart_print(b"\n=== PCIe Subsystem Status ===\n");
 
-            if let Some(ecam) = pcie::get_ecam() {
-                crate::uart_print(b"ECAM Base:  0x");
-                self.print_hex(ecam.base() as u64);
-                crate::uart_print(b"\n");
+            let _ = pcie::with_ecam(|ecam| {
+                unsafe {
+                    crate::uart_print(b"ECAM Base:  0x");
+                    self.print_hex(ecam.base() as u64);
+                    crate::uart_print(b"\n");
 
-                crate::uart_print(b"ECAM Size:  0x");
-                self.print_hex(ecam.size() as u64);
-                crate::uart_print(b"\n");
-            }
+                    crate::uart_print(b"ECAM Size:  0x");
+                    self.print_hex(ecam.size() as u64);
+                    crate::uart_print(b"\n");
+                }
+                Ok(())
+            });
 
             if let Some(rp1) = pcie::get_rp1() {
                 crate::uart_print(b"\nRP1 I/O Hub: Present\n");
@@ -161,7 +164,7 @@ impl super::Shell {
                 self.print_pcie_device_detailed(&dev);
 
                 // Try to read BARs
-                if let Some(ecam) = pcie::get_ecam() {
+                let _ = pcie::with_ecam(|ecam| {
                     unsafe {
                         crate::uart_print(b"\nBase Address Registers:\n");
                     }
@@ -211,7 +214,8 @@ impl super::Shell {
                             }
                         }
                     }
-                }
+                    Ok(())
+                });
 
                 unsafe {
                     crate::uart_print(b"\n");

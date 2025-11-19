@@ -48,6 +48,19 @@ pub const PCI_CLASS_CODE: u16 = 0x09;
 /// PCIe Header Type register offset
 pub const PCI_HEADER_TYPE: u16 = 0x0E;
 
+/// PCIe Capabilities Pointer register offset
+pub const PCI_CAPABILITY_LIST: u16 = 0x34;
+
+/// PCIe capability IDs
+pub mod capability {
+    /// MSI (Message Signaled Interrupts) capability ID
+    pub const MSI: u8 = 0x05;
+    /// MSI-X (Extended Message Signaled Interrupts) capability ID
+    pub const MSIX: u8 = 0x11;
+    /// PCI Express capability ID
+    pub const PCIE: u8 = 0x10;
+}
+
 /// PCIe Base Address Register 0 offset
 pub const PCI_BAR0: u16 = 0x10;
 
@@ -230,6 +243,46 @@ impl PciDevice {
     pub fn prog_interface(&self) -> u8 {
         (self.class_code & 0xFF) as u8
     }
+}
+
+/// MSI (Message Signaled Interrupts) capability structure
+#[derive(Debug, Clone, Copy)]
+pub struct MsiCapability {
+    /// Offset of capability in config space
+    pub offset: u16,
+    /// Message Control register value
+    pub control: u16,
+    /// Message Address (low 32 bits)
+    pub address_low: u32,
+    /// Message Address (high 32 bits, if 64-bit capable)
+    pub address_high: Option<u32>,
+    /// Message Data
+    pub data: u16,
+    /// Number of vectors capable (1, 2, 4, 8, 16, 32)
+    pub vectors_capable: u8,
+    /// Whether this is a 64-bit address capable device
+    pub is_64bit: bool,
+    /// Whether per-vector masking is supported
+    pub per_vector_masking: bool,
+}
+
+/// MSI-X (Extended Message Signaled Interrupts) capability structure
+#[derive(Debug, Clone, Copy)]
+pub struct MsixCapability {
+    /// Offset of capability in config space
+    pub offset: u16,
+    /// Message Control register value
+    pub control: u16,
+    /// Table size (N-1, where N is number of entries)
+    pub table_size: u16,
+    /// BAR indicator for MSI-X table
+    pub table_bar: u8,
+    /// Offset into BAR for MSI-X table
+    pub table_offset: u32,
+    /// BAR indicator for Pending Bit Array
+    pub pba_bar: u8,
+    /// Offset into BAR for PBA
+    pub pba_offset: u32,
 }
 
 /// ECAM configuration space accessor
@@ -496,6 +549,225 @@ impl Ecam {
         }
 
         devices
+    }
+
+    /// Find a specific capability in the device's capability list
+    ///
+    /// Walks the capability linked list starting from the capabilities pointer
+    /// and returns the offset of the first capability matching the given ID.
+    ///
+    /// # Arguments
+    /// * `addr` - PCI address of the device
+    /// * `cap_id` - Capability ID to search for (e.g., capability::MSI, capability::MSIX)
+    ///
+    /// # Returns
+    /// * `Ok(Some(offset))` - Capability found at the given offset
+    /// * `Ok(None)` - Capability not found
+    /// * `Err(_)` - Error reading config space
+    pub fn find_capability(&self, addr: PciAddress, cap_id: u8) -> DriverResult<Option<u16>> {
+        // Read capabilities pointer from header
+        let cap_ptr = self.read_u8(addr, PCI_CAPABILITY_LIST)? as u16;
+
+        // Check if capabilities are supported (pointer is non-zero)
+        if cap_ptr == 0 {
+            return Ok(None);
+        }
+
+        // Walk the capability list (max 48 iterations to prevent infinite loops)
+        let mut offset = cap_ptr;
+        for _ in 0..48 {
+            if offset == 0 {
+                break;
+            }
+
+            // Read capability ID and next pointer
+            let cap_header = self.read_u16(addr, offset)?;
+            let id = (cap_header & 0xFF) as u8;
+            let next = ((cap_header >> 8) & 0xFF) as u16;
+
+            if id == cap_id {
+                return Ok(Some(offset));
+            }
+
+            offset = next;
+        }
+
+        Ok(None)
+    }
+
+    /// Read MSI capability structure
+    ///
+    /// Parses the MSI capability if present, extracting control register,
+    /// address, data, and capability flags.
+    ///
+    /// # Returns
+    /// * `Ok(Some(msi))` - MSI capability found and parsed
+    /// * `Ok(None)` - MSI capability not present
+    /// * `Err(_)` - Error reading config space
+    pub fn read_msi_capability(&self, addr: PciAddress) -> DriverResult<Option<MsiCapability>> {
+        let offset = match self.find_capability(addr, capability::MSI)? {
+            Some(off) => off,
+            None => return Ok(None),
+        };
+
+        // Read Message Control register (offset + 2)
+        let control = self.read_u16(addr, offset + 2)?;
+
+        // Parse control register flags
+        let is_64bit = (control & (1 << 7)) != 0;
+        let per_vector_masking = (control & (1 << 8)) != 0;
+        let mmc = ((control >> 1) & 0x7) as u8; // Multiple Message Capable
+        let vectors_capable = 1u8 << mmc;
+
+        // Read Message Address (offset + 4)
+        let address_low = self.read_u32(addr, offset + 4)?;
+
+        // Read Message Address High (offset + 8, if 64-bit capable)
+        let address_high = if is_64bit {
+            Some(self.read_u32(addr, offset + 8)?)
+        } else {
+            None
+        };
+
+        // Read Message Data (offset varies based on 64-bit capability)
+        let data_offset = if is_64bit { offset + 12 } else { offset + 8 };
+        let data = self.read_u16(addr, data_offset)?;
+
+        Ok(Some(MsiCapability {
+            offset,
+            control,
+            address_low,
+            address_high,
+            data,
+            vectors_capable,
+            is_64bit,
+            per_vector_masking,
+        }))
+    }
+
+    /// Read MSI-X capability structure
+    ///
+    /// Parses the MSI-X capability if present, extracting table information
+    /// and PBA (Pending Bit Array) details.
+    ///
+    /// # Returns
+    /// * `Ok(Some(msix))` - MSI-X capability found and parsed
+    /// * `Ok(None)` - MSI-X capability not present
+    /// * `Err(_)` - Error reading config space
+    pub fn read_msix_capability(&self, addr: PciAddress) -> DriverResult<Option<MsixCapability>> {
+        let offset = match self.find_capability(addr, capability::MSIX)? {
+            Some(off) => off,
+            None => return Ok(None),
+        };
+
+        // Read Message Control register (offset + 2)
+        let control = self.read_u16(addr, offset + 2)?;
+        let table_size = (control & 0x7FF) + 1; // Table Size is N-1
+
+        // Read Table Offset/BIR (offset + 4)
+        let table_bir = self.read_u32(addr, offset + 4)?;
+        let table_bar = (table_bir & 0x7) as u8;
+        let table_offset = table_bir & !0x7;
+
+        // Read PBA Offset/BIR (offset + 8)
+        let pba_bir = self.read_u32(addr, offset + 8)?;
+        let pba_bar = (pba_bir & 0x7) as u8;
+        let pba_offset = pba_bir & !0x7;
+
+        Ok(Some(MsixCapability {
+            offset,
+            control,
+            table_size,
+            table_bar,
+            table_offset,
+            pba_bar,
+            pba_offset,
+        }))
+    }
+
+    /// Enable MSI interrupts for a device
+    ///
+    /// Configures the MSI capability with the specified address, data, and number of vectors.
+    /// The device must have MSI capability.
+    ///
+    /// # Arguments
+    /// * `addr` - PCI address of the device
+    /// * `address` - 64-bit MSI target address
+    /// * `data` - MSI data value
+    /// * `num_vectors` - Number of vectors to enable (1, 2, 4, 8, 16, or 32)
+    ///
+    /// # Returns
+    /// * `Ok(())` - MSI successfully configured and enabled
+    /// * `Err(_)` - MSI not supported or configuration failed
+    pub fn enable_msi(
+        &self,
+        addr: PciAddress,
+        address: u64,
+        data: u16,
+        num_vectors: u8,
+    ) -> DriverResult<()> {
+        let msi = self.read_msi_capability(addr)?
+            .ok_or(PcieError::UnsupportedFeature)?;
+
+        // Validate requested vectors
+        if num_vectors == 0 || num_vectors > msi.vectors_capable {
+            return Err(PcieError::UnsupportedFeature.into());
+        }
+
+        // Calculate MME (Multiple Message Enable) field
+        let mme = match num_vectors {
+            1 => 0,
+            2 => 1,
+            4 => 2,
+            8 => 3,
+            16 => 4,
+            32 => 5,
+            _ => return Err(PcieError::UnsupportedFeature.into()),
+        };
+
+        // Write Message Address Low
+        self.write_u32(addr, msi.offset + 4, address as u32)?;
+
+        // Write Message Address High (if 64-bit capable)
+        if msi.is_64bit {
+            self.write_u32(addr, msi.offset + 8, (address >> 32) as u32)?;
+        }
+
+        // Write Message Data
+        let data_offset = if msi.is_64bit { msi.offset + 12 } else { msi.offset + 8 };
+        self.write_u16(addr, data_offset, data)?;
+
+        // Update Message Control: set MME and enable MSI
+        let mut control = msi.control;
+        control = (control & !0x70) | ((mme & 0x7) << 4); // Set MME field
+        control |= 1; // MSI Enable bit
+        self.write_u16(addr, msi.offset + 2, control)?;
+
+        Ok(())
+    }
+
+    /// Enable MSI-X interrupts for a device
+    ///
+    /// Enables MSI-X capability. The caller is responsible for programming
+    /// the MSI-X table and PBA through the BAR regions.
+    ///
+    /// # Arguments
+    /// * `addr` - PCI address of the device
+    ///
+    /// # Returns
+    /// * `Ok(())` - MSI-X successfully enabled
+    /// * `Err(_)` - MSI-X not supported or enable failed
+    pub fn enable_msix(&self, addr: PciAddress) -> DriverResult<()> {
+        let msix = self.read_msix_capability(addr)?
+            .ok_or(PcieError::UnsupportedFeature)?;
+
+        // Update Message Control: enable MSI-X and unmask function
+        let mut control = msix.control;
+        control |= (1 << 15); // MSI-X Enable bit
+        control &= !(1 << 14); // Function Mask (0 = unmasked)
+        self.write_u16(addr, msix.offset + 2, control)?;
+
+        Ok(())
     }
 }
 
