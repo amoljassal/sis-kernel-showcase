@@ -31,29 +31,30 @@ name = "formal-verification-runner"
 path = "src/bin/formal_verification_runner.rs"
 
 [dependencies]
-tokio = { version = "1.35", features = ["full", "net"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
-libc = "0.2"
-anyhow = "1.0"
-thiserror = "1.0"
-log = "0.4"
-env_logger = "0.11"
-rand = "0.8"
-nix = { version = "0.27", features = ["process", "term"] }
-async-trait = "0.1"
+# Use workspace dependencies for consistency
+tokio = { workspace = true, features = ["net"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+libc = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+rand = { workspace = true }
+nix = { workspace = true }
+async-trait = { workspace = true }
 
 # Formal verification (optional)
-kani = { version = "0.0.1", optional = true }
+kani-verifier = { workspace = true, optional = true }
 
 # Prusti contracts for verification (optional)
-prusti-contracts = { version = "0.1.0", optional = true }
+prusti-contracts = { workspace = true, optional = true }
 
 [dev-dependencies]
 
 # Testing utilities
-tempfile = "3.8"
+tempfile = { workspace = true }
 
 [features]
 default = ["qemu-tests", "performance-tests", "correctness-tests"]
@@ -71,7 +72,7 @@ ext4-stress-test = []
 property-based-tests = ["dep:proptest", "dep:quickcheck"]
 
 # Formal verification support (off by default)
-formal-verification = ["dep:kani", "dep:prusti-contracts"]
+formal-verification = ["dep:kani-verifier", "dep:prusti-contracts"]
 
 # Integration with existing kernel
 kernel-integration = []
@@ -94,9 +95,9 @@ strict = [
 ]
 
 [dependencies.proptest]
-version = "1.4"
+workspace = true
 optional = true
 
 [dependencies.quickcheck]
-version = "1.0"
+workspace = true
 optional = true

@@ -12002,6 +12002,34 @@ Allocation:       8-15µs       (Hardware: <1µs)
 
 ---
 
+## Recent Updates
+
+### Week 3 (P1) - Build Workspace & Verification Setup
+
+**Workspace Dependency Management** (`Cargo.toml`):
+- Added `[workspace.dependencies]` for centralized version management across crates
+- Unified versions for tokio, serde, chrono, anyhow, thiserror, and 20+ other dependencies
+- Reduced duplication between `sis-testing` and `sisctl` daemon crates
+- Faster builds through workspace-level dependency caching
+- Easier dependency updates with single source of truth
+
+**Formal Verification Setup** (`crates/testing/`):
+- Integrated Kani model checker (v0.40) for bounded model checking
+- Integrated Prusti contracts (v0.1.0) for functional correctness verification
+- Added `formal-verification` feature flag for optional verification builds
+- Created comprehensive verification documentation (`docs/VERIFICATION.md`)
+- Example proof harnesses for backend lifecycle and tokenizer properties
+- CI/CD ready verification workflows for GitHub Actions
+
+**Documentation Enhancements** (`docs/VERIFICATION.md`):
+- Complete guide to Kani and Prusti installation and usage
+- Example verification harnesses for hardware backend and tokenizer
+- Best practices for bounded model checking and contract writing
+- Troubleshooting guide for common verification issues
+- CI integration examples for automated verification
+
+---
+
 ## Roadmap (near term)
 
 **Completed:**
