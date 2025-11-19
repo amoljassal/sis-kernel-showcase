@@ -272,6 +272,27 @@ This section reflects what is implemented today in the codebase when running und
 
 See also “Known Limitations & Feature Status” below for a compact matrix.
 
+### Recent Improvements (2025-01-20)
+
+**P0 Critical Fixes - Code Quality & Safety:**
+
+- **Modular Initialization Architecture**: Refactored monolithic `main.rs` from 2,388 lines to 916 lines (61% reduction)
+  - Created `init/` module with 5 clean phases: `early_init`, `platform_init`, `memory_init`, `subsystem_init`, `driver_init`, `late_init`
+  - Each phase uses proper `Result<(), KernelError>` for comprehensive error propagation
+  - Clear separation of concerns: MMU/heap setup → platform detection → memory subsystems → VFS/network/graphics → GIC/interrupts/SMP
+  - Location: `crates/kernel/src/init/{mod.rs,error.rs,phases.rs}`
+
+- **PCIe Thread Safety & MSI Support**:
+  - Wrapped ECAM accessor in `Mutex<ecam::Ecam>` to prevent SMP race conditions
+  - Implemented complete MSI/MSI-X interrupt support (capability discovery, enable/disable/mask operations)
+  - Added `with_ecam()` closure-based API enforcing exclusive access
+  - Removed unsafe global `get_ecam()` function
+  - Location: `crates/kernel/src/drivers/pcie/{ecam.rs,mod.rs}` (~300 lines of MSI/MSI-X code)
+
+- **Error Handling**: Comprehensive `KernelError` enum with specific variants (`EarlyInit`, `PlatformInit`, `MemoryInit`, `DriverInit`, `SubsystemInit`, `LateInit`, `InvalidExceptionLevel`) providing clear failure context
+
+**Benefits**: Improved maintainability, proper error propagation, SMP-safe PCIe operations, modern interrupt support, cleaner architecture
+
 ### Raspberry Pi 5 Hardware Enablement (WIP)
 
 Implemented toward the plan in `docs/plans/IMPLEMENTATION_PLAN_RPI5_HARDWARE.md` (validated in QEMU unless noted):
