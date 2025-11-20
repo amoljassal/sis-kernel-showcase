@@ -3,6 +3,7 @@
 
 use crate::lib::error::Errno;
 use core::arch::asm;
+use core::sync::atomic::Ordering;
 
 /// Saved register state on exception
 #[repr(C)]
@@ -192,9 +193,46 @@ pub extern "C" fn handle_irq(frame: &mut TrapFrame) {
         } else {
             crate::process::scheduler::timer_tick();
         }
+
+        // Rearm EL1 physical timer (PPI 30) for the next tick.
+        // Without this, the timer line stays asserted and the CPU livelocks in IRQs,
+        // which blocks shell input.
+        #[cfg(target_arch = "aarch64")]
+        unsafe {
+            let mut frq: u64;
+            asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
+            if frq == 0 {
+                frq = crate::platform::active().timer().freq_hz;
+            }
+
+            // Use the autonomy decision interval when available, otherwise fall back to 1s.
+            let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL
+                .decision_interval_ms
+                .load(Ordering::Relaxed)
+                .clamp(100, 60_000);
+            let cycles = (frq / 1000).saturating_mul(interval_ms as u64);
+
+            // Program a relative timeout clears ISTATUS and de-asserts the interrupt line.
+            asm!("msr cntp_tval_el0, {x}", x = in(reg) cycles);
+            let ctl_on: u64 = 1; // ENABLE=1, IMASK=0
+            asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl_on);
+            asm!("isb", options(nostack, preserves_flags));
+        }
+
+        // Kick the autonomy tick when enabled and ready
+        if crate::autonomy::AUTONOMOUS_CONTROL.is_enabled()
+            && crate::autonomy::AUTONOMY_READY.load(Ordering::Acquire)
+        {
+            crate::autonomy::autonomous_decision_tick();
+        }
     } else if irq_num < 16 {
         // Software Generated Interrupt (SGI) - IPI
-        if crate::smp::ipi::handle_ipi(irq_num) {
+        if irq_num == 0 {
+            // Debug test SGI
+            unsafe {
+                crate::uart_print(b"[DEBUG] SGI 0 received! IRQ path works!\n");
+            }
+        } else if crate::smp::ipi::handle_ipi(irq_num) {
             // IPI handled successfully
         } else {
             crate::warn!("Unexpected SGI: {}", irq_num);

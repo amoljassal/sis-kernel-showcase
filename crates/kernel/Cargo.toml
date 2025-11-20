@@ -95,6 +95,12 @@ benchmarks = []       # Benchmark suite and performance tests
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(have_initramfs_models)'] }
 
+[profile.dev]
+codegen-units = 1  # Required to avoid duplicate symbols from global_asm!
+
+[profile.release]
+codegen-units = 1  # Required to avoid duplicate symbols from global_asm!
+
 [build-dependencies]
 chrono = "0.4"
 

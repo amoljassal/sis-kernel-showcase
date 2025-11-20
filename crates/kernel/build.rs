@@ -10,6 +10,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
+    // Assembly files (vectors.S, switch.S) are included via global_asm! in mod.rs
+    // No need to compile them separately here
+    println!("cargo:rerun-if-changed=src/arch/aarch64/vectors.S");
+    println!("cargo:rerun-if-changed=src/arch/aarch64/switch.S");
+
     // Get git information
     let git_commit = get_git_commit();
     let git_branch = get_git_branch();

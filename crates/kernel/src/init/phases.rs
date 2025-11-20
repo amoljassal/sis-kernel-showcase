@@ -572,36 +572,34 @@ pub unsafe fn late_init() -> KernelResult<()> {
     #[cfg(all(target_arch = "aarch64", feature = "bringup"))]
     {
         crate::autonomy::AUTONOMOUS_CONTROL.enable();
-        // Disable timer first
-        let ctl_off: u64 = 0;
-        asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl_off);
-        asm!("dsb sy; isb");
-        let clear_val: u64 = 1;
-        asm!("msr cntp_tval_el0, {x}", x = in(reg) clear_val);
-        asm!("isb");
 
         // Compute timer interval
         let mut frq: u64;
         asm!("mrs {x}, cntfrq_el0", x = out(reg) frq);
+        if frq == 0 {
+            frq = 62_500_000; // Default 62.5 MHz
+        }
         let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL
             .decision_interval_ms
             .load(core::sync::atomic::Ordering::Relaxed)
             .clamp(100, 60_000);
-        let cycles = if frq > 0 {
-            (frq / 1000).saturating_mul(interval_ms)
-        } else {
-            (62_500u64).saturating_mul(interval_ms)
-        };
-        let mut now: u64;
-        asm!("mrs {x}, cntpct_el0", x = out(reg) now);
-        let next = now.saturating_add(cycles);
+        let cycles = (frq / 1000).saturating_mul(interval_ms);
 
-        asm!("msr cntp_cval_el0, {x}", x = in(reg) next);
+        // Use TVAL (relative timer) instead of CVAL (absolute compare)
+        // This is simpler and avoids issues with counter overflow
+        asm!("msr cntp_tval_el0, {x}", x = in(reg) cycles);
         asm!("isb");
-        let ctl_on: u64 = 1;
+
+        let ctl_on: u64 = 1; // ENABLE=1, IMASK=0
         asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl_on);
         asm!("isb");
+
         crate::uart_print(b"[AUTOCTL] Autonomous mode ENABLED at boot (bringup)\n");
+        crate::uart_print(b"[AUTOCTL] Timer interval: ");
+        crate::bringup::print_number(interval_ms as usize);
+        crate::uart_print(b"ms (");
+        crate::bringup::print_number(cycles as usize);
+        crate::uart_print(b" cycles)\n");
     }
 
     // Print build info

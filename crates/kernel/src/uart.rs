@@ -171,15 +171,9 @@ impl Uart {
 
     /// Read a byte with blocking wait
     pub unsafe fn read_byte_blocking(&self) -> u8 {
-        // Debug: periodically print a dot to show we're alive
-        let mut iterations = 0u32;
         loop {
             if let Some(byte) = self.read_byte() {
                 return byte;
-            }
-            iterations += 1;
-            if iterations % 10_000_000 == 0 {
-                self.write_byte(b'.');
             }
             core::hint::spin_loop();
         }
@@ -399,6 +393,14 @@ pub fn print_hex8(n: u8) {
 pub unsafe fn print_hex_u32(n: u32) {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
     for i in (0..8).rev() {
+        let nibble = ((n >> (i * 4)) & 0xF) as usize;
+        write_byte(HEX[nibble]);
+    }
+}
+
+pub unsafe fn print_hex_u64(n: u64) {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    for i in (0..16).rev() {
         let nibble = ((n >> (i * 4)) & 0xF) as usize;
         write_byte(HEX[nibble]);
     }

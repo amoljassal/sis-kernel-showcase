@@ -325,11 +325,6 @@ mod bringup {
     struct Table512([u64; 512]);
     static mut L1_TABLE: Table512 = Table512([0; 512]);
 
-    // Simple EL-aware VBAR install and UART helper from outer module
-    extern "C" {
-        static VECTORS: u8;
-    }
-
     pub unsafe fn run() {
         // 1) Install stack
         let stack_ptr = &raw const BOOT_STACK.0;
@@ -584,7 +579,8 @@ mod bringup {
 
         // Try direct write of full register
         // PPI 30 is in bits [15:8] of this register (30 % 4 = 2, so shift by 16)
-        let prio_val: u32 = 0x60606060; // Set all 4 priorities to 0x60
+        // Use priority 0 (highest priority) to ensure it's < PMR (0xF8)
+        let prio_val: u32 = 0x00000000; // Set all 4 priorities to 0 (highest)
         super::uart_print(b"  Writing priority register 0x");
         print_number(prio_val as usize);
         super::uart_print(b" to offset ");
@@ -603,12 +599,10 @@ mod bringup {
         let actual_prio = (prio_check >> shift) & 0xFF;
         super::uart_print(b"  PPI 30 priority: ");
         print_number(actual_prio as usize);
-        if actual_prio == 0x60 {
-            super::uart_print(b" (OK - set to 96)\n");
-        } else if actual_prio == 0 {
-            super::uart_print(b" (ERROR - still 0!)\n");
+        if actual_prio == 0 {
+            super::uart_print(b" (OK - set to 0, highest priority)\n");
         } else {
-            super::uart_print(b" (unexpected value)\n");
+            super::uart_print(b" (unexpected value, wanted 0)\n");
         }
 
         // 5) Enable PPI 30 with retries
@@ -857,6 +851,7 @@ mod bringup {
 
     pub unsafe fn timer_init_1hz() {
         use core::arch::asm;
+        use core::sync::atomic::Ordering;
         super::uart_print(b"[TIMER_INIT] Starting timer initialization...\n");
 
         let mut frq: u64;
@@ -865,10 +860,25 @@ mod bringup {
             frq = crate::platform::active().timer().freq_hz;
         }
 
-        // Set initial interval ~1s but don't enable
-        asm!("msr cntp_tval_el0, {x}", x = in(reg) frq);
-        let ctl: u64 = 0; // Timer configured but disabled
+        // Get autonomy interval (default 500ms)
+        let interval_ms = crate::autonomy::AUTONOMOUS_CONTROL
+            .decision_interval_ms
+            .load(Ordering::Relaxed)
+            .clamp(100, 60_000);
+        let cycles = (frq / 1000).saturating_mul(interval_ms as u64);
+
+        // Set timer interval and enable it if autonomous mode is enabled
+        asm!("msr cntp_tval_el0, {x}", x = in(reg) cycles);
+
+        // Enable timer if autonomous mode is on, otherwise leave disabled
+        let ctl: u64 = if crate::autonomy::AUTONOMOUS_CONTROL.is_enabled() {
+            1  // ENABLE=1, IMASK=0
+        } else {
+            0  // Timer configured but disabled
+        };
         asm!("msr cntp_ctl_el0, {x}", x = in(reg) ctl);
+        asm!("isb");
+
         super::uart_print(b"[TIMER_INIT] Timer initialization complete.\n");
     }
 
@@ -894,17 +904,8 @@ mod bringup {
         }
     }
 
-    // Exception vector table (assembly)
-    core::arch::global_asm!(
-        r#"
-        .balign 2048
-        .global VECTORS
-        .global exception_vector_table
-    VECTORS:
-    exception_vector_table = VECTORS
-        // Each entry MUST be 0x80 (128) bytes apart!
-        "#
-    );
+    // Exception vector table is now defined in src/arch/aarch64/vectors.S
+    // and included via global_asm! in src/lib/mod.rs
 }
 
 /// Common main function for all architectures
