@@ -217,6 +217,12 @@ fn secondary_rust_entry(cpu_id: usize) -> ! {
     // Note: We can't use info! yet because UART might not be safe for concurrent access
     // In production, we'd use per-CPU buffers or atomic logging
 
+    // 0. Enable MMU using the page tables set up by boot CPU
+    // Secondary CPUs start with MMU disabled, so we need to enable it
+    unsafe {
+        enable_secondary_mmu();
+    }
+
     // 1. Initialize GIC redistributor for this CPU
     #[cfg(not(test))]
     unsafe {
@@ -253,6 +259,51 @@ fn secondary_rust_entry(cpu_id: usize) -> ! {
     // In production, this would enter the scheduler's idle loop
     // For now, just spin with WFI
     cpu_idle_loop(cpu_id);
+}
+
+/// Enable MMU for secondary CPU
+///
+/// Secondary CPUs start with MMU disabled. This function enables MMU using
+/// the same configuration and page tables as the boot CPU.
+///
+/// # Safety
+///
+/// Must be called exactly once per secondary CPU before any virtual memory access.
+unsafe fn enable_secondary_mmu() {
+    use core::arch::asm;
+
+    // Set MAIR_EL1 (Memory Attribute Indirection Register)
+    // AttrIdx0 = Device-nGnRE (0x04), AttrIdx1 = Normal WBWA (0xFF)
+    let mair = (0x04u64) | (0xFFu64 << 8);
+    asm!("msr MAIR_EL1, {x}", x = in(reg) mair, options(nostack, preserves_flags));
+
+    // Set TCR_EL1 (Translation Control Register)
+    // 4KB pages, Inner/Outer WBWA, Inner shareable, 39-bit VA, 48-bit PA
+    let t0sz: u64 = 64 - 39; // 25
+    let tcr = (t0sz & 0x3Fu64) |
+        (0b01u64 << 8)  | // IRGN0 = WBWA
+        (0b01u64 << 10) | // ORGN0 = WBWA
+        (0b11u64 << 12) | // SH0 = Inner Shareable
+        (0b00u64 << 14) | // TG0 = 4KB
+        (0b101u64 << 32); // IPS = 48-bit PA
+    asm!("msr TCR_EL1, {x}", x = in(reg) tcr, options(nostack, preserves_flags));
+    asm!("isb", options(nostack, preserves_flags));
+
+    // Set TTBR0_EL1 to the boot CPU's L1 page table
+    // The page table address is in the bringup module
+    extern "C" {
+        static L1_TABLE: [u64; 512];
+    }
+    let l1_pa = &raw const L1_TABLE as *const _ as u64;
+    asm!("msr TTBR0_EL1, {x}", x = in(reg) l1_pa, options(nostack, preserves_flags));
+    asm!("dsb ish; isb", options(nostack, preserves_flags));
+
+    // Enable MMU + caches in SCTLR_EL1
+    let mut sctlr: u64;
+    asm!("mrs {x}, SCTLR_EL1", x = out(reg) sctlr);
+    sctlr |= (1 << 0) | (1 << 2) | (1 << 12); // M (MMU), C (data cache), I (instruction cache)
+    asm!("msr SCTLR_EL1, {x}", x = in(reg) sctlr);
+    asm!("isb", options(nostack, preserves_flags));
 }
 
 /// CPU idle loop

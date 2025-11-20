@@ -196,6 +196,6 @@ exec qemu-system-aarch64 \
   "${QEMU_DEVICES[@]}" \
   -rtc base=utc \
   -no-reboot \
-  -smp 2 \
+  -smp 4 \
   $DEBUG_FLAGS \
   $(if [[ "${QMP:-}" != "" ]]; then echo -qmp unix:${QMP_SOCK:-/tmp/sis-qemu.sock},server,nowait; fi)

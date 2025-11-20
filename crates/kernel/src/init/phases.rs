@@ -317,9 +317,10 @@ pub unsafe fn subsystem_init() -> KernelResult<()> {
     crate::security::init_random();
     crate::uart_print(b"RANDOM: READY\n");
 
-    // Initialize SMP
+    // Initialize SMP (early per-CPU setup only; actual CPU bring-up happens later after GIC)
     crate::uart_print(b"SMP: INIT MULTI-CORE\n");
-    crate::smp::init();
+    crate::smp::percpu::init_percpu(0); // Initialize per-CPU data for boot CPU
+    crate::smp::mark_cpu_online(0);     // Mark boot CPU as online
     crate::uart_print(b"SMP: READY\n");
 
     // Initialize virtio-gpu

@@ -321,8 +321,10 @@ mod bringup {
     static mut BOOT_STACK: Stack = Stack([0; 64 * 1024]);
 
     // Level-1 translation table (4 KiB aligned)
+    // Exported with #[no_mangle] so secondary CPUs can use it
     #[repr(C, align(4096))]
     struct Table512([u64; 512]);
+    #[no_mangle]
     static mut L1_TABLE: Table512 = Table512([0; 512]);
 
     pub unsafe fn run() {
