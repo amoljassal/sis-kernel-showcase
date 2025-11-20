@@ -811,7 +811,9 @@ mod bringup {
             let end = (r.start as u64).saturating_add(r.size as u64);
             while base < end {
                 let idx = (base >> 30) as usize;
-                L1_TABLE.0[idx] = (base) | DESC_BLOCK | AF | SH_INNER | ATTRIDX_NORMAL;
+                if idx < 512 {
+                    L1_TABLE.0[idx] = (base) | DESC_BLOCK | AF | SH_INNER | ATTRIDX_NORMAL;
+                }
                 base = base.saturating_add(1u64 << 30);
             }
         }
@@ -822,7 +824,7 @@ mod bringup {
             let end = (m.start as u64).saturating_add(m.size as u64);
             while base < end {
                 let idx = (base >> 30) as usize;
-                if L1_TABLE.0[idx] == 0 {
+                if idx < 512 && L1_TABLE.0[idx] == 0 {
                     L1_TABLE.0[idx] = (base) | DESC_BLOCK | AF | ATTRIDX_DEVICE;
                 }
                 base = base.saturating_add(1u64 << 30);

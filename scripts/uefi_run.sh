@@ -132,7 +132,9 @@ QEMU_DEVICES=(
   -M virt,gic-version=3,highmem=on,secure=off
   -cpu cortex-a72,pmu=on
   -m 512M
-  -nographic
+  -display none
+  -serial stdio
+  -monitor none
   -bios "$FIRMWARE"
   -drive if=none,id=esp,format=raw,file=fat:rw:"$ESP_DIR"
 )
@@ -191,4 +193,4 @@ exec qemu-system-aarch64 \
   -no-reboot \
   -smp 2 \
   $DEBUG_FLAGS \
-  $(if [[ "${QMP:-}" != "" ]]; then echo -qmp unix:${QMP_SOCK:-/tmp/sis-qmp.sock},server,nowait; fi)
+  $(if [[ "${QMP:-}" != "" ]]; then echo -qmp unix:${QMP_SOCK:-/tmp/sis-qemu.sock},server,nowait; fi)
