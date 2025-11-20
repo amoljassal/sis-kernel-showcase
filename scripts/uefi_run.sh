@@ -105,10 +105,15 @@ if command -v shasum >/dev/null 2>&1; then
   shasum -a 256 "$EFI_BOOT_DIR/BOOTAA64.EFI" "$EFI_SIS_DIR/KERNEL.ELF" | sed 's/^/  /'
 fi
 
-FIRMWARE="/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
-if [[ ! -f "$FIRMWARE" ]]; then
-  echo "[!] EDK2 firmware not found at $FIRMWARE"
-  echo "    Install with: brew install qemu (or edk2-aarch64)"
+# Check for firmware in Linux location first, then macOS
+if [[ -f "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd" ]]; then
+  FIRMWARE="/usr/share/qemu-efi-aarch64/QEMU_EFI.fd"
+elif [[ -f "/opt/homebrew/share/qemu/edk2-aarch64-code.fd" ]]; then
+  FIRMWARE="/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
+else
+  echo "[!] EDK2 firmware not found"
+  echo "    Linux: Install with: sudo apt-get install qemu-efi-aarch64"
+  echo "    macOS: Install with: brew install qemu"
   exit 1
 fi
 

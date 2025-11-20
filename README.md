@@ -126,7 +126,7 @@ cargo build --target aarch64-unknown-none --features bringup,llm,crypto-real,ai-
 
 | Feature | Description | Required For |
 |---------|-------------|--------------|
-| `bringup` | Early boot diagnostics, verbose logging | All builds |
+| `bringup` | Early boot initialization, runtime log level control | All builds |
 | `llm` | Kernel-resident LLM inference engine | AI features |
 | `crypto-real` | Real SHA-256 + Ed25519 (vs stubs) | Production |
 | `ai-ops` | Model lifecycle, drift detection | AI governance |
@@ -271,6 +271,20 @@ This section reflects what is implemented today in the codebase when running und
 - Hardware: no physical ARM64 validation yet; everything here is based on QEMU.
 
 See also “Known Limitations & Feature Status” below for a compact matrix.
+
+### Recent Improvements (2025-11-20)
+
+**Production Logging Framework Integration:**
+
+- **Runtime-Configurable Log Levels**: Integrated comprehensive logging system with 5 levels (ERROR, WARN, INFO, DEBUG, TRACE)
+  - Boot phase messages now use structured logging framework instead of raw UART prints
+  - Default INFO level shows major milestones; DEBUG level shows component details; TRACE for verbose output
+  - Zero-cost abstractions when log levels are disabled
+  - Shell command `logctl` for runtime control: `logctl level debug`, `logctl production`, `logctl testing`
+  - Quick presets: production (WARN), development (DEBUG), testing (TRACE)
+  - Location: `crates/kernel/src/log.rs`, `crates/kernel/src/shell/logctl_helpers.rs`, `docs/guides/LOGGING.md`
+
+**Benefits**: Clean boot output by default, debug on demand without recompilation, production-ready log filtering
 
 ### Recent Improvements (2025-01-20)
 
@@ -4898,6 +4912,7 @@ sis-kernel/
 │   │       │   ├── graphctl_helpers.rs         # Dataflow graph control
 │   │       │   ├── learnctl_helpers.rs         # Learning control
 │   │       │   ├── llmctl_helpers.rs           # LLM service control
+│   │       │   ├── logctl_helpers.rs           # Logging level control (runtime)
 │   │       │   ├── memctl_helpers.rs           # Memory AI control
 │   │       │   ├── metaclassctl_helpers.rs     # Meta-learning control
 │   │       │   ├── mlctl_helpers.rs            # ML control
@@ -11168,7 +11183,7 @@ The SIS Kernel includes a comprehensive industry-grade testing framework that pr
 ## Feature Flags
 
 - Kernel
-  - `bringup` — Enable AArch64 bring-up path and boot markers.
+  - `bringup` — Enable AArch64 bring-up path and runtime log level control.
   - `arm64-ai` — Enable AI benchmark wiring.
   - `neon-optimized` — Enable 16×16 NEON matmul demo and related metric.
   - `perf-verbose` — Gate verbose timer/IRQ debug logs ([IRQ_HANDLER], [TIMER_ISR], TVAL diagnostics) and noisy [PERF] logs; METRICs and summaries are always on. Production builds should omit this feature for clean logs.

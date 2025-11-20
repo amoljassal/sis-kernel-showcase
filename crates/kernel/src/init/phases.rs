@@ -40,10 +40,10 @@ pub unsafe fn early_init() -> KernelResult<()> {
     }
     crate::uart_print(b"PMU: READY\n");
 
-    // Initialize UART for interactive I/O
+    // Initialize UART for interactive I/O (after this, we can use log system)
     crate::uart_print(b"UART: INIT\n");
     crate::uart::init();
-    crate::uart_print(b"UART: READY\n");
+    crate::log::info("UART", "UART initialized");
 
     // Emit counter frequency for timing sanity check
     {
@@ -58,16 +58,16 @@ pub unsafe fn early_init() -> KernelResult<()> {
     crate::time::init_boot_timestamp();
 
     // Initialize heap allocator
-    crate::uart_print(b"HEAP: INIT\n");
+    crate::log::debug("HEAP", "Initializing heap allocator");
     crate::heap::init_heap()
         .map_err(|_| KernelError::EarlyInit("heap init failed"))?;
-    crate::uart_print(b"HEAP: READY\n");
+    crate::log::info("HEAP", "Heap allocator ready");
 
     // Run heap tests
-    crate::uart_print(b"HEAP: TESTING\n");
+    crate::log::debug("HEAP", "Running heap tests");
     crate::heap::test_heap()
         .map_err(|_| KernelError::EarlyInit("heap tests failed"))?;
-    crate::uart_print(b"HEAP: TESTS PASSED\n");
+    crate::log::debug("HEAP", "Heap tests passed");
 
     Ok(())
 }
@@ -93,16 +93,16 @@ pub unsafe fn platform_init() -> KernelResult<()> {
             dt_active = crate::platform::override_with_dtb(crate::DTB_PTR);
         }
         if dt_active {
-            crate::uart_print(b"PLATFORM: dt override active\n");
+            crate::log::info("PLATFORM", "Device tree override active");
         } else {
-            crate::uart_print(b"PLATFORM: qemu_virt\n");
+            crate::log::info("PLATFORM", "Using qemu_virt platform");
         }
     }
 
     // Initialize PSCI for power management
-    crate::uart_print(b"PSCI: INIT\n");
+    crate::log::debug("PSCI", "Initializing PSCI");
     crate::arch::psci::init();
-    crate::uart_print(b"PSCI: READY\n");
+    crate::log::info("PSCI", "PSCI ready");
 
     Ok(())
 }
@@ -120,10 +120,10 @@ pub unsafe fn platform_init() -> KernelResult<()> {
 /// # Errors
 /// Returns `KernelError::MemoryInit` if memory subsystem fails.
 pub unsafe fn memory_init() -> KernelResult<()> {
-    crate::uart_print(b"PHASE A1: BOOT WIRING\n");
+    crate::log::info("BOOT", "Phase A1: Boot wiring");
 
     // Initialize buddy allocator
-    crate::uart_print(b"MM: BUDDY ALLOCATOR\n");
+    crate::log::debug("MM", "Initializing buddy allocator");
     let ram_start = 0x4100_0000u64; // Start after kernel (16MB offset)
     let ram_size = 112 * 1024 * 1024u64; // 112MB available
     let ranges: &[(u64, usize)] = &[(ram_start, ram_size as usize)];
@@ -136,14 +136,14 @@ pub unsafe fn memory_init() -> KernelResult<()> {
     crate::uart_print(b" pages)\n");
 
     // Initialize slab allocator
-    crate::uart_print(b"MM: SLAB ALLOCATOR\n");
+    crate::log::debug("MM", "Initializing slab allocator");
     crate::mm::slab::init();
-    crate::uart_print(b"MM: SLAB READY (5 caches: 16-256 bytes)\n");
+    crate::log::info("MM", "Slab allocator ready (5 caches: 16-256 bytes)");
 
     // Initialize page cache
-    crate::uart_print(b"PAGE CACHE: INIT\n");
+    crate::log::debug("PAGE_CACHE", "Initializing page cache");
     crate::mm::init_page_cache(1024); // Cache up to 1024 blocks (512KB)
-    crate::uart_print(b"PAGE CACHE: READY\n");
+    crate::log::info("PAGE_CACHE", "Page cache ready (1024 blocks)");
 
     Ok(())
 }
@@ -167,23 +167,23 @@ pub unsafe fn subsystem_init() -> KernelResult<()> {
     use alloc::string::ToString;
 
     // Initialize process table
-    crate::uart_print(b"PROCESS: INIT TABLE\n");
+    crate::log::debug("PROCESS", "Initializing process table");
     crate::process::init_process_table();
-    crate::uart_print(b"PROCESS: TABLE READY\n");
+    crate::log::info("PROCESS", "Process table ready");
 
     // Initialize scheduler
-    crate::uart_print(b"SCHEDULER: INIT\n");
+    crate::log::debug("SCHEDULER", "Initializing scheduler");
     crate::process::scheduler::init();
     crate::process::scheduler_smp::init();
-    crate::uart_print(b"SCHEDULER: READY\n");
+    crate::log::info("SCHEDULER", "Scheduler ready");
 
     // Initialize VFS
-    crate::uart_print(b"VFS: INIT\n");
+    crate::log::debug("VFS", "Initializing VFS");
     crate::vfs::init()
         .map_err(|_| KernelError::SubsystemInit("VFS init failed"))?;
 
     // Mount tmpfs at /
-    crate::uart_print(b"VFS: MOUNT TMPFS AT /\n");
+    crate::log::debug("VFS", "Mounting tmpfs at /");
     let root = crate::vfs::tmpfs::mount_tmpfs()
         .map_err(|_| KernelError::SubsystemInit("tmpfs mount failed"))?;
     crate::vfs::set_root(root.clone());
@@ -191,16 +191,16 @@ pub unsafe fn subsystem_init() -> KernelResult<()> {
     // Optionally unpack embedded initramfs
     #[cfg(all(feature = "initramfs-models", have_initramfs_models))]
     {
-        crate::uart_print(b"INITRAMFS: UNPACK MODELS\n");
+        crate::log::debug("INITRAMFS", "Unpacking models");
         if let Err(e) = crate::initramfs::unpack_initramfs(crate::embedded_models_initramfs::data) {
             crate::warn!("initramfs: unpack failed: {:?}", e);
         } else {
-            crate::uart_print(b"INITRAMFS: MODELS READY\n");
+            crate::log::info("INITRAMFS", "Models ready");
         }
     }
 
     // Mount devfs at /dev
-    crate::uart_print(b"VFS: MOUNT DEVFS AT /dev\n");
+    crate::log::debug("VFS", "Mounting devfs at /dev");
     let _dev_inode = crate::vfs::devfs::mount_devfs()
         .map_err(|_| KernelError::SubsystemInit("devfs mount failed"))?;
     root.create("dev", crate::vfs::S_IFDIR | 0o755)
@@ -208,19 +208,19 @@ pub unsafe fn subsystem_init() -> KernelResult<()> {
     crate::vfs::set_root(root.clone());
 
     // Mount procfs at /proc
-    crate::uart_print(b"VFS: MOUNT PROCFS AT /proc\n");
+    crate::log::debug("VFS", "Mounting procfs at /proc");
     let _proc_inode = crate::vfs::mount_procfs()
         .map_err(|_| KernelError::SubsystemInit("procfs mount failed"))?;
     root.create("proc", crate::vfs::S_IFDIR | 0o555)
         .map_err(|_| KernelError::SubsystemInit("failed to create /proc"))?;
     crate::vfs::set_root(root.clone());
 
-    crate::uart_print(b"VFS: READY\n");
+    crate::log::info("VFS", "Virtual filesystem ready");
 
     // Initialize virtio-blk devices
-    crate::uart_print(b"BLOCK: PROBING VIRTIO-BLK DEVICES\n");
+    crate::log::debug("BLOCK", "Probing VirtIO block devices");
     crate::arch::aarch64::init_virtio_blk();
-    crate::uart_print(b"BLOCK: READY\n");
+    crate::log::info("BLOCK", "Block devices ready");
 
     // Try to mount ext4 or ext2 at /models if block devices exist
     {
@@ -492,14 +492,15 @@ pub unsafe fn late_init() -> KernelResult<()> {
     use crate::bringup::print_number;
 
     // Initialize GICv3 and timer
-    crate::uart_print(b"GIC: INIT\n");
+    crate::log::debug("GIC", "Initializing GICv3");
     crate::bringup::gicv3_init_qemu();
     crate::bringup::timer_init_1hz();
-    crate::uart_print(b"[MAIN] Calling enable_irq() from initialization\n");
+    crate::log::debug("IRQ", "Enabling interrupts");
     crate::bringup::enable_irq();
+    crate::log::info("GIC", "GICv3 initialized and interrupts enabled");
 
     // Initialize SMP - bring up secondary CPUs
-    crate::uart_print(b"SMP: INIT\n");
+    crate::log::debug("SMP", "Initializing multi-core support");
     crate::arch::smp::init();
     let num_cpus = crate::arch::smp::num_cpus();
     crate::uart_print(b"SMP: ");
@@ -507,9 +508,9 @@ pub unsafe fn late_init() -> KernelResult<()> {
     crate::uart_print(b" CPU(S) ONLINE\n");
 
     // Initialize PMU
-    crate::uart_print(b"PMU: INIT\n");
+    crate::log::debug("PMU", "Initializing performance monitoring");
     crate::pmu::init();
-    crate::uart_print(b"PMU: READY\n");
+    crate::log::info("PMU", "Performance monitoring ready");
 
     // Optional GPIO initialization
     #[cfg(feature = "rpi5-gpio")]
@@ -557,16 +558,16 @@ pub unsafe fn late_init() -> KernelResult<()> {
     crate::uart_print(b"SYSCALL TESTS: COMPLETE\n");
 
     // Initialize neural agents
-    crate::uart_print(b"MEMORY AGENT: INIT\n");
+    crate::log::debug("AI", "Initializing memory agent");
     crate::neural::init_memory_agent();
-    crate::uart_print(b"MEMORY AGENT: READY\n");
+    crate::log::info("AI", "Memory agent ready");
 
-    crate::uart_print(b"META-AGENT: INIT\n");
+    crate::log::debug("AI", "Initializing meta-agent");
     crate::meta_agent::init_meta_agent();
-    crate::uart_print(b"META-AGENT: READY\n");
+    crate::log::info("AI", "Meta-agent ready");
 
     crate::autonomy::AUTONOMY_READY.store(true, core::sync::atomic::Ordering::Release);
-    crate::uart_print(b"AUTONOMY: set_ready complete\n");
+    crate::log::info("AUTONOMY", "Autonomous control system ready");
 
     // Optional auto-enable autonomy
     #[cfg(all(target_arch = "aarch64", feature = "bringup"))]
@@ -612,19 +613,19 @@ pub unsafe fn late_init() -> KernelResult<()> {
     }
 
     // Create PID 1
-    crate::uart_print(b"INIT: CREATING PID 1\n");
+    crate::log::debug("INIT", "Creating PID 1");
     let init_task = crate::process::Task::new_init();
     crate::process::insert_task(init_task)
         .map_err(|_| KernelError::LateInit("failed to insert PID 1"))?;
-    crate::uart_print(b"INIT: PID 1 CREATED\n");
+    crate::log::info("INIT", "PID 1 created");
 
     // Enqueue PID 1
-    crate::uart_print(b"SCHEDULER: ENQUEUE PID 1\n");
+    crate::log::debug("SCHEDULER", "Enqueueing PID 1");
     crate::process::scheduler::enqueue(1);
     crate::process::scheduler::set_current(1);
-    crate::uart_print(b"SCHEDULER: PID 1 RUNNING\n");
+    crate::log::info("SCHEDULER", "PID 1 running");
 
-    crate::uart_print(b"PHASE A1: BOOT WIRING COMPLETE\n");
+    crate::log::info("BOOT", "Phase A1 complete - boot wiring finished");
 
     // Deterministic admission demo
     #[cfg(feature = "deterministic")]
