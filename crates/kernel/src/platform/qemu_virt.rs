@@ -38,7 +38,10 @@ impl Platform for QemuVirtPlatform {
         R
     }
 
-    fn psci_available(&self) -> bool { cfg!(feature = "hardware") }
+    fn psci_available(&self) -> bool {
+        // QEMU virt always provides PSCI through UEFI firmware
+        true
+    }
 
     fn virtio_mmio_hint(&self) -> Option<(usize, usize, u32)> {
         // QEMU virt: virtio-mmio window starts at 0x0A000000, slots are 0x200 bytes, IRQs start at 16
