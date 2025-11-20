@@ -3,6 +3,10 @@
 **/target/
 *.pdb
 
+# Built kernel binaries (regenerated on each build)
+scripts/esp/EFI/BOOT/*.EFI
+scripts/esp/EFI/SIS/*.ELF
+
 # Cargo lock file (keep for binary projects)
 # Cargo.lock
 
