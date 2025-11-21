@@ -193,6 +193,7 @@ fn test_timeslice_enforcement() -> PropertyTestResult {
 fn test_starvation_freedom() -> PropertyTestResult {
     // Simulate starvation test with mixed priority tasks
     #[derive(Clone, Copy, Debug)]
+    #[allow(dead_code)]
     struct Task {
         id: u32,
         priority: u32,

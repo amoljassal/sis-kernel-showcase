@@ -184,7 +184,7 @@ impl AgentSupervisor {
             FaultAction::Kill => {
                 if let Some(metadata) = self.registry.get(&agent_id) {
                     // Kill via process manager
-                    crate::process::signal::send_signal(metadata.pid, crate::process::signal::Signal::SIGKILL);
+                    let _ = crate::process::signal::send_signal(metadata.pid, crate::process::signal::Signal::SIGKILL);
                 }
             }
             FaultAction::Throttle => {

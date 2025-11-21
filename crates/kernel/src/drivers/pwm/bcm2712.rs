@@ -320,7 +320,7 @@ impl Bcm2712Pwm {
         // Using integer division, actual freq may vary slightly
         let range = PWM_CLOCK_HZ / frequency_hz;
 
-        if range == 0 || range > 0xFFFF_FFFF {
+        if range == 0 {
             return Err(DriverError::InvalidParameter);
         }
 

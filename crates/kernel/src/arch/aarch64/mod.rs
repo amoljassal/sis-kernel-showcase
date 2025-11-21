@@ -7,6 +7,7 @@ pub mod psci;  // Phase E: SMP CPU bring-up
 pub mod gicv3; // GICv3 interrupt controller
 pub mod smp;   // M3: SMP multi-core support
 pub mod serial; // Serial compatibility layer for cross-platform support
+pub mod framebuffer; // Framebuffer output for screen display
 
 // TODO: Add in later phases:
 // pub mod mmu;     // Page tables, TLB (Phase A1)

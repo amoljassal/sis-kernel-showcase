@@ -75,6 +75,7 @@ impl QemuBackend {
     }
 
     /// Wait for specific pattern in serial log
+    #[allow(dead_code)]
     async fn wait_for_pattern(&mut self, pattern: &str, timeout: Duration) -> BackendResult<()> {
         let deadline = Instant::now() + timeout;
 

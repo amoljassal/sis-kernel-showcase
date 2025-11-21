@@ -69,6 +69,8 @@ pub mod userspace_test;
 pub mod shell;
 // UART driver module
 pub mod uart;
+// Boot logging module (captures output to memory for USB write)
+pub mod bootlog;
 // Driver framework module
 pub mod driver;
 // VirtIO transport layer module
@@ -189,9 +191,14 @@ pub mod arch {
 #[cfg(target_arch = "aarch64")]
 #[link_section = ".text._start"]
 #[no_mangle]
-pub extern "C" fn _start() -> ! {
+pub extern "C" fn _start(boot_info: *const crate::arch::aarch64::framebuffer::BootInfo) -> ! {
     unsafe {
-        uart_print(b"KERNEL(U)\n");
+        // Initialize framebuffer FIRST so we can see output on screen
+        if !boot_info.is_null() {
+            crate::arch::aarch64::framebuffer::init(&*boot_info);
+        }
+
+        uart_print(b"!KERNEL(U)\n");
     }
 
     #[cfg(all(target_arch = "aarch64", feature = "bringup"))]
@@ -288,6 +295,13 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
 
 #[inline(always)]
 unsafe fn uart_print(msg: &[u8]) {
+    // Capture to boot log for USB debugging
+    crate::bootlog::append(msg);
+
+    // Write to framebuffer (screen output)
+    #[cfg(target_arch = "aarch64")]
+    crate::arch::aarch64::framebuffer::write_bytes(msg);
+
     // Early boot UART writes using platform-provided base; avoids hardcoded MMIO
     let base = crate::platform::active().uart().base as *mut u32;
     for &b in msg {
@@ -310,14 +324,16 @@ macro_rules! kprintln {
     ($($t:tt)*) => { $crate::kprint!("{}\n", format_args!($($t)*)) };
 }
 
-#[cfg(all(target_arch = "aarch64", feature = "bringup"))]
+#[cfg(target_arch = "aarch64")]
 mod bringup {
     use core::arch::asm;
-    use core::sync::atomic::{AtomicBool, Ordering};
+    use core::sync::atomic::Ordering;
 
     // 64 KiB bootstrap stack (16-byte aligned)
+    #[cfg(feature = "bringup")]
     #[repr(C, align(16))]
     struct Stack([u8; 64 * 1024]);
+    #[cfg(feature = "bringup")]
     static mut BOOT_STACK: Stack = Stack([0; 64 * 1024]);
 
     // Level-1 translation table (4 KiB aligned)
@@ -327,6 +343,7 @@ mod bringup {
     #[no_mangle]
     static mut L1_TABLE: Table512 = Table512([0; 512]);
 
+    #[cfg(feature = "bringup")]
     pub unsafe fn run() {
         // 1) Install stack
         let stack_ptr = &raw const BOOT_STACK.0;
@@ -374,6 +391,10 @@ mod bringup {
             loop {}
         }
 
+        // Try saving boot log after VFS is initialized
+        super::uart_print(b"[BOOTLOG] Attempting to save boot log...\n");
+        crate::bootlog::try_save_to_vfs();
+
         // Driver init: block devices, watchdog, driver framework
         if let Err(e) = phases::driver_init() {
             super::uart_print(b"DRIVER INIT FAILED: ");
@@ -382,6 +403,9 @@ mod bringup {
             loop {}
         }
 
+        // Try saving boot log again after drivers are loaded
+        crate::bootlog::try_save_to_vfs();
+
         // Late init: GIC, interrupts, SMP, AI, shell
         if let Err(e) = phases::late_init() {
             super::uart_print(b"LATE INIT FAILED: ");
@@ -389,6 +413,10 @@ mod bringup {
             super::uart_print(b"\n");
             loop {}
         }
+
+        // Final boot log save before shell
+        super::uart_print(b"[BOOTLOG] Final boot log save...\n");
+        crate::bootlog::try_save_to_vfs();
 
         // All initialization phases complete! Launch interactive shell
         super::uart_print(b"LAUNCHING SHELL\n");
@@ -407,10 +435,13 @@ mod bringup {
     }
 
     // 64 KiB stack dedicated to the full shell runtime (16-byte aligned)
+    #[cfg(feature = "bringup")]
     #[repr(C, align(16))]
     struct ShellStack([u8; 64 * 1024]);
+    #[cfg(feature = "bringup")]
     static mut SHELL_STACK: ShellStack = ShellStack([0; 64 * 1024]);
 
+    #[cfg(feature = "bringup")]
     /// Switch to an alternate stack, run the full shell, then restore the original stack
     unsafe fn launch_full_shell_on_alt_stack() {
         use core::arch::asm;

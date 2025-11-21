@@ -179,12 +179,11 @@ impl VirtioNetDevice {
         let mut rx_queue = self.rx_queue.lock();
         let transport = self.transport.lock();
 
-        static mut REFILL_COUNT: usize = 0;
-        unsafe {
-            REFILL_COUNT += 1;
-            if REFILL_COUNT <= 2 {
-                crate::warn!("RX refill #{}: adding 128 buffers", REFILL_COUNT);
-            }
+        use core::sync::atomic::{AtomicUsize, Ordering};
+        static REFILL_COUNT: AtomicUsize = AtomicUsize::new(0);
+        let count = REFILL_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
+        if count <= 2 {
+            crate::warn!("RX refill #{}: adding 128 buffers", count);
         }
 
         // Add 128 RX buffers
@@ -206,10 +205,10 @@ impl VirtioNetDevice {
             }
         }
 
-        unsafe {
-            if REFILL_COUNT <= 2 {
-                crate::warn!("RX refill #{}: added {} buffers, notifying queue 0", REFILL_COUNT, added);
-                // Check available ring index
+        if count <= 2 {
+            crate::warn!("RX refill #{}: added {} buffers, notifying queue 0", count, added);
+            // Check available ring index
+            unsafe {
                 let avail_idx_ptr = (rx_queue.avail_ring_addr() + 2) as *const u16;
                 let avail_idx = core::ptr::read_volatile(avail_idx_ptr);
                 crate::warn!("RX queue: avail_idx={} (should be {})", avail_idx, added);
@@ -259,13 +258,12 @@ impl VirtioNetDevice {
         transport.write_reg(VirtIOMMIOOffset::QueueNotify, 1);
 
         // Log packet details (first 3 packets for debugging)
-        static mut TX_COUNT: usize = 0;
-        unsafe {
-            TX_COUNT += 1;
-            if TX_COUNT <= 3 {
-                crate::warn!("TX #{}: addr=0x{:x} len={} desc={} dev_status=0x{:x}",
-                           TX_COUNT, buffer_addr, buffer_len, desc_id, dev_status);
-            }
+        use core::sync::atomic::{AtomicUsize, Ordering};
+        static TX_COUNT: AtomicUsize = AtomicUsize::new(0);
+        let tx_count = TX_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
+        if tx_count <= 3 {
+            crate::warn!("TX #{}: addr=0x{:x} len={} desc={} dev_status=0x{:x}",
+                       tx_count, buffer_addr, buffer_len, desc_id, dev_status);
         }
 
         // Wait for completion (bounded spin to avoid deadlock if device not consuming)
@@ -308,19 +306,18 @@ impl VirtioNetDevice {
         let mut rx_queue = self.rx_queue.lock();
 
         // Check for completed RX descriptors
-        static mut RX_CHECKS: usize = 0;
-        unsafe {
-            RX_CHECKS += 1;
-            if RX_CHECKS <= 10 {
-                // Check interrupt status
-                let int_status = transport.read_reg(VirtIOMMIOOffset::InterruptStatus);
-                crate::warn!("RX check #{}: has_used={} int_status=0x{:x}",
-                           RX_CHECKS, rx_queue.has_used_buf(), int_status);
-                // Acknowledge any pending interrupts
-                if int_status != 0 {
-                    transport.write_reg(VirtIOMMIOOffset::InterruptACK, int_status);
-                    crate::warn!("RX: ACKed interrupt 0x{:x}", int_status);
-                }
+        use core::sync::atomic::{AtomicUsize, Ordering};
+        static RX_CHECKS: AtomicUsize = AtomicUsize::new(0);
+        let rx_check_count = RX_CHECKS.fetch_add(1, Ordering::Relaxed) + 1;
+        if rx_check_count <= 10 {
+            // Check interrupt status
+            let int_status = transport.read_reg(VirtIOMMIOOffset::InterruptStatus);
+            crate::warn!("RX check #{}: has_used={} int_status=0x{:x}",
+                       rx_check_count, rx_queue.has_used_buf(), int_status);
+            // Acknowledge any pending interrupts
+            if int_status != 0 {
+                transport.write_reg(VirtIOMMIOOffset::InterruptACK, int_status);
+                crate::warn!("RX: ACKed interrupt 0x{:x}", int_status);
             }
         }
 

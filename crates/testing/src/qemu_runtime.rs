@@ -227,9 +227,17 @@ impl QEMURuntimeManager {
         // Use a consistent emulated CPU like the manual runner
         // (HVF/host model can behave differently for bare-metal UEFI)
         let cpu_type = "cortex-a72,pmu=on";
-        
-        // Optimize QEMU configuration for Apple Silicon development
-        let firmware_path = "/opt/homebrew/share/qemu/edk2-aarch64-code.fd";
+
+        // Check for firmware in both Linux and macOS locations
+        let firmware_path = if Path::new("/usr/share/qemu-efi-aarch64/QEMU_EFI.fd").exists() {
+            "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd" // Linux
+        } else if Path::new("/opt/homebrew/share/qemu/edk2-aarch64-code.fd").exists() {
+            "/opt/homebrew/share/qemu/edk2-aarch64-code.fd" // macOS (Homebrew)
+        } else {
+            return Err(TestError::QEMUError {
+                message: "EDK2 firmware not found. Install with:\n  Linux: sudo apt-get install qemu-efi-aarch64\n  macOS: brew install qemu".to_string()
+            });
+        };
         
         // Ensure parent directory for logs exists
         if let Some(parent) = Path::new(&instance.serial_log_path).parent() {

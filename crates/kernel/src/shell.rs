@@ -214,6 +214,7 @@ impl Shell {
             let cmd_is_known = match parts[0] {
                 "help" => { self.cmd_help(&parts[1..]); true },
                 "version" => { self.cmd_version(); true },
+                "bootlog" => { self.cmd_bootlog(); true },
                 "echo" => { self.cmd_echo(&parts[1..]); true },
                 "info" => { self.cmd_info(); true },
                 "test" => { self.cmd_test(); true },
@@ -491,6 +492,22 @@ impl Shell {
             crate::uart_print(b"Full build information:\n");
         }
         crate::build_info::print_build_info();
+    }
+
+    fn cmd_bootlog(&self) {
+        unsafe {
+            crate::uart_print(b"\nBoot log captured: ");
+            let size = crate::bootlog::size();
+            self.print_number_simple(size as u64);
+            crate::uart_print(b" bytes\n");
+        }
+        // Print the boot log
+        crate::bootlog::print_to_uart();
+        // Try to save it again
+        unsafe {
+            crate::uart_print(b"\nAttempting to save to /boot.log...\n");
+        }
+        crate::bootlog::try_save_to_vfs();
     }
 
     // --- Neural agent commands ---

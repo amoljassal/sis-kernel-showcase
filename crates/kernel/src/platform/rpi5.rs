@@ -131,7 +131,7 @@ impl Platform for Rpi5Platform {
     fn mmio_ranges(&self) -> &'static [MmioRange] {
         // Default MMIO ranges for RPi5
         // These will be overridden by FDT-parsed values when available
-        const RPi5_MMIO: &[MmioRange] = &[
+        const RPI5_MMIO: &[MmioRange] = &[
             // GIC region (includes GICD + GICR for 4 cores)
             MmioRange {
                 start: 0x107f_0000,
@@ -157,19 +157,19 @@ impl Platform for Rpi5Platform {
                 device: true,
             },
         ];
-        RPi5_MMIO
+        RPI5_MMIO
     }
 
     fn ram_ranges(&self) -> &'static [RamRange] {
         // Try to get from FDT first
         // Note: This is a placeholder. In practice, RAM ranges should come from FDT.
-        const RPi5_RAM: &[RamRange] = &[
+        const RPI5_RAM: &[RamRange] = &[
             RamRange {
                 start: 0x0000_0000,
                 size: 0x8000_0000,  // 2GB default (RPi5 has 4GB or 8GB)
             },
         ];
-        RPi5_RAM
+        RPI5_RAM
     }
 
     fn psci_available(&self) -> bool {

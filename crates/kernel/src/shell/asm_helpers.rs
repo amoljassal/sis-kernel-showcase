@@ -630,7 +630,7 @@ impl Shell {
                     }
 
                     // Send SIGKILL to the agent process
-                    crate::process::signal::send_signal(pid, crate::process::signal::Signal::SIGKILL);
+                    let _ = crate::process::signal::send_signal(pid, crate::process::signal::Signal::SIGKILL);
 
                     unsafe {
                         crate::uart_print(b"[ASM] Agent ");
@@ -983,7 +983,7 @@ impl Shell {
                     }
 
                     // Kill the agent (supervisor will auto-restart if configured)
-                    crate::process::signal::send_signal(pid, crate::process::signal::Signal::SIGKILL);
+                    let _ = crate::process::signal::send_signal(pid, crate::process::signal::Signal::SIGKILL);
 
                     unsafe {
                         crate::uart_print(b"Restart initiated (supervisor will respawn agent)\n");

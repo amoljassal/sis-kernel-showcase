@@ -42,6 +42,21 @@ pub static ALL_COMMANDS: &[CommandHelp] = &[
     },
 
     CommandHelp {
+        name: "bootlog",
+        category: Category::CoreSystem,
+        brief: "Display captured boot log and save to disk",
+        what_it_does: "Shows the complete boot log captured from kernel startup and attempts to save it to /boot.log for debugging hardware boot issues without serial console.",
+        use_case: "Use when debugging boot issues on real hardware without serial console access. The log is captured in memory from the very first kernel output and can be viewed after boot or saved to disk.",
+        functionality: "Displays the in-memory boot log buffer that captures all kernel output from the earliest boot stages, then attempts to write it to /boot.log in the VFS for persistent storage.",
+        robotics_analogy: "Like a black box flight recorder in an aircraft - continuously records all system messages so you can diagnose what happened during boot, even if you couldn't see it in real-time.",
+        os_level_explanation: "All uart_print() calls are mirrored to a 256KB ring buffer in kernel memory. This command dumps the buffer contents and writes to the virtual filesystem if available.",
+        subcommands: &[],
+        examples: &["bootlog"],
+        see_also: &["version", "info", "logctl"],
+        feature: None,
+    },
+
+    CommandHelp {
         name: "info",
         category: Category::CoreSystem,
         brief: "Show kernel information",
