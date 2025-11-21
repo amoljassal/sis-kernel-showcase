@@ -93,11 +93,28 @@ static mut CPU_STACKS: [CpuStack; MAX_CPUS] = [
 pub unsafe fn init() {
     crate::info!("SMP: Initializing multi-core support");
 
+    // Verify PSCI CPU_ON is supported
+    if !crate::arch::psci::is_feature_supported(crate::arch::psci::PsciFunction::CpuOn) {
+        crate::error!("SMP: PSCI CPU_ON not supported by firmware!");
+        return;
+    }
+    crate::info!("SMP: PSCI CPU_ON is supported");
+
     // Determine how many CPUs are available
     // For RPi5, we know it has 4 cores, but we'll try to bring them all up
     let num_cpus = MAX_CPUS;
 
     crate::info!("SMP: Attempting to bring up {} CPUs", num_cpus);
+
+    // Read boot CPU's MPIDR to understand affinity structure
+    let boot_mpidr: u64;
+    core::arch::asm!("mrs {}, mpidr_el1", out(reg) boot_mpidr);
+    crate::warn!("SMP: Boot CPU MPIDR = 0x{:x} (Aff0={}, Aff1={}, Aff2={}, Aff3={})",
+                 boot_mpidr,
+                 boot_mpidr & 0xFF,
+                 (boot_mpidr >> 8) & 0xFF,
+                 (boot_mpidr >> 16) & 0xFF,
+                 (boot_mpidr >> 32) & 0xFF);
 
     // Bring up each secondary CPU
     for cpu_id in 1..num_cpus {
@@ -116,7 +133,7 @@ pub unsafe fn init() {
 
 /// Bring up a specific CPU using PSCI
 fn bring_up_cpu(cpu_id: usize) {
-    crate::info!("SMP: Bringing up CPU {}", cpu_id);
+    crate::warn!("SMP: === Bringing up CPU {} ===", cpu_id);
 
     // Get entry point address
     let entry_point = secondary_entry as *const () as u64;
@@ -131,17 +148,22 @@ fn bring_up_cpu(cpu_id: usize) {
     // For RPi5, CPU IDs map directly to MPIDR affinity level 0
     let target_cpu = cpu_id as u64;
 
-    // Context ID passed to secondary CPU (we pass stack pointer)
-    let context_id = stack_top;
+    // Context ID passed to secondary CPU (we pass CPU ID for debugging)
+    let context_id = cpu_id as u64;
 
-    crate::info!("SMP:   Entry point: {:#x}", entry_point);
-    crate::info!("SMP:   Stack top:   {:#x}", stack_top);
-    crate::info!("SMP:   Target CPU:  {}", target_cpu);
+    crate::warn!("SMP:   Entry point:  {:#x}", entry_point);
+    crate::warn!("SMP:   Stack base:   {:#x}", unsafe { CPU_STACKS[cpu_id].0.as_ptr() as u64 });
+    crate::warn!("SMP:   Stack top:    {:#x} (size: {} bytes)", stack_top, 16 * 1024);
+    crate::warn!("SMP:   Target MPIDR: {:#x}", target_cpu);
+    crate::warn!("SMP:   Context ID:   {:#x}", context_id);
 
     // Use PSCI to start the CPU
-    match cpu_on(target_cpu, entry_point, context_id) {
+    let result = cpu_on(target_cpu, entry_point, context_id);
+    crate::warn!("SMP:   PSCI CPU_ON returned: {:?}", result);
+
+    match result {
         Ok(()) => {
-            crate::info!("SMP:   CPU_ON successful, waiting for ready signal...");
+            crate::warn!("SMP:   CPU_ON successful, waiting for ready signal...");
 
             // Wait for CPU to signal ready (with timeout)
             const TIMEOUT_MS: u32 = 1000;
@@ -151,7 +173,7 @@ fn bring_up_cpu(cpu_id: usize) {
             for i in 0..iterations {
                 if CPU_BOOT_FLAGS[cpu_id].load(Ordering::Acquire) {
                     NUM_CPUS_ONLINE.fetch_add(1, Ordering::Release);
-                    crate::info!("SMP: CPU {} is online", cpu_id);
+                    crate::info!("SMP: CPU {} is online after {} ms", cpu_id, i / 10);
                     return;
                 }
 
@@ -162,17 +184,25 @@ fn bring_up_cpu(cpu_id: usize) {
 
                 // Log progress every 100ms
                 if i % 1000 == 0 && i > 0 {
-                    crate::info!("SMP:   Still waiting for CPU {} ({} ms)...", cpu_id, i / 10);
+                    crate::warn!("SMP:   Still waiting for CPU {} ({} ms, flag={})",
+                              cpu_id, i / 10, CPU_BOOT_FLAGS[cpu_id].load(Ordering::Acquire));
                 }
             }
 
-            crate::warn!("SMP: Timeout waiting for CPU {} to come online", cpu_id);
+            crate::error!("SMP: TIMEOUT waiting for CPU {} (1000ms elapsed)", cpu_id);
+            crate::error!("SMP:   Final boot flag state: {}", CPU_BOOT_FLAGS[cpu_id].load(Ordering::Acquire));
         }
         Err(PsciError::AlreadyOn) => {
-            crate::warn!("SMP: CPU {} is already on (unexpected)", cpu_id);
+            crate::warn!("SMP: CPU {} reports ALREADY_ON (may need reset)", cpu_id);
         }
         Err(PsciError::InvalidParameters) => {
-            crate::error!("SMP: Invalid parameters for CPU {}", cpu_id);
+            crate::error!("SMP: INVALID_PARAMETERS for CPU {} (check MPIDR, entry point, alignment)", cpu_id);
+        }
+        Err(PsciError::Denied) => {
+            crate::error!("SMP: CPU {} DENIED (may be disabled in firmware)", cpu_id);
+        }
+        Err(PsciError::InvalidAddress) => {
+            crate::error!("SMP: INVALID_ADDRESS for CPU {} (entry={:#x})", cpu_id, entry_point);
         }
         Err(e) => {
             crate::error!("SMP: Failed to start CPU {}: {:?}", cpu_id, e);
@@ -214,50 +244,59 @@ pub unsafe extern "C" fn secondary_entry(cpu_id: u64, _stack_ptr: u64) -> ! {
 /// This is called from `secondary_entry` after basic setup.
 fn secondary_rust_entry(cpu_id: usize) -> ! {
     // We're on a secondary CPU now!
-    // Note: We can't use info! yet because UART might not be safe for concurrent access
-    // In production, we'd use per-CPU buffers or atomic logging
+    // Use UART carefully - it's shared but we'll add markers
+    crate::warn!("SMP: [CPU{}] Secondary entry point reached!", cpu_id);
 
     // 0. Enable MMU using the page tables set up by boot CPU
     // Secondary CPUs start with MMU disabled, so we need to enable it
     unsafe {
+        crate::warn!("SMP: [CPU{}] Enabling MMU...", cpu_id);
         enable_secondary_mmu();
+        crate::warn!("SMP: [CPU{}] MMU enabled", cpu_id);
     }
 
     // 1. Initialize GIC redistributor for this CPU
     #[cfg(not(test))]
     unsafe {
+        crate::warn!("SMP: [CPU{}] Initializing GIC redistributor...", cpu_id);
         crate::arch::aarch64::gicv3::init_cpu(cpu_id);
+        crate::warn!("SMP: [CPU{}] GIC redistributor initialized", cpu_id);
     }
 
     // 2. Initialize timer for this CPU
     // (The timer itself is per-CPU, but the configuration is shared)
     #[cfg(not(test))]
     {
+        crate::warn!("SMP: [CPU{}] Enabling timer IRQ...", cpu_id);
         // Enable timer IRQ for this CPU
         if let Some(_) = crate::arch::aarch64::gicv3::enable_irq_checked(
             crate::arch::aarch64::timer::TIMER_IRQ_PHYS
         ) {
-            // Timer IRQ enabled for this CPU
+            crate::warn!("SMP: [CPU{}] Timer IRQ enabled", cpu_id);
         }
     }
 
     // 3. Enable interrupts
     unsafe {
+        crate::warn!("SMP: [CPU{}] Enabling interrupts...", cpu_id);
         core::arch::asm!(
             "msr DAIFClr, #2",  // Clear IRQ mask (bit 1)
             options(nomem, nostack)
         );
+        crate::warn!("SMP: [CPU{}] Interrupts enabled", cpu_id);
     }
 
-    // 4. Signal that this CPU is ready
+    // 4. Signal that this CPU is ready (with memory barrier)
+    core::sync::atomic::compiler_fence(Ordering::Release);
     CPU_BOOT_FLAGS[cpu_id].store(true, Ordering::Release);
+    core::sync::atomic::compiler_fence(Ordering::SeqCst);
 
-    // Now it's safe to log
-    crate::info!("SMP: CPU {} initialized and ready", cpu_id);
+    crate::info!("SMP: [CPU{}] READY - Signaled boot CPU", cpu_id);
 
     // 5. Enter idle loop
     // In production, this would enter the scheduler's idle loop
     // For now, just spin with WFI
+    crate::warn!("SMP: [CPU{}] Entering idle loop", cpu_id);
     cpu_idle_loop(cpu_id);
 }
 
