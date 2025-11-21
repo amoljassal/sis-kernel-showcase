@@ -1,7 +1,8 @@
 # Core Systems Fix & Completion Plan
 
-**Status**: DRAFT
-**Created**: 2025-01-21
+**Status**: DRAFT v2 (REFINED)
+**Created**: 2025-11-21
+**Last Updated**: 2025-11-21
 **Target**: Fix failing and incomplete core kernel systems
 **Priority**: HIGH - Production Readiness Blockers
 
@@ -15,6 +16,37 @@ Analysis of the boot sequence revealed 9 critical systems that are either failin
 - 🔴 **3 Critical Failures**: SMP, Fork, SDHCI
 - 🟡 **4 Incomplete Stubs**: GOP/Framebuffer, Watchdog, VirtIO Console, Graphics Stack
 - 🟠 **2 Minor Issues**: GIC Priority Mask, Autonomy Confidence
+
+**Timeline Philosophy:**
+All time estimates include realistic debugging buffers (×1.4 multiplier) to account for Rust borrow checker challenges, ARM64 architecture quirks, and unexpected hardware behavior. Estimates assume QEMU-first development followed by hardware validation.
+
+---
+
+## How These Fixes Enable AI Features
+
+The SIS Kernel's AI integration depends critically on the systems being fixed in this plan:
+
+### SMP Multi-Core → Parallel NN Inference
+- **Current Blocker**: Only 1 of 4 CPUs online
+- **AI Impact**: Neural network inference cannot leverage SIMD parallelism across cores
+- **Once Fixed**: AI models can run parallel matrix operations across all 4 cores, dramatically reducing inference latency for real-time autonomous decision-making
+
+### Fork → Isolated Agent Processes
+- **Current Blocker**: Cannot create child processes
+- **AI Impact**: Cannot spawn isolated agent instances for parallel task execution
+- **Once Fixed**: Autonomy system can fork() worker processes for independent reasoning chains, enabling multi-agent collaboration patterns
+
+### SDHCI → Model Storage
+- **Current Blocker**: No SD card access on hardware
+- **AI Impact**: Cannot load large pre-trained models from persistent storage
+- **Once Fixed**: Kernel can load NN weights from SD card, enabling swap-based model serving for memory-constrained environments
+
+### Framebuffer → Visual Feedback
+- **Current Blocker**: No graphics output
+- **AI Impact**: Cannot visualize autonomy confidence graphs, decision trees, or real-time inference metrics
+- **Once Fixed**: Real-time visual debugging of AI decision-making processes
+
+These fixes unblock the integration of `llm` and `crypto-real` features mentioned in the build script, enabling production AI capabilities.
 
 ---
 
@@ -147,7 +179,7 @@ pub extern "C" fn secondary_cpu_main(cpu_id: u64) -> ! {
         // Initialize per-CPU timer
         timer::init_per_cpu();
 
-        // Mark CPU as online
+        // Mark CPU as online (with atomic synchronization)
         mark_cpu_online(cpu_id);
 
         crate::info!("CPU {} is now online!", cpu_id);
@@ -155,6 +187,27 @@ pub extern "C" fn secondary_cpu_main(cpu_id: u64) -> ! {
 
     // Enter scheduler idle loop
     scheduler::enter_idle_loop()
+}
+
+// Atomic CPU online tracking
+use core::sync::atomic::{AtomicU64, Ordering, compiler_fence};
+
+static CPU_ONLINE_MASK: AtomicU64 = AtomicU64::new(1); // Boot CPU (0) is always online
+
+fn mark_cpu_online(cpu_id: u64) {
+    // Ensure all previous writes are visible before marking online
+    compiler_fence(Ordering::Release);
+
+    // Atomically set the bit for this CPU
+    CPU_ONLINE_MASK.fetch_or(1 << cpu_id, Ordering::SeqCst);
+
+    // Ensure the online status is visible to all CPUs
+    compiler_fence(Ordering::SeqCst);
+}
+
+fn is_cpu_online(cpu_id: u64) -> bool {
+    let mask = CPU_ONLINE_MASK.load(Ordering::Acquire);
+    (mask & (1 << cpu_id)) != 0
 }
 ```
 
@@ -201,19 +254,45 @@ pub fn verify_cpu_on_support() -> bool {
 ```
 
 **Testing**:
+
+**Checkpoint 1: QEMU Validation**
 1. Boot with `-smp 1` to verify single-core still works
 2. Boot with `-smp 2` to test basic SMP
 3. Boot with `-smp 4` to test full quad-core
 4. Run parallel workload to verify all CPUs active
 5. Verify GIC interrupts routed to correct CPUs
 
+**Verification**: Use Kani to verify barrier ordering
+```rust
+#[cfg(kani)]
+#[kani::proof]
+fn verify_cpu_online_ordering() {
+    let cpu_id: u64 = kani::any();
+    kani::assume(cpu_id < 4);
+
+    mark_cpu_online(cpu_id);
+
+    // After marking online, reading should show the CPU is online
+    assert!(is_cpu_online(cpu_id));
+}
+```
+
+**Checkpoint 2: Hardware Validation** (After QEMU success)
+1. Test on Raspberry Pi 4/5 (BCM2711)
+2. Test on other ARM64 boards (if available)
+3. Verify CPU hotplug on hardware
+4. Measure context switch latency per-core
+5. Stress test under heavy multi-core load
+
 **Success Criteria**:
-- ✅ All 4 CPUs online in QEMU
+- ✅ All 4 CPUs online in QEMU (Checkpoint 1)
+- ✅ All cores online on RPi hardware (Checkpoint 2)
 - ✅ Load distributed across cores
 - ✅ No race conditions in scheduler
 - ✅ Proper CPU affinity for interrupts
+- ✅ Kani verification passes for atomic operations
 
-**Estimated Effort**: 3-5 days
+**Estimated Effort**: 5-8 days (Base: 5 days QEMU + 2 days hardware + 1 day debugging buffer)
 **Priority**: 🔴 P0 - Critical
 
 ---
@@ -402,7 +481,35 @@ pub fn sys_fork() -> Result<usize> {
 }
 ```
 
+**Security Considerations**:
+1. **Process Limit Enforcement**: Check `RLIMIT_NPROC` before creating child to prevent fork bombs
+2. **TOCTOU Races**: Audit COW fault handler for time-of-check-time-of-use races in refcount updates
+3. **Page Table Isolation**: Ensure COW pages don't leak across security boundaries
+4. **Refcount Overflow**: Protect against refcount overflow attacks (max 2^32 references per page)
+
+```rust
+pub fn sys_fork() -> Result<usize> {
+    let current = current_process();
+
+    // Security: Check process limit to prevent fork bombs
+    let rlimit_nproc = current.get_rlimit(RLIMIT_NPROC)?;
+    if get_process_count() >= rlimit_nproc {
+        return Err(Errno::EAGAIN);
+    }
+
+    // Security: Check refcount overflow before creating child
+    if !can_safely_fork(&current) {
+        return Err(Errno::ENOMEM);
+    }
+
+    let child = current.fork()?;
+    // ... rest of implementation
+}
+```
+
 **Testing**:
+
+**Checkpoint 1: QEMU Unit Tests**
 ```rust
 #[test]
 fn test_fork() {
@@ -438,16 +545,46 @@ fn test_cow() {
     assert_eq!(parent.read_memory(addr, 4), &[1, 2, 3, 4]);
     assert_eq!(child.read_memory(addr, 4), &[5, 6, 7, 8]);
 }
+
+#[test]
+fn test_fork_bomb_protection() {
+    // Verify RLIMIT_NPROC is enforced
+    set_rlimit(RLIMIT_NPROC, 10);
+    for _ in 0..10 {
+        assert!(sys_fork().is_ok());
+    }
+    assert_eq!(sys_fork(), Err(Errno::EAGAIN)); // 11th fork should fail
+}
 ```
 
-**Success Criteria**:
-- ✅ Fork creates child process with unique PID
-- ✅ Child has copy of parent's address space
-- ✅ COW works correctly (pages shared until write)
-- ✅ File descriptors properly duplicated
-- ✅ Shell can spawn background processes
+**Verification**: Use Prusti for refcount invariants
+```rust
+#[cfg(prusti)]
+#[requires(page_refcount(*phys_addr) > 0)]
+#[ensures(page_refcount(*phys_addr) == old(page_refcount(*phys_addr)) - 1)]
+fn decrement_page_refcount(phys_addr: u64) {
+    // Implementation with verified refcount safety
+}
+```
 
-**Estimated Effort**: 4-6 days
+**Checkpoint 2: Hardware Validation** (After QEMU success)
+1. Test on Raspberry Pi 4/5
+2. Fork stress test with multiple generations
+3. Measure fork latency on hardware
+4. Verify COW performance under memory pressure
+5. Security audit: Attempt fork bomb, refcount overflow attacks
+
+**Success Criteria**:
+- ✅ Fork creates child process with unique PID (QEMU)
+- ✅ Child has copy of parent's address space (QEMU)
+- ✅ COW works correctly (pages shared until write) (QEMU)
+- ✅ File descriptors properly duplicated (QEMU)
+- ✅ Shell can spawn background processes (QEMU)
+- ✅ Fork bomb protection works (QEMU)
+- ✅ Works on RPi hardware (Checkpoint 2)
+- ✅ Prusti verification passes for refcounts
+
+**Estimated Effort**: 6-8 days (Base: 4 days QEMU + 2 days security + 1 day hardware + 1 day buffer)
 **Priority**: 🔴 P0 - Critical
 
 ---
@@ -691,18 +828,29 @@ pub fn init_block_devices() {
 ```
 
 **Testing**:
-1. Test with QEMU (should use VirtIO-blk)
-2. Test with Raspberry Pi (should use SDHCI)
-3. Read/write tests for both drivers
-4. Stress test with large file I/O
+
+**Checkpoint 1: QEMU Validation**
+1. Verify VirtIO-blk still works (regression test)
+2. Boot with VirtIO-blk and read/write files
+3. Stress test with large file I/O
+4. Verify conditional compilation doesn't break QEMU
+
+**Checkpoint 2: Hardware Validation** (Primary focus for SDHCI)
+1. Test on Raspberry Pi 4/5 with SD card
+2. Verify SD card detection and initialization
+3. Read/write tests across different card types (SDSC, SDHC, SDXC)
+4. Performance benchmarking: sequential/random read/write
+5. Stress test: Large file transfers, concurrent I/O
 
 **Success Criteria**:
+- ✅ VirtIO-blk works in QEMU (Checkpoint 1)
 - ✅ SDHCI driver compiles with feature flag
-- ✅ SD card detection works on RPi
-- ✅ Read/write operations succeed
-- ✅ VirtIO-blk still works in QEMU
+- ✅ SD card detection works on RPi (Checkpoint 2)
+- ✅ Read/write operations succeed on hardware (Checkpoint 2)
+- ✅ Supports SDHC/SDXC high-capacity cards
+- ✅ No performance regressions in VirtIO-blk
 
-**Estimated Effort**: 5-7 days
+**Estimated Effort**: 7-10 days (Base: 4 days SDHCI implementation + 3 days hardware testing + 3 days debugging buffer)
 **Priority**: 🟡 P1 - Medium (QEMU works with VirtIO-blk)
 
 ---
@@ -875,18 +1023,30 @@ impl RpiMailbox {
 ```
 
 **Testing**:
-1. Test with QEMU + VirtIO-GPU enabled
-2. Test on Raspberry Pi with mailbox
-3. Test drawing primitives (lines, rectangles, text)
-4. Test scrolling and clearing
+
+**Checkpoint 1: QEMU + VirtIO-GPU Validation**
+1. Enable VirtIO-GPU in QEMU with `-device virtio-gpu-device`
+2. Verify framebuffer allocation and setup
+3. Test text rendering (console output)
+4. Test drawing primitives (lines, rectangles, text)
+5. Test scrolling and clearing
+
+**Checkpoint 2: Hardware Validation** (Raspberry Pi)
+1. Test mailbox framebuffer allocation on RPi 4/5
+2. Verify different resolutions (1920x1080, 1280x720, etc.)
+3. Test 24-bit and 32-bit color depths
+4. Performance test: Measure frame update rates
+5. Integration: Verify WM/UI stack works on hardware framebuffer
 
 **Success Criteria**:
-- ✅ Framebuffer available in at least one backend
-- ✅ Text rendering works
+- ✅ VirtIO-GPU framebuffer works in QEMU (Checkpoint 1)
+- ✅ Text rendering works in both backends
 - ✅ Basic graphics primitives work
+- ✅ Mailbox framebuffer works on RPi (Checkpoint 2)
 - ✅ Graceful fallback to serial if no display
+- ✅ No screen tearing or corruption
 
-**Estimated Effort**: 3-5 days
+**Estimated Effort**: 5-7 days (Base: 3 days VirtIO-GPU + 2 days RPi mailbox + 2 days buffer)
 **Priority**: 🟡 P1 - Medium
 
 ---
@@ -977,8 +1137,9 @@ impl ArmWatchdog {
 - ✅ Kicking watchdog resets timer
 - ✅ Timeout triggers reboot
 - ✅ Can be disabled for debugging
+- ✅ Works on both QEMU and hardware
 
-**Estimated Effort**: 1-2 days
+**Estimated Effort**: 2-3 days (Base: 1.5 days implementation + 1.5 days testing/debugging)
 **Priority**: 🟢 P2 - Low
 
 ---
@@ -1045,8 +1206,9 @@ impl VirtioConsole {
 - ✅ Console device detected
 - ✅ Can send/receive data from host
 - ✅ Useful for automated testing
+- ✅ Multiport support working
 
-**Estimated Effort**: 2-3 days
+**Estimated Effort**: 3-4 days (Base: 2 days implementation + 1 day testing + 1 day buffer)
 **Priority**: 🟢 P2 - Low
 
 ---
@@ -1065,24 +1227,54 @@ UI: TEST PASSED
 - May be mock/stub implementations
 - Need to verify real graphics capability
 
-**Investigation Needed**:
-1. Check if graphics tests are stubs or real
-2. Verify window manager functionality
-3. Test UI toolkit with actual rendering
-4. Determine if GPU acceleration works
+**Investigation & Audit Plan**:
 
-**Action Items**:
-```bash
-# Investigate graphics test implementation
-grep -r "GRAPHICS: TEST" crates/kernel/src/
-grep -r "WM: TEST" crates/kernel/src/
-grep -r "UI: TEST" crates/kernel/src/
+**Phase 1: Code Audit** (1 day)
+1. Locate test implementations:
+   - Find source of "GRAPHICS: TEST PASSED" output
+   - Find source of "WM: TEST PASSED" output
+   - Find source of "UI: TEST PASSED" output
+2. Analyze test implementations:
+   - Are they unit tests with mocks?
+   - Do they actually draw to framebuffer?
+   - Is GPU device actually initialized?
+3. Trace graphics stack dependencies:
+   - What framebuffer backend is being used?
+   - Is VirtIO-GPU or GOP actually functional?
+   - Are window manager primitives implemented or stubbed?
 
-# Check for actual GPU/framebuffer usage
-grep -r "virtio_gpu" crates/kernel/src/
-grep -r "framebuffer" crates/kernel/src/
-```
+**Phase 2: Functional Verification** (2 days)
+1. **Graphics Layer Test**:
+   - Create test that draws colored rectangles to framebuffer
+   - Verify pixel data is written (read back framebuffer)
+   - Test alpha blending and transparency
+2. **Window Manager Test**:
+   - Create actual window with title bar
+   - Verify window creation and destruction
+   - Test window movement/resizing
+   - Verify z-ordering of overlapping windows
+3. **UI Toolkit Test**:
+   - Render buttons, text boxes, labels
+   - Verify event handling (mouse clicks, keyboard input)
+   - Test widget layout and rendering
+4. **GPU Acceleration Check**:
+   - Verify VirtIO-GPU command submission
+   - Check if 2D/3D resources are actually used
+   - Measure rendering performance (FPS)
 
+**Phase 3: Integration Test** (1 day)
+1. Run complete UI demo application end-to-end
+2. Capture screenshots for visual verification
+3. Measure memory consumption of graphics stack
+4. Stress test: Open/close 100 windows rapidly
+
+**Deliverables**:
+- Audit report documenting actual vs. claimed functionality
+- List of stub implementations that need real implementations
+- Performance baseline measurements
+- Recommendation: Keep or rewrite graphics stack
+
+**Estimated Effort**: 4 days (1 day audit + 2 days verification + 1 day integration)
 **Priority**: 🟡 P1 - Need Investigation
 
 ---
@@ -1145,56 +1337,85 @@ pub fn debug_icc_pmr() {
 
 ## 4. Implementation Phases
 
-### Phase 1: Critical Blockers (Week 1-2)
+### Phase 1: Critical Blockers (Week 1-3)
 **Goal**: Fix systems preventing core functionality
+**Duration**: 14 days (with realistic buffers and hardware validation)
 
-1. **SMP Multi-Core** (5 days)
-   - Day 1-2: Diagnostic enhancement
-   - Day 3-4: Fix entry point and per-CPU initialization
-   - Day 5: Testing and validation
+1. **SMP Multi-Core** (5-8 days)
+   - Day 1-2: Diagnostic enhancement + atomic synchronization
+   - Day 3-5: Fix entry point and per-CPU initialization
+   - Day 6-7: QEMU testing and Kani verification
+   - Day 8: Hardware validation on Raspberry Pi
 
-2. **Fork Syscall** (6 days)
+2. **Fork Syscall** (6-8 days)
    - Day 1-2: Address space duplication
    - Day 3-4: COW implementation
-   - Day 5-6: Testing and integration
+   - Day 5-6: Security hardening (RLIMIT_NPROC, refcount protection)
+   - Day 7: QEMU testing and Prusti verification
+   - Day 8: Hardware validation
+
+**Checkpoint**: QEMU validation complete for both systems
+**Checkpoint**: Hardware validation complete on RPi
 
 **Deliverables**:
-- All 4 CPUs online in QEMU
-- Fork syscall working with COW
+- All 4 CPUs online in QEMU and hardware
+- Fork syscall working with COW and security protections
 - Shell can spawn child processes
+- Kani/Prusti verification passing
 
 ---
 
-### Phase 2: Storage & Display (Week 3)
+### Phase 2: Storage & Display (Week 4-5)
 **Goal**: Improve I/O and user experience
+**Duration**: 12 days (hardware-focused with fallback testing)
 
-3. **Framebuffer/Display** (5 days)
-   - Day 1-2: VirtIO-GPU backend
-   - Day 3-4: RPi mailbox backend
-   - Day 5: Testing and integration
+3. **Framebuffer/Display** (5-7 days)
+   - Day 1-3: VirtIO-GPU backend (QEMU)
+   - Day 4-5: RPi mailbox backend (hardware)
+   - Day 6-7: Integration testing and performance tuning
 
-4. **SDHCI Driver** (3 days)
-   - Day 1-2: Basic SDHCI implementation
-   - Day 3: Testing on hardware
+4. **SDHCI Driver** (7-10 days)
+   - Day 1-4: Basic SDHCI implementation (spec-compliant)
+   - Day 5-7: Hardware testing with real SD cards
+   - Day 8-10: Debugging buffer (card compatibility, timing issues)
+
+**Checkpoint**: QEMU graphics working via VirtIO-GPU
+**Checkpoint**: RPi framebuffer working via mailbox
+**Checkpoint**: SDHCI working on RPi hardware
 
 **Deliverables**:
-- Graphics output working (QEMU or RPi)
-- SD card support on real hardware
+- Graphics output working on QEMU (VirtIO-GPU)
+- Graphics output working on RPi (mailbox)
+- SD card support on real hardware (SDHC/SDXC)
+- VirtIO-blk regression tests passing
 
 ---
 
-### Phase 3: Polish & Reliability (Week 4)
-**Goal**: Add production features
+### Phase 3: Investigation & Polish (Week 6)
+**Goal**: Verify existing systems and add reliability features
+**Duration**: 9 days (investigation-heavy phase)
 
-5. **Watchdog Timer** (2 days)
-6. **VirtIO Console** (2 days)
-7. **GIC Priority Mask Investigation** (1 day)
-8. **Graphics Stack Verification** (2 days)
+5. **Graphics Stack Verification** (4 days)
+   - Day 1: Code audit of test implementations
+   - Day 2-3: Functional verification with real rendering
+   - Day 4: Integration testing and audit report
+
+6. **Watchdog Timer** (2-3 days)
+   - Day 1-2: ARM generic timer implementation
+   - Day 3: Testing on QEMU and hardware
+
+7. **VirtIO Console** (3-4 days)
+   - Day 1-2: Basic driver implementation
+   - Day 3-4: Multiport support and host integration testing
+
+**Checkpoint**: Graphics audit complete with recommendations
+**Checkpoint**: Watchdog and console working
 
 **Deliverables**:
+- Graphics stack audit report
 - Watchdog protecting against hangs
-- Host communication via console
-- All systems validated
+- Host communication via VirtIO console
+- All systems validated on both QEMU and hardware
 
 ---
 
@@ -1246,6 +1467,32 @@ fn test_fork_and_exec() {
 - Multi-core load test
 - Disk I/O stress
 - Graphics rendering stress
+
+### Performance Regression Tracking
+Establish baseline measurements before implementing changes, track throughout development:
+
+**Metrics to Track**:
+1. **Boot Time**: Time from UEFI handoff to shell prompt
+   - Baseline: ~3-5 seconds
+   - Target: No regression > 10%
+2. **Context Switch Latency**: Per-core task switch time
+   - Baseline: TBD (measure on single CPU)
+   - Target: < 2µs per-core after SMP
+3. **Fork Latency**: Time to create child process
+   - Target: < 10ms (including COW setup)
+4. **Memory Overhead**: Per-process memory footprint
+   - Baseline: TBD
+   - Target: No regression > 15% after COW
+5. **Interrupt Latency**: GIC IRQ handling time
+   - Baseline: TBD
+   - Target: < 5µs after SMP changes
+
+**Benchmarking Approach**:
+- Run benchmarks before each major change
+- Compare QEMU vs. hardware performance
+- Use statistical analysis (mean, p95, p99)
+- Investigate any regression > 10%
+- Document performance-correctness trade-offs
 
 ---
 
@@ -1332,28 +1579,101 @@ fn test_fork_and_exec() {
 
 ## 9. Rollout Plan
 
-### Stage 1: Development (Weeks 1-3)
+### Sprint Structure (2-week sprints)
+
+#### Sprint 1: SMP Foundation (Weeks 1-2)
+**Goal**: Get all CPUs online in QEMU
+- Day 1-3: SMP diagnostic enhancement, fix entry point
+- Day 4-7: Per-CPU initialization, atomic synchronization
+- Day 8-10: QEMU testing, Kani verification
+- Day 11-14: Hardware validation, debugging
+
+**Checkpoint 1**: All 4 CPUs online in QEMU
+**Checkpoint 2**: All CPUs online on Raspberry Pi hardware
+
+**Exit Criteria**:
+- ✅ Kani verification passes
+- ✅ Hardware tests pass
+- ✅ No performance regression
+
+---
+
+#### Sprint 2: Process Isolation (Weeks 3-4)
+**Goal**: Fork working with COW and security
+- Day 1-4: Address space duplication, COW implementation
+- Day 5-7: Security hardening (RLIMIT_NPROC, refcount protection)
+- Day 8-10: QEMU testing, Prusti verification
+- Day 11-14: Hardware validation, fork stress tests
+
+**Checkpoint 1**: Fork works in QEMU with COW
+**Checkpoint 2**: Security hardening validated (fork bomb protection)
+**Checkpoint 3**: Fork works on hardware
+
+**Exit Criteria**:
+- ✅ Prusti verification passes
+- ✅ Security tests pass
+- ✅ Fork latency < 10ms
+
+---
+
+#### Sprint 3: I/O & Display (Weeks 5-6)
+**Goal**: Graphics and storage working
+- Day 1-5: VirtIO-GPU and RPi mailbox framebuffer
+- Day 6-10: SDHCI implementation
+- Day 11-14: Hardware validation, performance tuning
+
+**Checkpoint 1**: Graphics working in QEMU (VirtIO-GPU)
+**Checkpoint 2**: Graphics working on RPi (mailbox)
+**Checkpoint 3**: SDHCI working on hardware
+
+**Exit Criteria**:
+- ✅ Framebuffer available on both platforms
+- ✅ SD card read/write working
+- ✅ No VirtIO-blk regression
+
+---
+
+#### Sprint 4: Verification & Polish (Week 7)
+**Goal**: Audit and reliability features
+- Day 1-4: Graphics stack audit
+- Day 5-7: Watchdog and VirtIO console
+- Day 8-10: Integration testing
+- Day 11-14: Documentation and release prep
+
+**Checkpoint 1**: Graphics audit complete
+**Checkpoint 2**: All reliability features working
+
+**Exit Criteria**:
+- ✅ All systems validated
+- ✅ Documentation updated
+- ✅ Release notes complete
+
+---
+
+### Stage 1: Development (Sprints 1-4)
 - Implement features in feature branches
 - Run unit tests continuously
-- Integrate to main branch incrementally
+- Integrate to main branch after each checkpoint
+- Track performance metrics sprint-over-sprint
 
-### Stage 2: Testing (Week 4)
-- Run full test suite
-- Hardware validation
-- Stress testing
-- Performance benchmarking
+### Stage 2: Final Validation (Week 8)
+- Run full test suite on QEMU
+- Run full test suite on Raspberry Pi hardware
+- Stress testing (fork bomb, multi-core load, disk I/O)
+- Performance benchmarking (compare to baselines)
+- Regression testing (ensure no breakage)
 
-### Stage 3: Documentation (Week 4-5)
+### Stage 3: Documentation (Week 8-9)
 - Update README with new capabilities
-- Document known issues
-- Create user guide for features
-- Write developer notes
+- Document known issues and workarounds
+- Create user guide for AI features enabled by fixes
+- Write developer notes on SMP/COW/SDHCI implementation
 
-### Stage 4: Release (Week 5)
-- Tag release version
-- Update changelog
-- Announce new features
-- Gather community feedback
+### Stage 4: Release (Week 9)
+- Tag release version (e.g., v0.2.0)
+- Update CHANGELOG.md with detailed changes
+- Create release announcement highlighting AI enablement
+- Gather community feedback via GitHub issues
 
 ---
 
@@ -1406,8 +1726,31 @@ fn test_fork_and_exec() {
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | 2025-01-21 | Claude Code | Initial draft |
+| 1.0 | 2025-11-21 | Claude Code | Initial draft |
+| 2.0 | 2025-11-21 | Claude Code | **REFINED**: Updated timelines (×1.4 realistic buffers), added QEMU→Hardware validation checkpoints, added AI integration section, added Kani/Prusti verification steps, added security considerations for fork/COW, fixed atomic synchronization in mark_cpu_online, expanded graphics audit with concrete steps, added performance regression tracking, added sprint structure with explicit checkpoints |
 
 ---
 
-**Next Steps**: Review this plan and prioritize which system to tackle first. Recommend starting with **SMP multi-core** as it has the highest impact on performance and enables true parallelism.
+## Summary of Refinements (v2.0)
+
+**Key Improvements**:
+1. ✅ **Realistic Timelines**: Updated all estimates with ×1.4 debugging buffers (e.g., SMP: 3-5 days → 5-8 days)
+2. ✅ **Hardware Validation**: Added explicit QEMU→Hardware checkpoints for each system
+3. ✅ **AI Integration**: New section explaining how fixes enable parallel NN inference, isolated agent processes, model storage, and visual feedback
+4. ✅ **Formal Verification**: Added Kani checkpoints for SMP barriers, Prusti contracts for COW refcounts
+5. ✅ **Security Hardening**: Added RLIMIT_NPROC checks, refcount overflow protection, TOCTOU race auditing for fork/COW
+6. ✅ **Atomic Synchronization**: Fixed mark_cpu_online example to use AtomicU64 with proper memory ordering
+7. ✅ **Graphics Audit**: Replaced grep commands with concrete functional verification steps (actual rendering tests)
+8. ✅ **Performance Tracking**: Added baseline metrics for boot time, context switch, fork latency, memory overhead
+9. ✅ **Sprint Structure**: Organized rollout into 4 sprints with explicit checkpoints and exit criteria
+
+**Philosophy**:
+- QEMU-first development for rapid iteration
+- Hardware validation after each major milestone
+- Formal verification where critical (atomics, refcounts)
+- Security-first for process isolation features
+- Performance regression tracking throughout
+
+---
+
+**Next Steps**: Begin Sprint 1 (SMP Foundation) by starting diagnostic enhancement and atomic synchronization work. Recommend creating feature branch `feat/smp-multicore` and establishing performance baselines before making changes.
