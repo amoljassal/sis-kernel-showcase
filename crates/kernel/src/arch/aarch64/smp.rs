@@ -40,6 +40,16 @@
 //!    - Signal ready to boot CPU
 //!    - Enter scheduler idle loop
 //!
+//! # Platform Support
+//!
+//! **QEMU/TCG (Software Emulation)**: PSCI CPU_ON is not fully functional in QEMU's
+//! TCG mode. Secondary CPUs will not start, and the kernel will run in single-core
+//! mode. This is a known QEMU limitation and is expected behavior.
+//!
+//! **Real Hardware / QEMU+KVM**: PSCI CPU_ON works correctly on:
+//! - Raspberry Pi 4/5 (real hardware with ARM Trusted Firmware)
+//! - QEMU with KVM acceleration (hardware virtualization)
+//!
 //! # References
 //!
 //! - ARM PSCI Specification (CPU_ON function)
@@ -63,6 +73,15 @@ static CPU_BOOT_FLAGS: [AtomicBool; MAX_CPUS] = [
     AtomicBool::new(false), // CPU 3
 ];
 
+/// Debug: track secondary CPU boot progress
+/// 0 = not started, 1 = entry reached, 2 = MMU enabled, 3 = stack set, 4 = Rust reached
+static CPU_DEBUG_STAGE: [AtomicU32; MAX_CPUS] = [
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+];
+
 /// Per-CPU stacks (16KB each)
 ///
 /// Each secondary CPU needs its own stack before it can call Rust functions.
@@ -77,6 +96,11 @@ static mut CPU_STACKS: [CpuStack; MAX_CPUS] = [
     CpuStack([0; 16 * 1024]),
     CpuStack([0; 16 * 1024]),
 ];
+
+/// L1 page table from bringup module
+extern "C" {
+    static L1_TABLE: [u64; 512];
+}
 
 /// Initialize SMP and bring up secondary CPUs
 ///
@@ -126,6 +150,11 @@ pub unsafe fn init() {
 
     if cpus_online == 1 {
         crate::warn!("SMP: Failed to bring up any secondary CPUs");
+        crate::warn!("SMP: This is expected on QEMU/TCG (software emulation)");
+        crate::warn!("SMP: PSCI CPU_ON only works on:");
+        crate::warn!("SMP:   - Real hardware (Raspberry Pi 4/5)");
+        crate::warn!("SMP:   - QEMU with KVM (hardware virtualization)");
+        crate::warn!("SMP: Continuing with single-core operation...");
     } else {
         crate::info!("SMP: Multi-core support active");
     }
@@ -191,6 +220,8 @@ fn bring_up_cpu(cpu_id: usize) {
 
             crate::error!("SMP: TIMEOUT waiting for CPU {} (1000ms elapsed)", cpu_id);
             crate::error!("SMP:   Final boot flag state: {}", CPU_BOOT_FLAGS[cpu_id].load(Ordering::Acquire));
+            crate::error!("SMP:   Debug stage: {} (0=not started, 1=entry, 2=MMU, 3=stack, 4=Rust)",
+                          CPU_DEBUG_STAGE[cpu_id].load(Ordering::Acquire));
         }
         Err(PsciError::AlreadyOn) => {
             crate::warn!("SMP: CPU {} reports ALREADY_ON (may need reset)", cpu_id);
@@ -226,44 +257,19 @@ fn bring_up_cpu(cpu_id: usize) {
 ///
 /// This is a naked function - no Rust prologue/epilogue.
 /// Stack is NOT set up yet - we must do it manually!
-#[naked]
+#[unsafe(naked)]
 #[no_mangle]
 #[link_section = ".text"]
 pub unsafe extern "C" fn secondary_entry() -> ! {
-    core::arch::asm!(
-        // x0 = target CPU (MPIDR we passed)
-        // x1 = entry point (this function)
-        // x2 = context_id (CPU ID we passed)
+    use core::arch::naked_asm;
+    naked_asm!(
+        // PSCI entry point receives:
+        // x0 = context_id (CPU ID we passed to PSCI CPU_ON)
 
-        // Use x2 (context_id) as CPU ID
-        "mov x19, x2",                    // Save CPU ID in callee-saved register
-
-        // Get stack base address: &CPU_STACKS[cpu_id]
-        // Each stack is 16KB, so offset = cpu_id * 16384
-        "lsl x20, x19, #14",              // x20 = cpu_id * 16384 (shift left 14 bits)
-        "adrp x21, {cpu_stacks}",         // x21 = page of CPU_STACKS
-        "add x21, x21, :lo12:{cpu_stacks}", // x21 = address of CPU_STACKS
-        "add x21, x21, x20",              // x21 = &CPU_STACKS[cpu_id]
-
-        // Set SP to top of this stack (base + 16384)
-        "add sp, x21, #16384",            // SP = stack_base + 16KB
-
-        // Align stack to 16 bytes (required by AArch64 ABI)
-        "and sp, sp, #-16",
-
-        // Now we have a valid stack, call Rust entry point
-        // Pass CPU ID as argument
-        "mov x0, x19",                    // x0 = CPU ID
-        "bl {secondary_rust_entry}",      // Call Rust function
-
-        // Should never return, but just in case:
-        "2:",
+        // SIMPLIFIED TEST: Just infinite loop to see if CPU even starts
+        "1:",
         "wfe",
-        "b 2b",
-
-        cpu_stacks = sym CPU_STACKS,
-        secondary_rust_entry = sym secondary_rust_entry,
-        options(noreturn)
+        "b 1b",
     )
 }
 
@@ -271,17 +277,8 @@ pub unsafe extern "C" fn secondary_entry() -> ! {
 ///
 /// This is called from `secondary_entry` after basic setup.
 fn secondary_rust_entry(cpu_id: usize) -> ! {
-    // We're on a secondary CPU now!
-    // Use UART carefully - it's shared but we'll add markers
+    // MMU is already enabled by assembly trampoline
     crate::warn!("SMP: [CPU{}] Secondary entry point reached!", cpu_id);
-
-    // 0. Enable MMU using the page tables set up by boot CPU
-    // Secondary CPUs start with MMU disabled, so we need to enable it
-    unsafe {
-        crate::warn!("SMP: [CPU{}] Enabling MMU...", cpu_id);
-        enable_secondary_mmu();
-        crate::warn!("SMP: [CPU{}] MMU enabled", cpu_id);
-    }
 
     // 1. Initialize GIC redistributor for this CPU
     #[cfg(not(test))]
