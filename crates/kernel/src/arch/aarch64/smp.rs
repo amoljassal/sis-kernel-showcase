@@ -210,33 +210,61 @@ fn bring_up_cpu(cpu_id: usize) {
     }
 }
 
-/// Secondary CPU entry point
+/// Secondary CPU entry point (Assembly trampoline)
 ///
-/// This function is called by firmware (via PSCI) when a secondary CPU is started.
-/// It receives:
-/// - x0: CPU ID (MPIDR value)
-/// - x1: Context ID (stack pointer in our case)
+/// This is the FIRST code that runs on secondary CPUs after PSCI CPU_ON.
+/// PSCI passes:
+/// - x0: Target CPU (MPIDR value we passed to CPU_ON)
+/// - x1: Entry point (this function's address)
+/// - x2: Context ID (CPU ID we passed to CPU_ON)
+///
+/// This naked function must:
+/// 1. Set up stack pointer using CPU ID
+/// 2. Jump to Rust code
 ///
 /// # Safety
 ///
-/// This is the first Rust code that runs on secondary CPUs. It must:
-/// 1. Set up the stack pointer (passed in x1)
-/// 2. Initialize per-CPU hardware (GIC redistributor, timer)
-/// 3. Enable interrupts
-/// 4. Signal ready to boot CPU
-/// 5. Never return
+/// This is a naked function - no Rust prologue/epilogue.
+/// Stack is NOT set up yet - we must do it manually!
+#[naked]
 #[no_mangle]
 #[link_section = ".text"]
-pub unsafe extern "C" fn secondary_entry(cpu_id: u64, _stack_ptr: u64) -> ! {
-    // Extract CPU ID from MPIDR
-    let cpu = (cpu_id & 0xFF) as usize;
+pub unsafe extern "C" fn secondary_entry() -> ! {
+    core::arch::asm!(
+        // x0 = target CPU (MPIDR we passed)
+        // x1 = entry point (this function)
+        // x2 = context_id (CPU ID we passed)
 
-    // Set up stack pointer
-    // Note: In a real implementation, this would be done in assembly before
-    // calling this function. For now, we assume firmware has set SP to stack_ptr.
+        // Use x2 (context_id) as CPU ID
+        "mov x19, x2",                    // Save CPU ID in callee-saved register
 
-    // At this point, we can safely use the stack and call Rust functions
-    secondary_rust_entry(cpu);
+        // Get stack base address: &CPU_STACKS[cpu_id]
+        // Each stack is 16KB, so offset = cpu_id * 16384
+        "lsl x20, x19, #14",              // x20 = cpu_id * 16384 (shift left 14 bits)
+        "adrp x21, {cpu_stacks}",         // x21 = page of CPU_STACKS
+        "add x21, x21, :lo12:{cpu_stacks}", // x21 = address of CPU_STACKS
+        "add x21, x21, x20",              // x21 = &CPU_STACKS[cpu_id]
+
+        // Set SP to top of this stack (base + 16384)
+        "add sp, x21, #16384",            // SP = stack_base + 16KB
+
+        // Align stack to 16 bytes (required by AArch64 ABI)
+        "and sp, sp, #-16",
+
+        // Now we have a valid stack, call Rust entry point
+        // Pass CPU ID as argument
+        "mov x0, x19",                    // x0 = CPU ID
+        "bl {secondary_rust_entry}",      // Call Rust function
+
+        // Should never return, but just in case:
+        "2:",
+        "wfe",
+        "b 2b",
+
+        cpu_stacks = sym CPU_STACKS,
+        secondary_rust_entry = sym secondary_rust_entry,
+        options(noreturn)
+    )
 }
 
 /// Secondary CPU entry point (Rust)
