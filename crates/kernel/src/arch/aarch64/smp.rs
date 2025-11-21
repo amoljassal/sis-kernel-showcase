@@ -245,13 +245,13 @@ fn bring_up_cpu(cpu_id: usize) {
 ///
 /// This is the FIRST code that runs on secondary CPUs after PSCI CPU_ON.
 /// PSCI passes:
-/// - x0: Target CPU (MPIDR value we passed to CPU_ON)
-/// - x1: Entry point (this function's address)
-/// - x2: Context ID (CPU ID we passed to CPU_ON)
+/// - x0: Context ID (CPU ID we passed to CPU_ON)
 ///
 /// This naked function must:
-/// 1. Set up stack pointer using CPU ID
-/// 2. Jump to Rust code
+/// 1. Save CPU ID from x0
+/// 2. Set up stack pointer using CPU ID
+/// 3. Enable MMU with same page tables as boot CPU
+/// 4. Jump to Rust code
 ///
 /// # Safety
 ///
@@ -266,17 +266,68 @@ pub unsafe extern "C" fn secondary_entry() -> ! {
         // PSCI entry point receives:
         // x0 = context_id (CPU ID we passed to PSCI CPU_ON)
 
-        // SIMPLIFIED TEST: Just infinite loop to see if CPU even starts
-        "1:",
-        "wfe",
-        "b 1b",
+        // Save CPU ID (x0) to a callee-saved register
+        "mov x19, x0",
+
+        // Set up stack for this CPU
+        // Stack address = CPU_STACKS[cpu_id].0 + 16KB
+        "adrp x1, {cpu_stacks}",
+        "add  x1, x1, :lo12:{cpu_stacks}",
+
+        // Calculate offset: cpu_id * sizeof(CpuStack) = cpu_id * 16KB
+        "lsl  x2, x19, #14",        // x2 = cpu_id * 16384 (16KB = 2^14)
+        "add  x1, x1, x2",           // x1 = &CPU_STACKS[cpu_id]
+        "add  x1, x1, #16384",       // x1 = stack_top (add 16KB)
+        "mov  sp, x1",               // Set stack pointer
+
+        // Enable MMU using boot CPU's page table
+        // Set MAIR_EL1 (Memory Attribute Indirection Register)
+        "mov  x2, #0x04",            // AttrIdx0 = Device-nGnRE
+        "movk x2, #0xFF00, lsl #0",  // AttrIdx1 = Normal WBWA
+        "msr  MAIR_EL1, x2",
+        "isb",
+
+        // Set TCR_EL1 (Translation Control Register)
+        // 4KB pages, 39-bit VA, 48-bit PA, Inner/Outer WBWA
+        "mov  x2, #25",              // T0SZ = 25 (64-39)
+        "orr  x2, x2, #0x100",       // IRGN0 = WBWA (01 << 8)
+        "orr  x2, x2, #0x400",       // ORGN0 = WBWA (01 << 10)
+        "orr  x2, x2, #0x3000",      // SH0 = Inner Shareable (11 << 12)
+        // IPS = 48-bit PA (101 << 32) - must use movk since immediate is too large
+        "movk x2, #0x5, lsl #32",    // Set bits [47:32] to 0x0005
+        "msr  TCR_EL1, x2",
+        "isb",
+
+        // Set TTBR0_EL1 to boot CPU's L1 page table
+        "adrp x2, {l1_table}",
+        "add  x2, x2, :lo12:{l1_table}",
+        "msr  TTBR0_EL1, x2",
+        "dsb  ish",
+        "isb",
+
+        // Enable MMU in SCTLR_EL1 (M=1, C=1, I=1)
+        "mrs  x2, SCTLR_EL1",
+        "orr  x2, x2, #0x1",         // M (MMU enable)
+        "orr  x2, x2, #0x4",         // C (Data cache enable)
+        "orr  x2, x2, #0x1000",      // I (Instruction cache enable)
+        "msr  SCTLR_EL1, x2",
+        "isb",
+
+        // Call Rust entry point with CPU ID as argument
+        "mov  x0, x19",              // Restore CPU ID
+        "b    {secondary_rust_entry}",
+
+        cpu_stacks = sym CPU_STACKS,
+        l1_table = sym L1_TABLE,
+        secondary_rust_entry = sym secondary_rust_entry,
     )
 }
 
 /// Secondary CPU entry point (Rust)
 ///
 /// This is called from `secondary_entry` after basic setup.
-fn secondary_rust_entry(cpu_id: usize) -> ! {
+#[no_mangle]
+extern "C" fn secondary_rust_entry(cpu_id: usize) -> ! {
     // MMU is already enabled by assembly trampoline
     crate::warn!("SMP: [CPU{}] Secondary entry point reached!", cpu_id);
 
