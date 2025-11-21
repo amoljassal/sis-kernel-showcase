@@ -118,8 +118,8 @@ impl VirtQueue {
             ptr::write_bytes(used_phys as *mut u8, 0, used_size);
         }
 
-        // Initialize free descriptor list
-        let free_list: alloc::vec::Vec<u16> = (0..size).collect();
+        // Initialize free descriptor list (reverse order so pop() gives us 0 first)
+        let free_list: alloc::vec::Vec<u16> = (0..size).rev().collect();
 
         Ok(Self {
             index,
@@ -171,8 +171,8 @@ impl VirtQueue {
         let avail_base = region_pa + (avail_off as u64);
         let used_base = region_pa + (used_off as u64);
 
-        // Initialize free descriptor list
-        let free_list: alloc::vec::Vec<u16> = (0..size).collect();
+        // Initialize free descriptor list (reverse order so pop() gives us 0 first)
+        let free_list: alloc::vec::Vec<u16> = (0..size).rev().collect();
 
         Ok(Self {
             index,
@@ -289,9 +289,21 @@ impl VirtQueue {
 
     /// Check if there are used buffers ready
     pub fn has_used_buf(&self) -> bool {
+        // Ensure we see device writes to used ring
+        compiler_fence(Ordering::Acquire);
+
         unsafe {
             let used_idx_ptr = (self.used_base + 2) as *const u16;
             let used_idx = ptr::read_volatile(used_idx_ptr);
+
+            // Debug: log first few checks for queue 0 (RX)
+            static mut RX_IDX_CHECKS: usize = 0;
+            if self.index == 0 && RX_IDX_CHECKS < 3 {
+                RX_IDX_CHECKS += 1;
+                crate::warn!("RX queue: used_idx={} last_used_idx={} base=0x{:x}",
+                           used_idx, self.last_used_idx, self.used_base);
+            }
+
             used_idx != self.last_used_idx
         }
     }

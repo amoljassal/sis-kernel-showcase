@@ -71,16 +71,40 @@ impl VirtioNetDevice {
             return Err(Errno::EINVAL);
         }
 
-        // Basic status + feature negotiation (use generic helper)
-        // For now, we only require basic features (0)
-        let driver_features: u32 = 0;
-        transport_ref
-            .init_device(driver_features)
-            .map_err(|_| Errno::EIO)?;
+        // Check VirtIO MMIO version
+        let mmio_version = transport_ref.read_reg(VirtIOMMIOOffset::Version);
+        let is_legacy = mmio_version == 1;
+        crate::warn!("virtio-net: MMIO version = {} ({})", mmio_version,
+                     if is_legacy { "legacy" } else { "modern" });
 
         // Log device features for visibility
-        let device_features = transport_ref.read_reg(VirtIOMMIOOffset::DeviceFeatures);
-        crate::info!("virtio-net: device features = 0x{:08x}", device_features);
+        let device_features_low = transport_ref.read_reg(VirtIOMMIOOffset::DeviceFeatures);
+        crate::warn!("virtio-net: device features[0:31] = 0x{:08x}", device_features_low);
+
+        // Enable required features:
+        // - VIRTIO_NET_F_MAC (bit 5) - Device has MAC address
+        // - VIRTIO_NET_F_MRG_RXBUF (bit 15) - Merged RX buffers (try enabling for RX)
+        // - VIRTIO_NET_F_STATUS (bit 16) - Device has status field
+        // Note: Legacy (v1) devices don't support VIRTIO_F_VERSION_1
+        let driver_features: u32 = (1 << 5) | (1 << 15) | (1 << 16);  // MAC + MRG_RXBUF + STATUS
+        crate::warn!("virtio-net: requesting features = 0x{:08x}", driver_features);
+
+        // For modern devices (v2+), also enable VIRTIO_F_VERSION_1
+        if !is_legacy {
+            transport_ref.write_reg(VirtIOMMIOOffset::DriverFeaturesSel, 1);
+            transport_ref.write_reg(VirtIOMMIOOffset::DriverFeatures, 1);  // VIRTIO_F_VERSION_1
+            transport_ref.write_reg(VirtIOMMIOOffset::DriverFeaturesSel, 0);
+        }
+
+        transport_ref
+            .init_device(driver_features)
+            .map_err(|e| {
+                crate::warn!("virtio-net: init_device failed: {:?}", e);
+                Errno::EIO
+            })?;
+
+        let status_after = transport_ref.read_reg(VirtIOMMIOOffset::Status);
+        crate::warn!("virtio-net: status after init = 0x{:x}", status_after);
 
         // Read configuration space for MAC address
         let mac = Self::read_mac(&transport_ref);
@@ -89,18 +113,36 @@ impl VirtioNetDevice {
 
         let mtu = 1514; // Standard Ethernet MTU + header
 
-        // Initialize virtqueues
+        // Initialize virtqueues (use contiguous allocation for legacy devices)
         // RX queue (index 0)
-        let mut rx_queue = VirtQueue::new(0, 256)?;
-        transport_ref.setup_queue(&mut rx_queue).map_err(|_| Errno::EIO)?;
+        let mut rx_queue = if is_legacy {
+            VirtQueue::new_contiguous(0, 256)?
+        } else {
+            VirtQueue::new(0, 256)?
+        };
+        let (rx_desc, rx_avail, rx_used) = rx_queue.get_addresses();
+        crate::warn!("virtio-net: RX queue addrs: desc=0x{:x} avail=0x{:x} used=0x{:x}", rx_desc, rx_avail, rx_used);
+        if is_legacy {
+            transport_ref.setup_queue_legacy(&rx_queue).map_err(|_| Errno::EIO)?;
+        } else {
+            transport_ref.setup_queue(&mut rx_queue).map_err(|_| Errno::EIO)?;
+        }
 
         // TX queue (index 1)
-        let mut tx_queue = VirtQueue::new(1, 256)?;
-        transport_ref.setup_queue(&mut tx_queue).map_err(|_| Errno::EIO)?;
+        let mut tx_queue = if is_legacy {
+            VirtQueue::new_contiguous(1, 256)?
+        } else {
+            VirtQueue::new(1, 256)?
+        };
+        let (tx_desc, tx_avail, tx_used) = tx_queue.get_addresses();
+        crate::warn!("virtio-net: TX queue addrs: desc=0x{:x} avail=0x{:x} used=0x{:x}", tx_desc, tx_avail, tx_used);
+        if is_legacy {
+            transport_ref.setup_queue_legacy(&tx_queue).map_err(|_| Errno::EIO)?;
+        } else {
+            transport_ref.setup_queue(&mut tx_queue).map_err(|_| Errno::EIO)?;
+        }
 
-        // Set device status to DRIVER_OK
-        transport_ref.driver_ready();
-
+        // Create device structure (but don't set DRIVER_OK yet)
         let device = Self {
             transport: Arc::new(Mutex::new(transport_ref)),
             rx_queue: Arc::new(Mutex::new(rx_queue)),
@@ -110,8 +152,11 @@ impl VirtioNetDevice {
             rx_buffers: Mutex::new(VecDeque::new()),
         };
 
-        // Pre-fill RX queue with buffers
+        // Pre-fill RX queue with buffers BEFORE setting DRIVER_OK
         device.refill_rx_buffers()?;
+
+        // Now set device status to DRIVER_OK
+        device.transport.lock().driver_ready();
 
         crate::info!("virtio-net: initialized device {}", name);
         Ok(device)
@@ -134,7 +179,16 @@ impl VirtioNetDevice {
         let mut rx_queue = self.rx_queue.lock();
         let transport = self.transport.lock();
 
+        static mut REFILL_COUNT: usize = 0;
+        unsafe {
+            REFILL_COUNT += 1;
+            if REFILL_COUNT <= 2 {
+                crate::warn!("RX refill #{}: adding 128 buffers", REFILL_COUNT);
+            }
+        }
+
         // Add 128 RX buffers
+        let mut added = 0;
         for _ in 0..128 {
             // Allocate buffer (header + max packet size)
             let buffer_size = size_of::<VirtioNetHdr>() + self.mtu as usize;
@@ -143,10 +197,23 @@ impl VirtioNetDevice {
 
             // Add to virtqueue as writable (device writes received packets here)
             let buffers = vec![(buffer_addr, buffer_size as u32, true)];
-            rx_queue.add_buf(&buffers)?;
+            if let Ok(_desc_id) = rx_queue.add_buf(&buffers) {
+                // Store buffer for later retrieval
+                self.rx_buffers.lock().push_back(buffer);
+                added += 1;
+            } else {
+                break; // Queue full
+            }
+        }
 
-            // Store buffer for later retrieval
-            self.rx_buffers.lock().push_back(buffer);
+        unsafe {
+            if REFILL_COUNT <= 2 {
+                crate::warn!("RX refill #{}: added {} buffers, notifying queue 0", REFILL_COUNT, added);
+                // Check available ring index
+                let avail_idx_ptr = (rx_queue.avail_ring_addr() + 2) as *const u16;
+                let avail_idx = core::ptr::read_volatile(avail_idx_ptr);
+                crate::warn!("RX queue: avail_idx={} (should be {})", avail_idx, added);
+            }
         }
 
         // Notify device that RX queue has buffers
@@ -158,6 +225,7 @@ impl VirtioNetDevice {
     /// Transmit a packet
     pub fn transmit(&self, packet: &[u8]) -> Result<()> {
         if packet.len() > self.mtu as usize {
+            crate::warn!("TX: packet too large {} > {}", packet.len(), self.mtu);
             return Err(Errno::EMSGSIZE);
         }
 
@@ -184,18 +252,51 @@ impl VirtioNetDevice {
         let buffers = vec![(buffer_addr, buffer_len, false)];
         let desc_id = tx_queue.add_buf(&buffers)?;
 
+        // Check device status before notify
+        let dev_status = transport.read_reg(VirtIOMMIOOffset::Status);
+
         // Notify device
         transport.write_reg(VirtIOMMIOOffset::QueueNotify, 1);
 
+        // Log packet details (first 3 packets for debugging)
+        static mut TX_COUNT: usize = 0;
+        unsafe {
+            TX_COUNT += 1;
+            if TX_COUNT <= 3 {
+                crate::warn!("TX #{}: addr=0x{:x} len={} desc={} dev_status=0x{:x}",
+                           TX_COUNT, buffer_addr, buffer_len, desc_id, dev_status);
+            }
+        }
+
         // Wait for completion (bounded spin to avoid deadlock if device not consuming)
         let mut spins: usize = 0;
+        let mut last_int_status = 0;
+        let mut checked_used = false;
         loop {
+            // Check and acknowledge any pending interrupts
+            let int_status = transport.read_reg(VirtIOMMIOOffset::InterruptStatus);
+            if int_status != 0 && int_status != last_int_status {
+                crate::warn!("TX: INTERRUPT! status=0x{:x} at spin={}", int_status, spins);
+                transport.write_reg(VirtIOMMIOOffset::InterruptACK, int_status);
+                last_int_status = int_status;
+            }
+
             if let Some((completed_id, _len)) = tx_queue.get_used_buf() {
-                if completed_id == desc_id { break; }
+                if completed_id == desc_id {
+                    crate::warn!("TX: SUCCESS after {} spins", spins);
+                    break;
+                } else if !checked_used {
+                    crate::warn!("TX: got used buf {} but waiting for {}", completed_id, desc_id);
+                    checked_used = true;
+                }
             }
             core::hint::spin_loop();
             spins = spins.wrapping_add(1);
-            if spins > 5_000_000 { return Err(Errno::ETIMEDOUT); }
+            if spins > 5_000_000 {
+                crate::warn!("TX: TIMEOUT after {} spins, int_status=0x{:x}, dev_status=0x{:x}",
+                          spins, last_int_status, transport.read_reg(VirtIOMMIOOffset::Status));
+                return Err(Errno::ETIMEDOUT);
+            }
         }
 
         Ok(())
@@ -203,10 +304,28 @@ impl VirtioNetDevice {
 
     /// Receive a packet (non-blocking)
     pub fn receive(&self) -> Option<Vec<u8>> {
+        let transport = self.transport.lock();
         let mut rx_queue = self.rx_queue.lock();
 
         // Check for completed RX descriptors
+        static mut RX_CHECKS: usize = 0;
+        unsafe {
+            RX_CHECKS += 1;
+            if RX_CHECKS <= 10 {
+                // Check interrupt status
+                let int_status = transport.read_reg(VirtIOMMIOOffset::InterruptStatus);
+                crate::warn!("RX check #{}: has_used={} int_status=0x{:x}",
+                           RX_CHECKS, rx_queue.has_used_buf(), int_status);
+                // Acknowledge any pending interrupts
+                if int_status != 0 {
+                    transport.write_reg(VirtIOMMIOOffset::InterruptACK, int_status);
+                    crate::warn!("RX: ACKed interrupt 0x{:x}", int_status);
+                }
+            }
+        }
+
         if let Some((desc_id, len)) = rx_queue.get_used_buf() {
+            crate::warn!("RX: got packet desc={} len={}", desc_id, len);
             // Retrieve the buffer
             let mut rx_buffers = self.rx_buffers.lock();
             if let Some(mut buffer) = rx_buffers.pop_front() {
@@ -216,15 +335,20 @@ impl VirtioNetDevice {
                     let packet_len = len as usize - hdr_size;
                     let packet = buffer[hdr_size..hdr_size + packet_len].to_vec();
 
-                    // Refill RX buffer
+                    // Refill RX buffer (must drop all locks first!)
                     drop(rx_buffers);
                     drop(rx_queue);
+                    drop(transport);  // Drop transport lock to avoid deadlock
                     let _ = self.refill_rx_buffers();
 
                     return Some(packet);
                 }
             }
         }
+
+        // Drop locks explicitly
+        drop(rx_queue);
+        drop(transport);
 
         None
     }

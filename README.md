@@ -567,7 +567,7 @@ User Command → Shell Parser → Neural Agent → Meta-Agent Coordinator
 | **Hardware** | Only tested in QEMU; no real ARM64 bring‑up yet | Planned | Use QEMU for now; Pi 4/5 and Jetson validation are roadmap items |
 | **SMP** | Uniprocessor focus; SMP code exists but unvalidated | Planned | Single core sufficient for current QEMU demos |
 | **NPU** | Emulated (MMIO); no real accelerator support | By Design | Validates interface; real NPU requires hardware |
-| **Network** | Basic smoltcp TCP/IP | Functional | TCP/UDP/DHCP in QEMU; advanced protocols not targeted |
+| **Network** | VirtIO-net MMIO + smoltcp TCP/IP | Functional | DHCP, TCP/UDP working; legacy (v1) MMIO with MRG_RXBUF support |
 | **Storage** | ext4 journaling implemented; utilities limited | Functional | Create/read/write/delete work; no fsck yet |
 | **GUI** | Live QEMU control supported; still evolving | In Progress | Works with daemon against QEMU; expect instability |
 | **Real‑Time** | CBS+EDF in QEMU only | Tested | Not a hard real‑time claim; QEMU timing not representative |
@@ -580,7 +580,7 @@ User Command → Shell Parser → Neural Agent → Meta-Agent Coordinator
 |---------|------|----------|------------|-------|
 | Boot to Shell | ✅ | — | — | Boots reliably in QEMU; no endurance claim |
 | VFS (ext4/tmpfs) | ✅ | — | — | Journaling implemented; no fsck |
-| Network Stack | ✅ | — | — | smoltcp TCP/UDP/DHCP |
+| Network Stack | ✅ | — | — | VirtIO-net (MMIO v1) + smoltcp TCP/UDP/DHCP |
 | Deterministic Scheduler | ✅ | — | — | CBS+EDF scaffolding; QEMU timing only |
 | Stress/Validation Suites | ✅ | — | — | See “Latest Results”; slow under full load |
 | LLM (kernel) | ✅ | — | — | Full transformer inference: BPE tokenizer, Q4_0 quantization, GGUF loader, KV cache, SIMD; 16 modules (10,910 lines); loads from VFS `/models/*.gguf` |
