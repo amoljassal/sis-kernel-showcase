@@ -4268,15 +4268,17 @@ sis> viobench read   # Benchmark block device read performance
 sis> viobench write  # Benchmark block device write performance
 ```
 
-### 8.4 Process Foundation (Fork Scaffolding)
+### 8.4 Process Foundation (Fork Syscall - COMPLETE ✅)
 
-Fork system call scaffolding with copy-on-write (COW) page table support for efficient process duplication.
+Production-ready fork() system call with copy-on-write (COW) page table support for efficient process duplication.
 
 **Core Features:**
-- **COW Page Tables** - Deferred copying with write protection (crates/kernel/src/mm/pagetable.rs:1-240)
-- **Fork Scaffolding** - Basic fork implementation for testing (crates/kernel/src/process/fork.rs:1-241)
-- **Resource Duplication** - VFS handles, credentials, signal queues (crates/kernel/src/process/fork.rs:80-150)
-- **Statistics Tracking** - Fork success/failure metrics (crates/kernel/src/process/fork.rs:200-230)
+- **COW Page Tables** - Deferred copying with write protection (crates/kernel/src/mm/pagetable.rs:136-240)
+- **Fork Implementation** - Full fork() syscall with separate kernel stacks (crates/kernel/src/process/fork.rs:70-175)
+- **Resource Duplication** - Memory manager, VFS handles, credentials, signal queues (crates/kernel/src/process/fork.rs:113-132)
+- **Trap Frame Setup** - Child returns 0, parent returns child PID (crates/kernel/src/process/fork.rs:129-132)
+- **Deadlock Prevention** - Proper lock scoping and resource ordering (crates/kernel/src/process/fork.rs:84-135)
+- **Statistics Tracking** - Fork success/failure metrics (crates/kernel/src/process/fork.rs:225-255)
 
 **Architecture:**
 ```rust
@@ -4346,9 +4348,13 @@ pub fn handle_cow_fault(addr: VirtAddr) -> Result<(), PageFaultError> {
 ```
 
 **Implementation Status:**
-- ✅ Fork scaffolding complete
+- ✅ Fork syscall complete and tested
 - ✅ COW page table infrastructure
-- ⚠️ Full fork with exec pending (Phase 9)
+- ✅ Separate 16KB kernel stacks per process
+- ✅ Proper trap frame setup (child returns 0, parent returns child PID)
+- ✅ Child marked as Ready for scheduler
+- ✅ Deadlock prevention (proper lock scoping)
+- 📋 Future: exec() system call (Phase 9)
 
 ### 8.5 Profiling Framework
 

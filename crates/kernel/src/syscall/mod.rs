@@ -607,22 +607,24 @@ pub fn sys_getpid() -> Result<isize> {
     Ok(pid as isize)
 }
 
-/// sys_fork - Create a child process (Phase 8 scaffolding)
+/// sys_fork - Create a child process
 ///
 /// Creates a copy of the current process with copy-on-write memory.
-/// Returns child PID to parent. In Phase 9, child will receive 0.
+/// Parent receives child PID, child receives 0.
+///
+/// # Returns
+/// * Parent: child PID (positive integer)
+/// * Child: 0 (when scheduled and resumed)
 pub fn sys_fork() -> Result<isize> {
     let parent_pid = crate::process::current_pid();
 
-    // Phase 8: Use new do_fork() implementation
+    // Create child process with COW memory, separate kernel stack,
+    // and trap frame configured to return 0 to child
     let child_pid = crate::process::do_fork(parent_pid)?;
 
-    // Phase 8: Only parent returns (child context not yet implemented)
-    // TODO Phase 9: Copy trap frame and set child's return value to 0
-    // TODO Phase 9: Mark child as runnable in scheduler
-    // TODO Phase 9: Properly differentiate parent/child return values
-
     // Parent returns child PID
+    // Child is now Ready in process table and will be scheduled
+    // When child runs, it will return 0 (already set in its trap_frame.x0)
     Ok(child_pid as isize)
 }
 

@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(alloc_error_handler)]
+#![feature(naked_functions)]
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 // CI lint gate: when built with `--features strict`, fail on any warning
 #![cfg_attr(feature = "strict", deny(warnings))]

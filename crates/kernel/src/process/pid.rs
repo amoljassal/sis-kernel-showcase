@@ -7,6 +7,7 @@ use super::task::{Pid, Task};
 use crate::lib::error::{KernelError, Errno};
 use alloc::vec::Vec;
 use alloc::boxed::Box;
+use alloc::format;
 use core::sync::atomic::{AtomicU32, Ordering};
 use spin::Mutex;
 
@@ -51,10 +52,16 @@ impl PidTable {
     /// Insert a task into the table
     pub fn insert(&mut self, task: Task) -> Result<(), KernelError> {
         let pid = task.pid as usize;
+        crate::log::info("PID_TABLE", &format!("PidTable::insert: inserting task with PID {} at index {}", task.pid, pid));
         if pid >= MAX_PIDS {
+            crate::log::error("PID_TABLE", &format!("PidTable::insert: PID {} >= MAX_PIDS {}", pid, MAX_PIDS));
             return Err(KernelError::InvalidArgument);
         }
-        self.entries[pid] = PidEntry::Used(Box::new(task));
+        crate::log::info("PID_TABLE", &format!("PidTable::insert: creating Box for PID {}", pid));
+        let boxed_task = Box::new(task);
+        crate::log::info("PID_TABLE", &format!("PidTable::insert: Box created, assigning to entries[{}]", pid));
+        self.entries[pid] = PidEntry::Used(boxed_task);
+        crate::log::info("PID_TABLE", &format!("PidTable::insert: successfully inserted PID {}", pid));
         Ok(())
     }
 
@@ -73,12 +80,20 @@ impl PidTable {
     /// Get a mutable reference to a task by PID
     pub fn get_mut(&mut self, pid: Pid) -> Option<&mut Task> {
         let idx = pid as usize;
+        crate::log::info("PID_TABLE", &format!("PidTable::get_mut: looking up PID {} at index {}", pid, idx));
         if idx >= self.entries.len() {
+            crate::log::error("PID_TABLE", &format!("PidTable::get_mut: index {} >= entries.len() {}", idx, self.entries.len()));
             return None;
         }
         match &mut self.entries[idx] {
-            PidEntry::Used(task) => Some(task),
-            PidEntry::Free => None,
+            PidEntry::Used(task) => {
+                crate::log::info("PID_TABLE", &format!("PidTable::get_mut: found PID {}", pid));
+                Some(task)
+            },
+            PidEntry::Free => {
+                crate::log::error("PID_TABLE", &format!("PidTable::get_mut: PID {} is Free (not Used)", pid));
+                None
+            },
         }
     }
 
@@ -165,10 +180,17 @@ pub fn alloc_pid() -> Result<Pid, KernelError> {
 
 /// Insert a task into the global table
 pub fn insert_task(task: Task) -> Result<(), KernelError> {
+    let pid = task.pid;
+    crate::log::info("PID_TABLE", &format!("insert_task: called with PID {}", pid));
     let mut table = PROCESS_TABLE.lock();
+    crate::log::info("PID_TABLE", "insert_task: acquired lock");
     if let Some(ref mut tbl) = *table {
-        tbl.insert(task)
+        crate::log::info("PID_TABLE", "insert_task: process table exists, calling insert()");
+        let result = tbl.insert(task);
+        crate::log::info("PID_TABLE", &format!("insert_task: insert() returned {:?}", result));
+        result
     } else {
+        crate::log::error("PID_TABLE", "insert_task: process table is None!");
         Err(KernelError::NotInitialized)
     }
 }

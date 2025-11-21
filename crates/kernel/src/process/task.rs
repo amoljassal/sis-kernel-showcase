@@ -215,7 +215,9 @@ pub struct Task {
 
 impl Task {
     /// Allocate kernel stack for task (16KB = 4 pages)
-    fn alloc_kstack() -> Result<u64, KernelError> {
+    ///
+    /// Used by fork() to allocate a separate kernel stack for the child process.
+    pub fn alloc_kstack() -> Result<u64, KernelError> {
         // Allocate 4 contiguous pages (16KB)
         crate::mm::alloc_pages(2).ok_or(KernelError::OutOfMemory)
     }

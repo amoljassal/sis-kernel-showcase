@@ -554,10 +554,6 @@ pub unsafe fn late_init() -> KernelResult<()> {
         crate::uart_print(b"CONTEXT SWITCH BENCH: COMPLETE\n");
     }
 
-    crate::uart_print(b"SYSCALL TESTS: STARTING\n");
-    crate::userspace_test::run_syscall_tests();
-    crate::uart_print(b"SYSCALL TESTS: COMPLETE\n");
-
     // Initialize neural agents
     crate::log::debug("AI", "Initializing memory agent");
     crate::neural::init_memory_agent();
@@ -627,6 +623,11 @@ pub unsafe fn late_init() -> KernelResult<()> {
     crate::log::info("SCHEDULER", "PID 1 running");
 
     crate::log::info("BOOT", "Phase A1 complete - boot wiring finished");
+
+    // Run syscall tests now that PID 1 exists
+    crate::uart_print(b"SYSCALL TESTS: STARTING\n");
+    crate::userspace_test::run_syscall_tests();
+    crate::uart_print(b"SYSCALL TESTS: COMPLETE\n");
 
     // Deterministic admission demo
     #[cfg(feature = "deterministic")]
